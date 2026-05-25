@@ -1,0 +1,116 @@
+import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth";
+import { runImport } from "@/lib/cartolas/import";
+import { runMatching } from "@/lib/reconciliation/match";
+
+/**
+ * POST /api/cartolas/import?dryRun=1
+ * multipart/form-data:
+ *   - file: el archivo de cartola (.xlsx | .xls)
+ *   - forceAccountId (opcional): override manual de cuenta destino
+ *
+ * Si `?dryRun=1`, devuelve el preview SIN insertar.
+ * Si no, ejecuta la inserción con dedup y devuelve el resultado.
+ */
+export async function POST(req: Request) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    return NextResponse.json({ error: "Body inválido" }, { status: 400 });
+  }
+
+  const file = form.get("file");
+  if (!(file instanceof File)) {
+    return NextResponse.json(
+      { error: "Falta el archivo (campo `file`)" },
+      { status: 400 }
+    );
+  }
+
+  const forceAccountIdRaw = form.get("forceAccountId");
+  const forceAccountId =
+    typeof forceAccountIdRaw === "string" && forceAccountIdRaw.trim() !== ""
+      ? forceAccountIdRaw.trim()
+      : undefined;
+
+  const url = new URL(req.url);
+  const dryRun = url.searchParams.get("dryRun") === "1";
+
+  const buf = Buffer.from(await file.arrayBuffer());
+
+  try {
+    const result = await runImport({
+      fileName: file.name,
+      fileBuffer: buf,
+      dryRun,
+      forceAccountId,
+    });
+
+    // Después de un import real, intentamos reconciliar Dynatechs en estados abiertos
+    // (NO_MATCH y REVIEW pueden tener nuevos candidatos con la cartola recién insertada)
+    if (!dryRun && result.inserted && result.inserted.rowsInserted > 0) {
+      try {
+        await runMatching({ reEvaluateOpenStates: true });
+      } catch (e) {
+        console.error("[cartolas/import] error en runMatching:", e);
+      }
+    }
+
+    return NextResponse.json(serializeResult(result));
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error al procesar el archivo";
+    return NextResponse.json({ error: msg }, { status: 400 });
+  }
+}
+
+function serializeResult(result: import("@/lib/cartolas/import").ImportResult) {
+  const p = result.preview;
+  return {
+    preview: {
+      ...p,
+      periodFrom: p.periodFrom?.toISOString() ?? null,
+      periodTo: p.periodTo?.toISOString() ?? null,
+      alreadyImported: p.alreadyImported
+        ? {
+            ...p.alreadyImported,
+            importedAt: p.alreadyImported.importedAt.toISOString(),
+          }
+        : undefined,
+      // Para reducir payload, NO mandamos los items completos en preview;
+      // solo los conteos y muestras. La inserción se decide en server.
+      items: p.items.slice(0, 50).map((it) => ({
+        status: it.status,
+        dedupKey: it.dedupKey,
+        errorReason: it.errorReason,
+        duplicateOfAccountLabel: it.duplicateOfAccountLabel,
+        movement: serializeMovement(it.movement),
+      })),
+      itemsTotal: p.items.length,
+    },
+    inserted: result.inserted,
+  };
+}
+
+function serializeMovement(m: import("@/lib/cartolas/types").NormalizedMovement) {
+  return {
+    externalId: m.externalId,
+    postDate: m.postDate.toISOString(),
+    transactionDate: m.transactionDate?.toISOString() ?? null,
+    amount: m.amount,
+    currency: m.currency,
+    direction: m.direction,
+    description: m.description,
+    balanceAfter: m.balanceAfter,
+    counterpartyName: m.counterpartyName,
+    counterpartyRut: m.counterpartyRut,
+    counterpartyBank: m.counterpartyBank,
+    branchLabel: m.branchLabel,
+    txType: m.txType,
+  };
+}

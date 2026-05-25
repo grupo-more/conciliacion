@@ -1,0 +1,244 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String?
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+}
+
+model BankAccount {
+  id            String   @id @default(uuid())
+  bankCode      String   @map("bank_code")        // "BCI" | "SANTANDER" | "INTERNACIONAL"
+  bankName      String   @map("bank_name")
+  accountNumber String   @map("account_number")   // normalizado (solo dígitos)
+  displayNumber String?  @map("display_number")   // como lo muestra el banco
+  holderName    String   @map("holder_name")
+  holderRut     String?  @map("holder_rut")
+  currency      String   @default("CLP") @db.Char(3)
+  alias         String?
+  purpose       String?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  imports   StatementImport[]
+  movements BankMovement[]
+  branchHints BranchAccountHint[]
+
+  @@unique([bankCode, accountNumber])
+  @@index([active])
+}
+
+model StatementImport {
+  id             String    @id @default(uuid())
+  accountId      String    @map("account_id")
+  account        BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  parserCode     String    @map("parser_code")
+  fileName       String    @map("file_name")
+  fileHash       String    @map("file_hash")
+  periodFrom     DateTime? @map("period_from")
+  periodTo       DateTime? @map("period_to")
+  rowsTotal      Int       @default(0) @map("rows_total")
+  rowsInserted   Int       @default(0) @map("rows_inserted")
+  rowsDuplicated Int       @default(0) @map("rows_duplicated")
+  rowsFailed     Int       @default(0) @map("rows_failed")
+  rawMetadata    Json?     @map("raw_metadata")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  movements BankMovement[]
+
+  @@unique([accountId, fileHash])
+  @@index([accountId, createdAt])
+}
+
+model BankMovement {
+  id                String   @id @default(uuid())
+  accountId         String   @map("account_id")
+  account           BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  statementImportId String   @map("statement_import_id")
+  statementImport   StatementImport @relation(fields: [statementImportId], references: [id], onDelete: Cascade)
+
+  externalId        String?  @map("external_id")
+  postDate          DateTime @map("post_date")
+  transactionDate   DateTime? @map("transaction_date")
+  amount            BigInt
+  currency          String   @default("CLP") @db.Char(3)
+  direction         String                              // "IN" | "OUT"
+  description       String   @db.Text
+  descriptionNorm   String   @map("description_norm") @db.Text
+  balanceAfter      BigInt?  @map("balance_after")
+
+  counterpartyName    String? @map("counterparty_name")
+  counterpartyRut     String? @map("counterparty_rut")
+  counterpartyAccount String? @map("counterparty_account")
+  counterpartyBank    String? @map("counterparty_bank")
+
+  branchLabel String? @map("branch_label")
+  txType      String? @map("tx_type")
+
+  dedupKey String @map("dedup_key")
+  rawRow   Json   @map("raw_row")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  reconciliationLinks ReconciliationLink[]
+
+  @@unique([accountId, dedupKey])
+  @@index([accountId, postDate])
+  @@index([externalId])
+}
+
+model DynatechMovement {
+  id                 String   @id @default(uuid())
+  mCjId              BigInt   @unique @map("m_cj_id")
+
+  branchExternalId   Int      @map("branch_external_id")
+  branchExternalName String?  @map("branch_external_name")
+
+  cashierUsername    String   @map("cashier_username")
+  cashierName        String?  @map("cashier_name")
+
+  documentCode       Int      @map("document_code")
+  documentType       String?  @map("document_type")
+  documentFolio      BigInt   @default(0) @map("document_folio")
+
+  // Cliente identificado por el cajero. NULL cuando es CLIENTE GENERICO
+  // (RUT 55555555-5 en la API Dynatech) o cuando el campo no viene en la respuesta.
+  customerName       String?  @map("customer_name")
+  customerRut        String?  @map("customer_rut")
+
+  observation        String   @db.Text
+  occurredAt         DateTime @map("occurred_at")
+  loadedAt           DateTime? @map("loaded_at")
+
+  totalAmount        BigInt   @map("total_amount")
+  currency           String   @default("CLP") @db.Char(3)
+
+  // Rubro contable interno de Dynatech (ej: 200 = Tesoreria). Varias cuentas
+  // bancarias pueden apuntar al mismo rubro. Se usa para futuras reglas de
+  // matching. Nullable porque la API podria no enviarlo en algunos movimientos.
+  rubro              Int?
+
+  items              Json
+  rawJson            Json     @map("raw_json")
+
+  syncedAt           DateTime @default(now()) @map("synced_at")
+
+  reconciliation Reconciliation?
+
+  @@index([branchExternalId])
+  @@index([cashierUsername])
+  @@index([occurredAt])
+  @@index([documentCode])
+  @@index([documentFolio])
+  @@index([customerRut])
+  @@index([rubro])
+}
+
+model DynatechSyncRun {
+  id                String   @id @default(uuid())
+  startedAt         DateTime @default(now()) @map("started_at")
+  finishedAt        DateTime? @map("finished_at")
+  status            String                              // RUNNING | OK | ERROR
+  fetchedRows       Int      @default(0) @map("fetched_rows")
+  insertedRows      Int      @default(0) @map("inserted_rows")
+  skippedDuplicates Int      @default(0) @map("skipped_duplicates")
+  skippedInvalid    Int      @default(0) @map("skipped_invalid")
+  errorMessage      String?  @db.Text @map("error_message")
+  fetchMs           Int?     @map("fetch_ms")
+
+  @@index([startedAt])
+  @@index([status, startedAt])
+}
+
+// Etiqueta humana para los codigos de rubro de Dynatech.
+// El codigo (ej. 200 = Tesoreria) viene en cada movimiento desde la API.
+// Aqui le damos nombre + descripcion para mostrarlo en la UI. Los rubros
+// se crean manualmente; si llega un movimiento con un rubro sin label,
+// el front lo muestra solo como numero.
+model RubroLabel {
+  rubro       Int      @id
+  name        String
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+}
+
+// Hint opcional: sucursal Dynatech → cuenta bancaria preferida.
+// Se usa como pista cuando el mCjObs no menciona banco/empresa explícitamente.
+// El mCjObs explícito SIEMPRE gana sobre el hint manual.
+// Si no hay hint, el matching infiere por historial (≥70% confianza) o queda en REVIEW.
+model BranchAccountHint {
+  id                String      @id @default(uuid())
+  branchExternalId  Int         @unique @map("branch_external_id")
+  branchName        String?     @map("branch_name")
+  accountId         String      @map("account_id")
+  account           BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  notes             String?     @db.Text
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  @@index([branchExternalId])
+  @@index([accountId])
+}
+
+// Conciliación: relaciona un movimiento de Dynatech con su contraparte bancaria.
+// Una fila por DynatechMovement procesado. Los bank movements asociados van en
+// ReconciliationLink (puede ser 0, 1 o N — soporta pagos divididos 1:N).
+model Reconciliation {
+  id                 String           @id @default(uuid())
+  dynatechMovementId String           @unique @map("dynatech_movement_id")
+  dynatechMovement   DynatechMovement @relation(fields: [dynatechMovementId], references: [id], onDelete: Cascade)
+
+  // AUTO_MATCHED  → match automático con alta certeza (1:1 mismo día o 1:N con RUT común)
+  // SUGGESTED     → match propuesto, requiere aprobación humana
+  // REVIEW        → varios candidatos / múltiples combinaciones posibles, usuario elige
+  // MANUAL        → match elegido manualmente por el usuario
+  // NO_MATCH      → sin candidatos en la ventana; se reintenta al subir cartolas nuevas
+  // OUT_OF_SCOPE  → mCjObs menciona banco no registrado (BICE, ITAU, CHILE, etc.)
+  status String
+
+  // EXACT_SAME_DAY | EXACT_PM2 | EXACT_PM7 | SPLIT_SAME_RUT | SPLIT | MANUAL | null
+  matchType String? @map("match_type")
+
+  // Por qué fue OUT_OF_SCOPE / NO_MATCH (texto libre o "Banco no registrado: BICE")
+  outOfScopeReason String? @db.Text @map("out_of_scope_reason")
+
+  notes String? @db.Text
+
+  matchedAt DateTime @default(now()) @map("matched_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  links ReconciliationLink[]
+
+  @@index([status])
+}
+
+// Cada bank movement asociado a una conciliación. Soporta:
+//   · 1:1 — un solo link
+//   · 1:N — varios links (pago dividido en múltiples transferencias)
+//   · 1:0 — sin links (NO_MATCH / OUT_OF_SCOPE)
+model ReconciliationLink {
+  id                String         @id @default(uuid())
+  reconciliationId  String         @map("reconciliation_id")
+  reconciliation    Reconciliation @relation(fields: [reconciliationId], references: [id], onDelete: Cascade)
+  bankMovementId    String         @map("bank_movement_id")
+  bankMovement      BankMovement   @relation(fields: [bankMovementId], references: [id], onDelete: Cascade)
+  createdAt         DateTime       @default(now()) @map("created_at")
+
+  @@unique([reconciliationId, bankMovementId])
+  @@unique([bankMovementId])  // un bank movement no puede estar en 2 conciliaciones
+  @@index([reconciliationId])
+}

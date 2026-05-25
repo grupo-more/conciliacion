@@ -1,0 +1,165 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Logo } from "@/components/brand/Logo";
+
+interface NavItem {
+  href: string;
+  label: string;
+  matchPrefix?: boolean;
+  icon: React.ReactNode;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  {
+    href: "/dashboard",
+    label: "Dashboard",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="3" width="7" height="9" rx="1.5" />
+        <rect x="14" y="3" width="7" height="5" rx="1.5" />
+        <rect x="14" y="12" width="7" height="9" rx="1.5" />
+        <rect x="3" y="16" width="7" height="5" rx="1.5" />
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/conciliacion",
+    label: "Conciliación",
+    matchPrefix: true,
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7 7h10M7 7l3-3M7 7l3 3" />
+        <path d="M17 17H7M17 17l-3-3M17 17l-3 3" />
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/cartolas",
+    label: "Cartolas",
+    matchPrefix: true,
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
+        <path d="M8 11h8M8 15h8M8 7h4" />
+      </svg>
+    ),
+  },
+  {
+    href: "/dashboard/dynatech",
+    label: "Dynatech",
+    matchPrefix: true,
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 3v18h18" />
+        <path d="M7 14l3-3 3 3 5-6" />
+      </svg>
+    ),
+  },
+];
+
+const SETTINGS_ITEM: NavItem = {
+  href: "/dashboard/configuracion",
+  label: "Configuración",
+  matchPrefix: true,
+  icon: (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  ),
+};
+
+export function Sidebar() {
+  const pathname = usePathname();
+
+  function isActive(item: NavItem): boolean {
+    if (item.matchPrefix) return pathname.startsWith(item.href);
+    return pathname === item.href;
+  }
+
+  return (
+    <aside className="w-64 shrink-0 border-r border-border-soft bg-white/80 backdrop-blur-md sticky top-0 h-screen self-start flex flex-col shadow-soft z-20">
+      {/* Logo en header del sidebar */}
+      <div className="px-5 py-5 border-b border-border-soft">
+        <Link href="/dashboard" className="block group" aria-label="MoreGiros">
+          <div className="flex items-center gap-3">
+            <Logo
+              variant="mark"
+              tone="brand"
+              className="h-11 w-11 shrink-0 transition-all duration-450 ease-spring group-hover:scale-110 group-hover:rotate-3"
+            />
+            <div>
+              <div className="text-base font-bold tracking-tight text-brand leading-tight">
+                MOREGIROS
+              </div>
+              <div className="text-[9px] uppercase tracking-[0.18em] text-text-muted leading-tight mt-0.5">
+                By More Exchange
+              </div>
+            </div>
+          </div>
+        </Link>
+      </div>
+
+      {/* Navegación */}
+      <nav className="flex-1 px-3 py-4 space-y-1 stagger overflow-y-auto flex flex-col">
+        {NAV_ITEMS.map((item) => renderNavLink(item, isActive(item)))}
+        <div className="flex-1" aria-hidden />
+        <div className="my-2 border-t border-border-soft/60" aria-hidden />
+        {renderNavLink(SETTINGS_ITEM, isActive(SETTINGS_ITEM))}
+      </nav>
+
+      {/* Footer del sidebar */}
+      <div className="border-t border-border-soft px-5 py-4">
+        <div className="flex items-center justify-between text-[10px]">
+          <span className="tracking-wider text-text-dim font-semibold">
+            © {new Date().getFullYear()}
+          </span>
+          <span className="rounded-full bg-accent/10 text-accent px-2 py-0.5 font-bold border border-accent/20 animate-pulse-soft">
+            v1.0
+          </span>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+function renderNavLink(item: NavItem, active: boolean) {
+  return (
+    <Link
+      key={item.href}
+      href={item.href}
+      className={
+        "relative group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-all duration-250 ease-out overflow-hidden " +
+        (active
+          ? "bg-brand text-white shadow-brand"
+          : "text-text-muted hover:bg-brand-tint hover:text-brand hover:translate-x-0.5")
+      }
+    >
+      {active && (
+        <>
+          <span
+            className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-accent"
+            aria-hidden
+          />
+          <span
+            className="absolute inset-y-0 right-0 w-1/3 bg-gradient-to-l from-accent/20 to-transparent opacity-60"
+            aria-hidden
+          />
+        </>
+      )}
+      <span
+        className={
+          "h-4 w-4 shrink-0 transition-all duration-300 " +
+          (active
+            ? "text-white scale-110"
+            : "text-text-muted group-hover:text-brand group-hover:scale-110")
+        }
+      >
+        {item.icon}
+      </span>
+      <span>{item.label}</span>
+    </Link>
+  );
+}

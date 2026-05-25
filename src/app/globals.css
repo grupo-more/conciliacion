@@ -1,0 +1,316 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html,
+  body {
+    @apply bg-bg text-text;
+    font-family: theme("fontFamily.sans");
+    font-feature-settings: "ss01", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Fondo blanco con tintes azulados muy sutiles del manual */
+  body {
+    background-color: #ffffff;
+    background-image:
+      radial-gradient(
+        ellipse 75% 50% at 0% 0%,
+        rgba(36, 58, 133, 0.05) 0%,
+        transparent 60%
+      ),
+      radial-gradient(
+        ellipse 60% 50% at 100% 100%,
+        rgba(0, 174, 239, 0.04) 0%,
+        transparent 60%
+      );
+    background-attachment: fixed;
+  }
+
+  * {
+    @apply border-border-soft;
+  }
+
+  /* Selección con cyan corporativo */
+  ::selection {
+    background-color: rgba(0, 174, 239, 0.25);
+    color: #1a2350;
+  }
+
+  /* Scrollbar elegante con marca */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background-color: #f5f7fc;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: rgba(140, 143, 192, 0.5);
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 200ms;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(36, 58, 133, 0.6);
+  }
+
+  /* Focus visible global con cyan corporativo */
+  *:focus-visible {
+    outline: 2px solid #00aeef;
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.6;
+    transition: opacity 180ms;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+  }
+
+  input[type="checkbox"] {
+    @apply accent-accent;
+    cursor: pointer;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: theme("fontFamily.display");
+    letter-spacing: -0.015em;
+    @apply text-brand;
+  }
+}
+
+@layer components {
+  /* ───────── CARDS ───────── */
+  .card {
+    @apply rounded-xl border border-border-soft bg-bg-card p-5 shadow-card;
+    transition:
+      border-color 220ms theme("transitionTimingFunction.out"),
+      box-shadow 220ms theme("transitionTimingFunction.out"),
+      transform 220ms theme("transitionTimingFunction.out");
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer;
+  }
+  .card-interactive:hover {
+    @apply border-accent/40 shadow-card-hover -translate-y-0.5;
+  }
+
+  /* ───────── BOTONES ───────── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2 text-sm font-semibold tracking-wide select-none;
+    position: relative;
+    overflow: hidden;
+    transition:
+      background-color 200ms theme("transitionTimingFunction.out"),
+      color 200ms theme("transitionTimingFunction.out"),
+      border-color 200ms theme("transitionTimingFunction.out"),
+      box-shadow 200ms theme("transitionTimingFunction.out"),
+      transform 140ms theme("transitionTimingFunction.spring");
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(1px) scale(0.98);
+  }
+  .btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  .btn-primary {
+    @apply btn bg-brand text-white shadow-brand;
+  }
+  .btn-primary:hover:not(:disabled) {
+    @apply bg-brand-hover;
+    box-shadow: 0 12px 28px -8px rgba(36, 58, 133, 0.5);
+  }
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed shadow-none;
+    transform: none;
+  }
+
+  .btn-accent {
+    @apply btn bg-accent text-white;
+  }
+  .btn-accent:hover:not(:disabled) {
+    @apply bg-accent-hover;
+    box-shadow: 0 12px 28px -8px rgba(0, 174, 239, 0.55);
+  }
+  .btn-accent:disabled {
+    @apply opacity-50 cursor-not-allowed;
+    transform: none;
+  }
+
+  .btn-ghost {
+    @apply btn font-medium text-text-muted bg-transparent;
+  }
+  .btn-ghost:hover:not(:disabled) {
+    @apply bg-brand-tint text-brand;
+  }
+
+  .btn-outline {
+    @apply btn border border-border bg-transparent text-brand font-semibold;
+  }
+  .btn-outline:hover:not(:disabled) {
+    @apply bg-brand-tint border-brand;
+  }
+
+  /* ───────── INPUTS ───────── */
+  .input {
+    @apply w-full rounded-md border border-border bg-white px-3 py-2 text-sm text-text outline-none placeholder:text-text-dim shadow-soft;
+    transition:
+      border-color 200ms theme("transitionTimingFunction.out"),
+      box-shadow 200ms theme("transitionTimingFunction.out"),
+      background-color 200ms theme("transitionTimingFunction.out");
+  }
+  .input:hover {
+    @apply border-brand-tonal;
+  }
+  .input:focus {
+    @apply border-accent;
+    box-shadow: 0 0 0 3px rgba(0, 174, 239, 0.18);
+  }
+
+  .label {
+    @apply block text-[11px] font-semibold uppercase tracking-wider text-text-muted mb-1.5;
+  }
+
+  /* ───────── BADGES ───────── */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold;
+  }
+
+  /* ───────── MODAL ───────── */
+  .modal-backdrop {
+    @apply fixed inset-0 z-50 flex items-center justify-center p-4;
+    background-color: rgba(36, 58, 133, 0.22);
+    backdrop-filter: blur(8px);
+    animation: fade-in 200ms ease-out;
+  }
+  .modal-panel {
+    @apply card w-full max-w-3xl max-h-[90vh] overflow-y-auto;
+    animation: scale-bounce 380ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow:
+      0 32px 64px -16px rgba(36, 58, 133, 0.35),
+      0 0 0 1px rgba(0, 174, 239, 0.12);
+  }
+
+  /* ───────── TABLAS ───────── */
+  .table-row-hover {
+    transition:
+      background-color 180ms theme("transitionTimingFunction.out"),
+      transform 180ms theme("transitionTimingFunction.out");
+  }
+  .table-row-hover:hover {
+    @apply bg-brand-tint;
+  }
+
+  /* ───────── SKELETON / LOADING ───────── */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgba(140, 143, 192, 0.12) 0%,
+      rgba(140, 143, 192, 0.28) 50%,
+      rgba(140, 143, 192, 0.12) 100%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer rounded-md;
+  }
+
+  /* ───────── DIVIDERS ───────── */
+  .divider {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-border to-transparent;
+  }
+
+  /* ───────── CHIP / PILL ───────── */
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full bg-brand-tint text-brand px-2.5 py-0.5 text-xs font-semibold border border-brand/10;
+    transition: all 200ms theme("transitionTimingFunction.out");
+  }
+  .chip:hover {
+    @apply bg-brand text-white;
+  }
+
+  /* Stagger delays — aplica a hijos para entrar escalonado */
+  .stagger > * {
+    opacity: 0;
+    animation: fade-in-up 480ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .stagger > *:nth-child(1) { animation-delay: 40ms; }
+  .stagger > *:nth-child(2) { animation-delay: 100ms; }
+  .stagger > *:nth-child(3) { animation-delay: 160ms; }
+  .stagger > *:nth-child(4) { animation-delay: 220ms; }
+  .stagger > *:nth-child(5) { animation-delay: 280ms; }
+  .stagger > *:nth-child(6) { animation-delay: 340ms; }
+  .stagger > *:nth-child(7) { animation-delay: 400ms; }
+  .stagger > *:nth-child(8) { animation-delay: 460ms; }
+}
+
+@layer utilities {
+  /* Texto con gradiente de marca para títulos destacados */
+  .text-gradient-brand {
+    background: linear-gradient(135deg, #243a85 0%, #4b579b 50%, #00aeef 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  /* Patrón de fondo sutil con marca */
+  .bg-pattern-grid {
+    background-image: theme("backgroundImage.hero-grid");
+    background-size: 32px 32px;
+  }
+
+  /* Page transitions: contenedor de página.
+     IMPORTANTE: solo anima opacity, sin transform. Un transform residual
+     (incluso translateY(0)) en un ancestor convierte `position: fixed`
+     de los descendientes en posicionamiento relativo a este elemento,
+     lo que rompe los modales (se posicionan dentro del main en vez del
+     viewport). Si quieres entrada con slide, aplica .animate-fade-in-up
+     a un hijo interno del page, no al main mismo. */
+  .page-enter {
+    animation: fade-in 280ms ease-out both;
+  }
+
+  /* Hover lift sutil */
+  .hover-lift {
+    transition: transform 240ms theme("transitionTimingFunction.spring"),
+      box-shadow 240ms theme("transitionTimingFunction.out");
+  }
+  .hover-lift:hover {
+    transform: translateY(-2px);
+    @apply shadow-card-hover;
+  }
+
+  /* Glow accent al hover */
+  .hover-glow {
+    transition: box-shadow 240ms theme("transitionTimingFunction.out");
+  }
+  .hover-glow:hover {
+    @apply shadow-glow;
+  }
+
+  /* Borde animado para CTAs especiales */
+  .border-shimmer {
+    background-image:
+      linear-gradient(white, white),
+      linear-gradient(120deg, #243a85, #00aeef, #8c8fc0, #243a85);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    background-size: 100% 100%, 300% 100%;
+    @apply animate-bg-pan;
+  }
+}
