@@ -16,7 +16,7 @@
 #   · Inicia el servicio
 # =============================================================================
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
 
 function Write-Step {
@@ -114,7 +114,7 @@ Write-Ok "psql en $psqlPath"
 $pm2Installed = $null -ne (Get-Command pm2 -ErrorAction SilentlyContinue)
 if (-not $pm2Installed) {
     Write-Info "Instalando PM2 (gestor de procesos)..."
-    & npm install -g pm2 pm2-windows-startup 2>&1 | Out-Null
+    & npm install -g pm2 pm2-windows-startup | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "Error instalando PM2"
         exit 1
@@ -244,7 +244,7 @@ if ($dbExists -eq "1") {
     Write-Ok "Base de datos 'conciliacion' ya existe"
 } else {
     Write-Info "Creando base de datos 'conciliacion'..."
-    & $psqlPath -U postgres -h localhost -d postgres -c "CREATE DATABASE conciliacion;" 2>&1 | Out-Null
+    & $psqlPath -U postgres -h localhost -d postgres -c "CREATE DATABASE conciliacion;" | Out-Null
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "Error creando la base. ¿Password de postgres correcta?"
         exit 1
@@ -257,7 +257,7 @@ $env:PGPASSWORD = $null
 # 4. npm install
 # -----------------------------------------------------------------------------
 Write-Step "4/10 Instalando dependencias (puede tardar 1-3 min)"
-& npm install --no-audit --no-fund 2>&1 | Out-Null
+& npm install --no-audit --no-fund | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "npm install falló"
     exit 1
@@ -285,14 +285,14 @@ if (-not $pkg.scripts.PSObject.Properties.Name.Contains("start:server")) {
 # -----------------------------------------------------------------------------
 Write-Step "6/10 Aplicando schema de Prisma"
 
-& npx prisma generate 2>&1 | Out-Null
+& npx prisma generate | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "prisma generate falló"
     exit 1
 }
 Write-Ok "Cliente Prisma generado"
 
-& npx prisma db push 2>&1 | Out-Null
+& npx prisma db push | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "prisma db push falló"
     exit 1
@@ -303,7 +303,7 @@ Write-Ok "Schema aplicado a la BD"
 # 7. Seed
 # -----------------------------------------------------------------------------
 Write-Step "7/10 Sembrando datos iniciales"
-& npm run db:seed 2>&1 | Out-Null
+& npm run db:seed | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Warn "El seed reportó un error (puede ser normal si ya estaba sembrado)"
 } else {
@@ -314,7 +314,7 @@ if ($LASTEXITCODE -ne 0) {
 # 8. Build de producción
 # -----------------------------------------------------------------------------
 Write-Step "8/10 Compilando build de producción (puede tardar 1-2 min)"
-& npm run build 2>&1 | Out-Null
+& npm run build | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Fail "npm run build falló. Revisa errores ejecutando manualmente: npm run build"
     exit 1
@@ -359,23 +359,23 @@ try {
 
 if ($alreadyRunning) {
     Write-Info "Reiniciando proceso PM2 'conciliacion'..."
-    & pm2 restart conciliacion --update-env 2>&1 | Out-Null
+    & pm2 restart conciliacion --update-env | Out-Null
     Write-Ok "Proceso reiniciado"
 } else {
     Write-Info "Iniciando proceso PM2 'conciliacion'..."
-    & pm2 start npm --name conciliacion -- run start:server 2>&1 | Out-Null
+    & pm2 start npm --name conciliacion -- run start:server | Out-Null
     Write-Ok "Proceso iniciado"
 }
 
-& pm2 save 2>&1 | Out-Null
+& pm2 save | Out-Null
 Write-Ok "Configuración PM2 guardada"
 
 # Configurar startup (sólo si no estaba)
 $startupConfigured = $null -ne (Get-Service -Name "PM2" -ErrorAction SilentlyContinue)
 if (-not $startupConfigured) {
     Write-Info "Configurando inicio automático con Windows..."
-    & pm2-startup install 2>&1 | Out-Null
-    & pm2 save 2>&1 | Out-Null
+    & pm2-startup install | Out-Null
+    & pm2 save | Out-Null
     Write-Ok "PM2 arrancará automáticamente al iniciar Windows"
 } else {
     Write-Ok "Servicio de startup ya estaba configurado"
