@@ -6,7 +6,10 @@ import {
   parseAmount,
   parseDate,
 } from "../normalize";
-import { parseSantanderAccountInfo } from "./santander-movimiento";
+import {
+  parseSantanderAccountInfo,
+  parseSantanderSaldoFinal,
+} from "./santander-movimiento";
 
 /**
  * Santander - "Cartola Histórica CtaCte" (cartola mensual).
@@ -150,6 +153,11 @@ export const santanderHistoricaParser: BankParser = {
       }
     }
 
+    // El archivo no trae saldo por movimiento, pero sí "SALDO FINAL" en el
+    // bloque de saldos (fila 11). Lo aplicamos al movimiento más reciente del
+    // import para que el dashboard pueda mostrar el saldo de la cuenta.
+    applySaldoFinalToLatestMovement(movements, parseSantanderSaldoFinal(aoa));
+
     return {
       parserCode: "SANTANDER_HISTORICA",
       account,
@@ -161,6 +169,28 @@ export const santanderHistoricaParser: BankParser = {
     };
   },
 };
+
+/**
+ * Aplica el saldo final del header como balanceAfter del movimiento con la
+ * fecha más reciente del archivo (en caso de empate, el último en orden de
+ * lectura — que corresponde al cierre del período).
+ */
+export function applySaldoFinalToLatestMovement(
+  movements: NormalizedMovement[],
+  saldoFinal: number | null
+): void {
+  if (saldoFinal === null || movements.length === 0) return;
+  let bestIdx = 0;
+  let bestTime = movements[0].postDate.getTime();
+  for (let i = 1; i < movements.length; i++) {
+    const t = movements[i].postDate.getTime();
+    if (t >= bestTime) {
+      bestTime = t;
+      bestIdx = i;
+    }
+  }
+  movements[bestIdx].balanceAfter = saldoFinal;
+}
 
 function extractNameFromGlosa(glosa: string): string | null {
   if (!glosa) return null;

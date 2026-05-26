@@ -7,7 +7,11 @@ import {
   parseAmount,
   parseDate,
 } from "../normalize";
-import { parseSantanderAccountInfo } from "./santander-movimiento";
+import {
+  parseSantanderAccountInfo,
+  parseSantanderSaldoFinal,
+} from "./santander-movimiento";
+import { applySaldoFinalToLatestMovement } from "./santander-historica";
 
 /**
  * Santander - "Cartola Provisoria Cta. Cte. y Líneas de Crédito"
@@ -153,6 +157,11 @@ export const santanderProvisoriaParser: BankParser = {
         });
       }
     }
+
+    // El archivo no trae saldo por movimiento, pero sí "SALDO FINAL" en el
+    // bloque de saldos (fila 11). Lo aplicamos al movimiento más reciente del
+    // import para que el dashboard pueda mostrar el saldo de la cuenta.
+    applySaldoFinalToLatestMovement(movements, parseSantanderSaldoFinal(aoa));
 
     return {
       parserCode: "SANTANDER_PROVISORIA",

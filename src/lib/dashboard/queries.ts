@@ -231,17 +231,34 @@ export async function computeAccountBalances(
 
   const result: AccountBalanceRow[] = [];
 
+  // "Hoy" en la zona horaria del servidor (00:00) — base para el cálculo de
+  // freshness. No usamos `asOf` (que es el cierre de período) porque para
+  // periodos mensuales `range.end` es el primer día del mes SIGUIENTE y
+  // distorsionaría la frescura agregando ~días de mes restantes.
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+
   for (const a of accounts) {
-    const last = await prisma.bankMovement.findFirst({
+    // Saldo: tomar el último movimiento con balance_after no nulo. Algunos
+    // formatos (Santander Histórica/Provisoria) no traen saldo por movimiento,
+    // así que esto puede quedar en 0 aunque la cuenta tenga movimientos.
+    const lastWithBalance = await prisma.bankMovement.findFirst({
       where: { accountId: a.id, postDate: { lt: asOf }, balanceAfter: { not: null } },
       orderBy: [{ postDate: "desc" }, { createdAt: "desc" }],
       select: { balanceAfter: true, postDate: true },
     });
 
-    const balance = last?.balanceAfter ? Number(last.balanceAfter) : 0;
-    const lastDate = last?.postDate ?? null;
+    // Frescura: tomar el último movimiento de cualquier tipo (no requiere saldo).
+    const lastAny = await prisma.bankMovement.findFirst({
+      where: { accountId: a.id },
+      orderBy: [{ postDate: "desc" }, { createdAt: "desc" }],
+      select: { postDate: true },
+    });
+
+    const balance = lastWithBalance?.balanceAfter ? Number(lastWithBalance.balanceAfter) : 0;
+    const lastDate = lastAny?.postDate ?? null;
     const daysSince = lastDate
-      ? Math.floor((asOf.getTime() - lastDate.getTime()) / 86400000)
+      ? Math.max(0, Math.floor((todayMidnight.getTime() - lastDate.getTime()) / 86400000))
       : null;
 
     const periodAggs = await prisma.$queryRaw<

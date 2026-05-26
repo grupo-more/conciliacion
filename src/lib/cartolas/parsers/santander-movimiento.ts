@@ -172,6 +172,21 @@ export function parseSantanderAccountInfo(aoa: unknown[][]): ParsedStatement["ac
 }
 
 /**
+ * Extrae el "SALDO FINAL" del bloque de saldos (fila 10 = headers, fila 11 = valores).
+ * Ambos formatos Histórica y Provisoria tienen este bloque pero con columnas distintas:
+ *  - Histórica: 7 columnas (SALDO INICIAL | DEPÓSITOS | OTROS ABONOS | CHEQUES | OTROS CARGOS | IMPUESTOS | SALDO FINAL)
+ *  - Provisoria: 4 columnas (SALDO INICIAL | CARGOS | ABONOS | SALDO FINAL)
+ * Se busca por nombre del header para tolerar ambos. Devuelve null si no se encuentra.
+ */
+export function parseSantanderSaldoFinal(aoa: unknown[][]): number | null {
+  const headers = (aoa[9] || []).map((h) => asStr(h).toUpperCase());
+  const values = aoa[10] || [];
+  const col = headers.findIndex((h) => h.includes("SALDO FINAL"));
+  if (col < 0) return null;
+  return parseAmount(values[col]);
+}
+
+/**
  * Extrae fechas desde una fila tipo "Fecha desde: dd/mm/yyyy" / "Fecha hasta: dd/mm/yyyy".
  * Para CartolaMovimiento esa info está en fila 11 (índice 10).
  */
