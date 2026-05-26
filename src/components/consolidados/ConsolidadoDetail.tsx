@@ -63,36 +63,42 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
     "UNPROCESSED") as ConsolidadoStatus;
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
+    <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto"
+        className="modal-panel max-w-4xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="sticky top-0 bg-white border-b border-border-soft px-5 py-3 flex items-center justify-between">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-lg font-bold text-brand">Detalle Consolidado</h2>
-            <div className="text-xs text-text-muted">
-              ID Tesorería: {data?.tesoreria.externalId ?? "—"}
+            <h2 className="text-lg font-semibold tracking-tight">Detalle Consolidado</h2>
+            <div className="text-xs text-text-muted font-mono">
+              #{data?.tesoreria.externalId ?? "—"}
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="rounded-md px-2 py-1 text-xl hover:bg-bg-soft"
-            aria-label="Cerrar"
-          >
-            ×
+          <button onClick={onClose} className="btn-ghost text-sm" aria-label="Cerrar">
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
-        {loading && <div className="p-8 text-center text-text-muted">Cargando...</div>}
+        {loading && (
+          <div className="py-8 text-center text-text-muted text-sm">Cargando...</div>
+        )}
 
         {!loading && data && (
-          <div className="p-5 space-y-5">
-            {/* Estado */}
-            <div className="flex items-center gap-3">
+          <>
+            {/* Status chips */}
+            <div className="flex items-center gap-2 flex-wrap mb-4">
               <span
                 className={`inline-block rounded-full border px-3 py-1 text-sm font-bold ${STATUS_COLORS[status]}`}
               >
@@ -109,53 +115,75 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                 </span>
               )}
               {data.tesoreria.esExcepcion && (
-                <span className="rounded-full bg-amber-100 text-amber-800 text-xs px-2 py-0.5 font-bold border border-amber-200">
+                <span className="badge border-warn/40 bg-warn/10 text-warn">
                   Excepción API
                 </span>
               )}
             </div>
 
             {/* Datos Tesoreria */}
-            <section>
-              <h3 className="text-sm font-bold text-brand mb-2">Movimiento Tesorería</h3>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                <Field label="Fecha" value={formatDateTime(data.tesoreria.fecha)} />
-                <Field label="Monto" value={formatMoney(BigInt(data.tesoreria.monto))} mono />
-                <Field
-                  label="Sucursal"
-                  value={`${data.tesoreria.sucursalName ?? "—"} (#${data.tesoreria.sucursalId})`}
-                />
-                <Field
-                  label="Cajero"
-                  value={data.tesoreria.cajeroName ?? data.tesoreria.cajeroUsername}
-                />
-                <Field
-                  label="Cliente"
-                  value={
-                    data.tesoreria.clienteName
-                      ? `${data.tesoreria.clienteName} ${data.tesoreria.clienteRut ? `(${data.tesoreria.clienteRut})` : ""}`
-                      : "—"
-                  }
-                />
-                <Field label="Documento" value={data.tesoreria.tipoDocumento ?? "—"} />
-                <Field label="Folio" value={data.tesoreria.folio} mono />
-                <Field label="Banco" value={data.tesoreria.banco ?? "—"} />
-                <Field label="Banco sucursal" value={data.tesoreria.bancoSucursal ?? "—"} />
-                <Field label="Banco detectado" value={data.tesoreria.bancoDetectado ?? "—"} />
-                <Field label="Rubro sucursal" value={data.tesoreria.rubroSucursal?.toString() ?? "—"} />
-                <Field label="Rubro banco" value={data.tesoreria.rubroBanco?.toString() ?? "—"} />
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <Field label="Fecha" value={formatDateTime(data.tesoreria.fecha)} />
+              <Field
+                label="Monto"
+                value={formatMoney(BigInt(data.tesoreria.monto))}
+                highlight
+              />
+              <Field
+                label="Sucursal"
+                value={`${data.tesoreria.sucursalName ?? "—"} (#${data.tesoreria.sucursalId})`}
+              />
+              <Field
+                label="Cajero"
+                value={
+                  data.tesoreria.cajeroName
+                    ? `${data.tesoreria.cajeroName} (${data.tesoreria.cajeroUsername})`
+                    : data.tesoreria.cajeroUsername
+                }
+              />
+              <Field
+                label="Cliente"
+                value={
+                  data.tesoreria.clienteName || data.tesoreria.clienteRut
+                    ? `${data.tesoreria.clienteName ?? "—"}${
+                        data.tesoreria.clienteRut ? ` · ${data.tesoreria.clienteRut}` : ""
+                      }`
+                    : "—"
+                }
+              />
+              <Field label="Documento" value={data.tesoreria.tipoDocumento ?? "—"} />
+              <Field
+                label="Folio"
+                value={data.tesoreria.folio === "0" ? "—" : data.tesoreria.folio}
+                mono
+              />
+              <Field label="Banco" value={data.tesoreria.banco ?? "—"} />
+              <Field label="Banco sucursal" value={data.tesoreria.bancoSucursal ?? "—"} />
+              <Field
+                label="Banco detectado"
+                value={data.tesoreria.bancoDetectado ?? "—"}
+              />
+              <Field
+                label="Rubro sucursal"
+                value={data.tesoreria.rubroSucursal?.toString() ?? "—"}
+              />
+              <Field
+                label="Rubro banco"
+                value={data.tesoreria.rubroBanco?.toString() ?? "—"}
+              />
+            </div>
+
+            {/* Glosa */}
+            <div className="mt-4">
+              <div className="text-xs text-text-muted mb-1">Glosa</div>
+              <div className="rounded-md border border-border-soft bg-bg-soft p-3 text-sm">
+                {data.tesoreria.glosa || "—"}
               </div>
-              <div className="mt-3">
-                <div className="text-xs text-text-muted mb-1">Glosa</div>
-                <div className="rounded-md border border-border-soft bg-bg-soft p-3 text-sm">
-                  {data.tesoreria.glosa || "—"}
-                </div>
-              </div>
-            </section>
+            </div>
 
             {/* Movimientos bancarios vinculados */}
             {data.consolidado && data.consolidado.links.length > 0 && (
-              <section>
+              <div className="mt-5">
                 <h3 className="text-sm font-bold text-brand mb-2">
                   Movimientos bancarios vinculados ({data.consolidado.links.length})
                 </h3>
@@ -163,27 +191,30 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                   {data.consolidado.links.map((l) => (
                     <div
                       key={l.bankMovementId}
-                      className="rounded-md border border-emerald-200 bg-emerald-50/40 p-3 text-sm"
+                      className="rounded-md border border-emerald-300 bg-emerald-50/50 p-3 text-sm"
                     >
                       <div className="flex justify-between items-start gap-2">
-                        <div>
+                        <div className="min-w-0">
                           <div className="font-semibold">{l.account.bankName}</div>
                           <div className="text-xs text-text-muted">
                             {l.account.accountNumber} · {formatDate(l.postDate)}
                           </div>
                         </div>
-                        <div className="text-right font-mono font-bold">
+                        <div className="text-right font-mono font-bold whitespace-nowrap">
                           {formatMoney(BigInt(l.amount))}
                         </div>
                       </div>
-                      <div className="mt-2 text-xs text-text-muted">{l.description}</div>
+                      <div className="mt-2 text-xs text-text-muted break-words">
+                        {l.description}
+                      </div>
                       {l.counterpartyName && (
                         <div className="mt-1 text-xs">
-                          <span className="font-semibold">Contraparte:</span> {l.counterpartyName}
+                          <span className="font-semibold">Contraparte:</span>{" "}
+                          {l.counterpartyName}
                           {l.counterpartyRut && ` (${l.counterpartyRut})`}
                         </div>
                       )}
-                      {data.consolidado!.links.length > 0 && status !== "AUTO_MATCHED" && (
+                      {status !== "AUTO_MATCHED" && (
                         <div className="mt-2">
                           <button
                             onClick={() => action({ action: "reject" })}
@@ -197,12 +228,12 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                     </div>
                   ))}
                 </div>
-              </section>
+              </div>
             )}
 
-            {/* Candidatos (para REVIEW / SUGGESTED / NO_MATCH) */}
+            {/* Candidatos */}
             {data.candidates && data.candidates.length > 0 && (
-              <section>
+              <div className="mt-5">
                 <h3 className="text-sm font-bold text-brand mb-2">
                   Candidatos bancarios ({data.candidates.length})
                 </h3>
@@ -221,14 +252,16 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                         }`}
                       >
                         <div className="flex justify-between items-start gap-2">
-                          <div className="flex-1">
+                          <div className="flex-1 min-w-0">
                             <div className="font-semibold">
                               {c.account.bankName}{" "}
                               <span className="text-xs text-text-muted font-normal">
                                 · {formatDate(c.postDate)}
                               </span>
                             </div>
-                            <div className="text-xs text-text-muted mt-0.5">{c.description}</div>
+                            <div className="text-xs text-text-muted mt-0.5 break-words">
+                              {c.description}
+                            </div>
                             {c.counterpartyName && (
                               <div className="text-xs mt-1">
                                 <span className="font-semibold">Contraparte:</span>{" "}
@@ -240,8 +273,15 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                               <div className="text-xs text-text-muted mt-2 flex flex-wrap gap-x-3 gap-y-0.5">
                                 {c.factors.map((f, i) => (
                                   <span key={i}>
-                                    <span className={f.weight >= 0 ? "text-emerald-700" : "text-rose-700"}>
-                                      {f.weight > 0 ? "+" : ""}{f.weight}
+                                    <span
+                                      className={
+                                        f.weight >= 0
+                                          ? "text-emerald-700 font-semibold"
+                                          : "text-rose-700 font-semibold"
+                                      }
+                                    >
+                                      {f.weight > 0 ? "+" : ""}
+                                      {f.weight}
                                     </span>{" "}
                                     {f.label}
                                   </span>
@@ -250,7 +290,7 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                             )}
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="font-mono font-bold">
+                            <div className="font-mono font-bold whitespace-nowrap">
                               {formatMoney(BigInt(c.amount))}
                             </div>
                             <div className="text-xs mt-1">
@@ -276,19 +316,19 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                     );
                   })}
                 </div>
-              </section>
+              </div>
             )}
 
-            {/* Estado sin candidatos */}
+            {/* Mensajes de estado vacío */}
             {data.consolidado?.status === "OUT_OF_SCOPE" && (
-              <div className="rounded-md border border-zinc-300 bg-zinc-50 p-3 text-sm">
+              <div className="mt-5 rounded-md border border-zinc-300 bg-zinc-50 p-3 text-sm">
                 <strong>Fuera de scope:</strong>{" "}
                 {data.consolidado.outOfScopeReason ?? "Sin razón especificada"}
               </div>
             )}
             {data.consolidado?.status === "NO_MATCH" &&
               (!data.candidates || data.candidates.length === 0) && (
-                <div className="rounded-md border border-rose-200 bg-rose-50 p-3 text-sm">
+                <div className="mt-5 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm">
                   Sin candidatos en la cuenta bancaria resuelta dentro de la ventana ±7 días.
                   Si la cartola correspondiente no se ha cargado todavía, súbela y vuelve a
                   procesar.
@@ -296,8 +336,8 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
               )}
 
             {/* Notas */}
-            <section>
-              <h3 className="text-sm font-bold text-brand mb-2">Notas</h3>
+            <div className="mt-5">
+              <div className="text-xs text-text-muted mb-1">Notas</div>
               <textarea
                 value={notesDraft}
                 onChange={(e) => setNotesDraft(e.target.value)}
@@ -312,19 +352,35 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
               >
                 Guardar notas
               </button>
-            </section>
-          </div>
+            </div>
+          </>
         )}
       </div>
     </div>
   );
 }
 
-function Field({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+function Field({
+  label,
+  value,
+  mono,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  highlight?: boolean;
+}) {
   return (
-    <div>
+    <div className="min-w-0">
       <div className="text-xs text-text-muted">{label}</div>
-      <div className={mono ? "font-mono text-sm" : "text-sm"}>{value}</div>
+      <div
+        className={`${mono ? "font-mono" : ""} text-sm ${
+          highlight ? "font-bold text-brand" : ""
+        } break-words`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
