@@ -185,10 +185,12 @@ if (-not $skipEnv) {
     $port = Read-Host "  Puerto [$defaultPort]"
     if ([string]::IsNullOrWhiteSpace($port)) { $port = $defaultPort }
 
-    # JWT_SECRET aleatorio
-    $jwtSecret = [Convert]::ToBase64String(
-        [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(48)
-    )
+    # JWT_SECRET aleatorio (compatible con PowerShell 5.1)
+    $rngBytes = New-Object byte[] 48
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($rngBytes)
+    $rng.Dispose()
+    $jwtSecret = [Convert]::ToBase64String($rngBytes)
 
     # Escribir .env
     $envContent = @"
@@ -214,7 +216,8 @@ DYNATECH_TIMEZONE_OFFSET="-04:00"
 NODE_ENV=production
 PORT=$port
 "@
-    Set-Content -Path $envPath -Value $envContent -Encoding utf8
+    # UTF-8 sin BOM para evitar problemas con parsers
+    [IO.File]::WriteAllText($envPath, $envContent, (New-Object Text.UTF8Encoding $false))
     Write-Ok ".env generado"
 } else {
     # Cargar el puerto del .env existente
@@ -274,7 +277,9 @@ $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
 
 if (-not $pkg.scripts.PSObject.Properties.Name.Contains("start:server")) {
     $pkg.scripts | Add-Member -NotePropertyName "start:server" -NotePropertyValue "next start -H 0.0.0.0"
-    $pkg | ConvertTo-Json -Depth 10 | Set-Content $pkgPath -Encoding utf8
+    $pkgJson = $pkg | ConvertTo-Json -Depth 10
+    # UTF-8 sin BOM (Set-Content lo escribe con BOM y rompe JSON parsers)
+    [IO.File]::WriteAllText($pkgPath, $pkgJson, (New-Object Text.UTF8Encoding $false))
     Write-Ok "Script 'start:server' agregado a package.json"
 } else {
     Write-Ok "Script 'start:server' ya existía"
