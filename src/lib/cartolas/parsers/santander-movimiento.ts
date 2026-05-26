@@ -151,8 +151,13 @@ export function parseSantanderAccountInfo(aoa: unknown[][]): ParsedStatement["ac
   const empresa = asStr(row4[1]) || undefined;
   const rutEmpresa = normalizeRut(row5[1]) ?? undefined;
 
-  const cuentaCell = asStr(row7[0]); // "Cuenta Corriente N°: 0-000-9580058-0"
-  const m = cuentaCell.match(/N°[:\s]+([\d-]+)/i);
+  // Acepta dos variantes:
+  //  Movimiento/Histórica: "Cuenta Corriente N°: 0-000-9580058-0"
+  //  Provisoria:           "Cuenta 0-000-9405034-0"
+  const cuentaCell = asStr(row7[0]);
+  const m =
+    cuentaCell.match(/N°[:\s]+([\d-]+)/i) ??
+    cuentaCell.match(/cuenta(?:\s+corriente)?\s+(\d[\d-]*\d)/i);
   const displayNumber = m ? m[1] : undefined;
   const accountNumber = displayNumber ? normalizeAccountNumber(displayNumber) : "";
 
