@@ -8,9 +8,10 @@ export type ParserCode =
   | "SANTANDER_HISTORICA"
   | "SANTANDER_PROVISORIA"
   | "INTERNACIONAL_PROVISORIA"
-  | "INTERNACIONAL_HISTORICA";
+  | "INTERNACIONAL_HISTORICA"
+  | "CHILE_MOVIMIENTOS";
 
-export type BankCode = "BCI" | "SANTANDER" | "INTERNACIONAL";
+export type BankCode = "BCI" | "SANTANDER" | "INTERNACIONAL" | "CHILE";
 
 export interface ParsedAccountInfo {
   bankCode: BankCode;

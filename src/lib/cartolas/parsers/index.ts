@@ -7,6 +7,7 @@ import {
   internacionalProvisoriaParser,
   internacionalHistoricaParser,
 } from "./internacional";
+import { chileMovimientosParser } from "./chile";
 
 /**
  * Registro de parsers. Para agregar un nuevo banco/sub-formato:
@@ -25,4 +26,5 @@ export const PARSERS: BankParser[] = [
   santanderMovimientoParser,
   internacionalHistoricaParser,
   internacionalProvisoriaParser,
+  chileMovimientosParser,
 ];

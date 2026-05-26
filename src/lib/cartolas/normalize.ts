@@ -24,6 +24,8 @@ export function parseAmount(raw: unknown): number | null {
   const negative = s.startsWith("-") || s.startsWith("(");
   s = s.replace(/[()$\s]/g, "");
   if (s.startsWith("-")) s = s.slice(1);
+  // Algunos bancos (ej. Chile) prefijan saldos positivos con "+" → ignorar.
+  if (s.startsWith("+")) s = s.slice(1);
 
   // Decidir separador de miles: en Chile suelen usar punto o coma como miles.
   // No hay decimales en CLP, así que removemos ambos.

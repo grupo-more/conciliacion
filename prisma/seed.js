@@ -82,6 +82,16 @@ const ACCOUNTS = [
     currency: "CLP",
     alias: "Sin asignar - Banco Internacional",
   },
+  {
+    bankCode: "CHILE",
+    bankName: "Banco de Chile",
+    accountNumber: "_UNASSIGNED_CHILE",
+    displayNumber: null,
+    holderName: "Sin asignar",
+    holderRut: null,
+    currency: "CLP",
+    alias: "Sin asignar - Banco de Chile",
+  },
 ];
 
 async function seedUser() {
