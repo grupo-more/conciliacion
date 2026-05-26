@@ -249,7 +249,7 @@ export function TesoreriaView() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 animate-fade-in-down">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Tesorería</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Movimientos 200</h1>
           <p className="text-sm text-text-muted mt-0.5">
             Movimientos del feed bancario con informe cruzado de rubros.
           </p>
@@ -415,10 +415,10 @@ export function TesoreriaView() {
                 <th className="px-3 py-2 text-left">Sucursal</th>
                 <th className="px-3 py-2 text-left">Cajero</th>
                 <th className="px-3 py-2 text-left">Banco</th>
-                <th className="px-3 py-2 text-center">Rubro S/B</th>
-                <th className="px-3 py-2 text-left">Glosa</th>
                 <th className="px-3 py-2 text-right">Monto</th>
+                <th className="px-3 py-2 text-left">Glosa</th>
                 <th className="px-3 py-2 text-center">Exc</th>
+                <th className="px-3 py-2 text-center">Rubro S/B</th>
               </tr>
             </thead>
             <tbody>
@@ -475,18 +475,11 @@ export function TesoreriaView() {
                             </div>
                           )}
                       </td>
-                      <td className="px-3 py-2 text-center text-xs font-mono">
-                        <div>
-                          {m.rubroSucursal ?? "—"}
-                          <span className="text-text-dim mx-1">/</span>
-                          {m.rubroBanco ?? "—"}
-                        </div>
+                      <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                        {formatMoney(monto)}
                       </td>
                       <td className="px-3 py-2 max-w-md truncate" title={m.glosa}>
                         {m.glosa || <span className="text-text-dim">—</span>}
-                      </td>
-                      <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
-                        {formatMoney(monto)}
                       </td>
                       <td className="px-3 py-2 text-center">
                         {m.esExcepcion ? (
@@ -499,6 +492,13 @@ export function TesoreriaView() {
                         ) : (
                           <span className="text-text-dim text-xs">—</span>
                         )}
+                      </td>
+                      <td className="px-3 py-2 text-center text-xs font-mono">
+                        <div>
+                          {m.rubroSucursal ?? "—"}
+                          <span className="text-text-dim mx-1">/</span>
+                          {m.rubroBanco ?? "—"}
+                        </div>
                       </td>
                     </tr>
                   );

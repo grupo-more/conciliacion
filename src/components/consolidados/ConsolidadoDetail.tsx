@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatMoney, formatDate, formatDateTime } from "@/lib/format";
 import {
   type DetailResponse,
@@ -20,6 +21,11 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
+  // Necesario para createPortal: document no existe durante SSR de Next.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function load() {
     setLoading(true);
@@ -62,7 +68,9 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
   const status: ConsolidadoStatus = (data?.consolidado?.status ??
     "UNPROCESSED") as ConsolidadoStatus;
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className="modal-panel max-w-4xl"
@@ -356,7 +364,8 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
