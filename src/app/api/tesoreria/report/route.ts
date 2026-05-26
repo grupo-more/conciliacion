@@ -56,6 +56,35 @@ export async function GET(req: Request) {
   });
   const labelByRubro = new Map(rubroLabels.map((l) => [l.rubro, l.name]));
 
+  // Fallback automatico para columnas del informe rubro: para cada rubroBanco,
+  // calcular el `banco` mas frecuente entre los movimientos con ese rubro.
+  // Asi, si el usuario no configuro un nombre en Configuracion -> Rubros, el
+  // header de columna muestra el nombre del banco que la API ya trae (ej.
+  // "Santander ME", "BCI ME") en vez de un numero seco.
+  const bancoCountByRubroBanco = new Map<number, Map<string, number>>();
+  for (const r of rows) {
+    if (r.rubroBanco !== null && r.banco) {
+      let m = bancoCountByRubroBanco.get(r.rubroBanco);
+      if (!m) {
+        m = new Map();
+        bancoCountByRubroBanco.set(r.rubroBanco, m);
+      }
+      m.set(r.banco, (m.get(r.banco) ?? 0) + 1);
+    }
+  }
+  const bancoByRubroBanco = new Map<number, string>();
+  for (const [rubro, counts] of bancoCountByRubroBanco.entries()) {
+    let bestBanco: string | null = null;
+    let bestCount = 0;
+    for (const [b, c] of counts.entries()) {
+      if (c > bestCount) {
+        bestCount = c;
+        bestBanco = b;
+      }
+    }
+    if (bestBanco) bancoByRubroBanco.set(rubro, bestBanco);
+  }
+
   // Construir matriz dinamicamente segun groupBy.
   const keyExtractor = (
     r: (typeof rows)[number]
@@ -85,6 +114,8 @@ export async function GET(req: Request) {
     const colKey = r.rubroBanco === null ? "__null__" : String(r.rubroBanco);
     return {
       rowKey,
+      // Filas (rubroSucursal): mantienen formato "numero - nombre" cuando hay
+      // nombre configurado en Configuracion -> Rubros, si no, solo el numero.
       rowLabel:
         r.rubroSucursal === null
           ? "(sin rubro sucursal)"
@@ -92,12 +123,16 @@ export async function GET(req: Request) {
           ? `${r.rubroSucursal} - ${labelByRubro.get(r.rubroSucursal)}`
           : `${r.rubroSucursal}`,
       colKey,
+      // Columnas (rubroBanco): mostrar solo el nombre. Preferencia:
+      //   1. Nombre configurado en Configuracion -> Rubros
+      //   2. Banco que viene del feed (ej. "Santander ME")
+      //   3. Numero del rubro como ultimo recurso
       colLabel:
         r.rubroBanco === null
           ? "(sin rubro banco)"
-          : labelByRubro.get(r.rubroBanco)
-          ? `${r.rubroBanco} - ${labelByRubro.get(r.rubroBanco)}`
-          : `${r.rubroBanco}`,
+          : labelByRubro.get(r.rubroBanco) ??
+            bancoByRubroBanco.get(r.rubroBanco) ??
+            String(r.rubroBanco),
     };
   };
 
