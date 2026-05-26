@@ -162,6 +162,72 @@ model DynatechSyncRun {
   @@index([status, startedAt])
 }
 
+// Movimiento de Tesoreria - viene del endpoint /api/banco/conciliacion.
+// Este feed es distinto al de Dynatech: ya viene clasificado por banco
+// detectado vs banco asignado a la sucursal, con flag de excepcion. Lo
+// usamos para reportes de mapeo rubroSucursal -> rubroBanco.
+model TesoreriaMovement {
+  id                 String   @id @default(uuid())
+  externalId         BigInt   @unique @map("external_id")
+
+  sucursalId         Int      @map("sucursal_id")
+  sucursalName       String?  @map("sucursal_name")
+
+  cajeroUsername     String   @map("cajero_username")
+  cajeroName         String?  @map("cajero_name")
+
+  clienteName        String?  @map("cliente_name")
+  clienteRut         String?  @map("cliente_rut")
+
+  folio              BigInt   @default(0)
+  tipoDocumento      String?  @map("tipo_documento")
+  codigoDocumento    Int      @default(0) @map("codigo_documento")
+
+  glosa              String   @db.Text
+  banco              String?
+  bancoSucursal      String?  @map("banco_sucursal")
+  bancoDetectado     String?  @map("banco_detectado")
+
+  rubroBanco         Int?     @map("rubro_banco")
+  rubroSucursal      Int?     @map("rubro_sucursal")
+
+  monto              BigInt
+  fecha              DateTime
+  fechaCarga         DateTime? @map("fecha_carga")
+
+  esExcepcion        Boolean  @default(false) @map("es_excepcion")
+
+  items              Json
+  rawJson            Json     @map("raw_json")
+
+  syncedAt           DateTime @default(now()) @map("synced_at")
+
+  @@index([sucursalId])
+  @@index([cajeroUsername])
+  @@index([fecha])
+  @@index([banco])
+  @@index([rubroBanco])
+  @@index([rubroSucursal])
+  @@index([esExcepcion])
+}
+
+model TesoreriaSyncRun {
+  id                String   @id @default(uuid())
+  startedAt         DateTime @default(now()) @map("started_at")
+  finishedAt        DateTime? @map("finished_at")
+  status            String                              // RUNNING | OK | ERROR
+  fetchedRows       Int      @default(0) @map("fetched_rows")
+  insertedRows      Int      @default(0) @map("inserted_rows")
+  updatedRows       Int      @default(0) @map("updated_rows")
+  skippedDuplicates Int      @default(0) @map("skipped_duplicates")
+  skippedInvalid    Int      @default(0) @map("skipped_invalid")
+  errorMessage      String?  @db.Text @map("error_message")
+  fetchMs           Int?     @map("fetch_ms")
+
+  @@index([startedAt])
+  @@index([status, startedAt])
+}
+
 // Etiqueta humana para los codigos de rubro de Dynatech.
 // El codigo (ej. 200 = Tesoreria) viene en cada movimiento desde la API.
 // Aqui le damos nombre + descripcion para mostrarlo en la UI. Los rubros

@@ -57,6 +57,18 @@ const NAV_ITEMS: NavItem[] = [
       </svg>
     ),
   },
+  {
+    href: "/dashboard/tesoreria",
+    label: "Tesorería",
+    matchPrefix: true,
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="6" width="18" height="13" rx="2" />
+        <path d="M3 10h18" />
+        <circle cx="12" cy="14.5" r="1.5" />
+      </svg>
+    ),
+  },
 ];
 
 const SETTINGS_ITEM: NavItem = {
