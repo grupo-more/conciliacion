@@ -363,14 +363,13 @@ try {
 } catch {}
 
 if ($alreadyRunning) {
-    Write-Info "Reiniciando proceso PM2 'conciliacion'..."
-    & pm2 restart conciliacion --update-env | Out-Null
-    Write-Ok "Proceso reiniciado"
-} else {
-    Write-Info "Iniciando proceso PM2 'conciliacion'..."
-    & pm2 start npm --name conciliacion -- run start:server | Out-Null
-    Write-Ok "Proceso iniciado"
+    Write-Info "Eliminando proceso PM2 anterior..."
+    & pm2 delete conciliacion | Out-Null
 }
+
+Write-Info "Iniciando proceso PM2 'conciliacion' desde ecosystem.config.js..."
+& pm2 start ecosystem.config.js | Out-Null
+Write-Ok "Proceso iniciado"
 
 & pm2 save | Out-Null
 Write-Ok "Configuración PM2 guardada"
