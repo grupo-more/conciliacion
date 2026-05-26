@@ -11,6 +11,9 @@ interface NavItem {
   icon: React.ReactNode;
 }
 
+// Los módulos Conciliación y Dynatech quedaron deshabilitados en el sidebar
+// (sus páginas y APIs siguen funcionando si se accede por URL directa).
+// Para re-habilitarlos, agregar los items al arreglo NAV_ITEMS.
 const NAV_ITEMS: NavItem[] = [
   {
     href: "/dashboard",
@@ -25,13 +28,15 @@ const NAV_ITEMS: NavItem[] = [
     ),
   },
   {
-    href: "/dashboard/conciliacion",
-    label: "Conciliación",
+    href: "/dashboard/consolidados",
+    label: "Consolidados",
     matchPrefix: true,
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M7 7h10M7 7l3-3M7 7l3 3" />
-        <path d="M17 17H7M17 17l-3-3M17 17l-3 3" />
+        <path d="M4 6h7M4 12h7M4 18h7" />
+        <path d="M14 7l2 2 4-4" />
+        <path d="M14 13l2 2 4-4" />
+        <path d="M14 19l2 2 4-4" />
       </svg>
     ),
   },
@@ -43,17 +48,6 @@ const NAV_ITEMS: NavItem[] = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
         <path d="M8 11h8M8 15h8M8 7h4" />
-      </svg>
-    ),
-  },
-  {
-    href: "/dashboard/dynatech",
-    label: "Dynatech",
-    matchPrefix: true,
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 3v18h18" />
-        <path d="M7 14l3-3 3 3 5-6" />
       </svg>
     ),
   },

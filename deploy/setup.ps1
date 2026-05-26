@@ -176,7 +176,7 @@ if (-not $skipEnv) {
     $dynKey = Read-Host "  Dynatech API Key [usar default]"
     if ([string]::IsNullOrWhiteSpace($dynKey)) { $dynKey = $defaultDynKey }
 
-    $defaultDynUrl = "http://172.16.10.172:5158/api/depositos"
+    $defaultDynUrl = "http://172.16.10.172:5158/api/dynatech"
     $dynUrl = Read-Host "  Dynatech API URL [$defaultDynUrl]"
     if ([string]::IsNullOrWhiteSpace($dynUrl)) { $dynUrl = $defaultDynUrl }
 

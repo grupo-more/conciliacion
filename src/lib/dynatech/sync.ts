@@ -16,15 +16,18 @@ const itemSchema = z.object({
 
 const rowSchema = z.object({
   contexto: z.object({
-    mCjId: z.number().int().positive(),
+    id: z.number().int().positive(),
     sucursal: z.object({
       id: z.number().int().positive(),
       nombre: z.string().optional().nullable(),
     }),
-    cajero: z.object({
-      id: z.string(),
-      nombre: z.string().optional().nullable(),
-    }),
+    cajero: z
+      .object({
+        id: z.string(),
+        nombre: z.string().optional().nullable(),
+      })
+      .optional()
+      .nullable(),
     cliente: z
       .object({
         nombre: z.string().optional().nullable(),
@@ -41,15 +44,25 @@ const rowSchema = z.object({
     })
     .optional()
     .nullable(),
-  mCjObs: z.string().optional().default(""),
-  mCjHrAlt: z.string(),
-  totalAmount: z.number(),
+  glosa: z.string().optional().default(""),
+  fecha: z.string(),
+  monto: z.number(),
   currency: z.string().optional().default("CLP"),
   items: z.array(itemSchema).default([]),
   fechaCarga: z.string().optional().nullable(),
-  // Rubro contable interno de Dynatech (ej: 200 = Tesoreria). Nullable porque
+  // Rubro contable de la sucursal (ej: 202 = caja sucursal X). Nullable porque
   // no todos los movimientos necesariamente lo traen.
-  rubro: z.number().int().optional().nullable(),
+  rubroSucursal: z.number().int().optional().nullable(),
+  // Rubro contable del banco asociado (ej: 230 = Santander ME).
+  rubroBanco: z.number().int().optional().nullable(),
+  // Banco asignado al movimiento por reglas (string libre, ej "Santander ME").
+  banco: z.string().optional().nullable(),
+  // Banco que la sucursal/cajero tenía configurado.
+  bancoSucursal: z.string().optional().nullable(),
+  // Banco detectado heurísticamente por la API (puede diferir de "banco").
+  bancoDetectado: z.string().optional().nullable(),
+  // Flag de excepción: el movimiento no cumple alguna regla y requiere revisión.
+  esExcepcion: z.boolean().optional().default(false),
 });
 
 export type DynatechRow = z.infer<typeof rowSchema>;
@@ -195,33 +208,45 @@ export async function runSync(): Promise<SyncResult> {
   let nullRubroCount = 0;
 
   for (const r of valid) {
-    const username = r.contexto.cajero.id.trim().toUpperCase();
+    const username = r.contexto.cajero?.id?.trim().toUpperCase();
+    if (!username) {
+      // Sin cajero no podemos insertar (columna NOT NULL). En la práctica
+      // todos los movimientos vienen con cajero; este check es defensivo.
+      skippedInvalid++;
+      continue;
+    }
+    const cashierName = r.contexto.cajero?.nombre?.trim() || null;
     const rawRut = normalizeRut(r.contexto.cliente?.documento ?? null);
     const customerRut = rawRut && rawRut !== GENERIC_CUSTOMER_RUT ? rawRut : null;
     const customerName = customerRut
       ? r.contexto.cliente?.nombre?.trim() || null
       : null;
-    const rubro = r.rubro ?? null;
+    const rubro = r.rubroSucursal ?? null;
     if (rubro === null) nullRubroCount++;
     try {
       await prisma.dynatechMovement.create({
         data: {
-          mCjId: BigInt(r.contexto.mCjId),
+          mCjId: BigInt(r.contexto.id),
           branchExternalId: r.contexto.sucursal.id,
           branchExternalName: r.contexto.sucursal.nombre ?? null,
           cashierUsername: username,
-          cashierName: r.contexto.cajero.nombre?.trim() || null,
+          cashierName,
           customerName,
           customerRut,
           documentCode: r.documento?.codigo ?? 0,
           documentType: r.documento?.tipo ?? null,
           documentFolio: BigInt(r.documento?.folio ?? 0),
-          observation: r.mCjObs ?? "",
-          occurredAt: parseDynatechDate(r.mCjHrAlt),
+          observation: r.glosa ?? "",
+          occurredAt: parseDynatechDate(r.fecha),
           loadedAt: r.fechaCarga ? parseDynatechDate(r.fechaCarga) : null,
-          totalAmount: BigInt(Math.round(r.totalAmount)),
+          totalAmount: BigInt(Math.round(r.monto)),
           currency: r.currency ?? "CLP",
           rubro,
+          rubroBank: r.rubroBanco ?? null,
+          bankName: r.banco ?? null,
+          branchBank: r.bancoSucursal ?? null,
+          detectedBank: r.bancoDetectado ?? null,
+          isException: r.esExcepcion ?? false,
           items: r.items as unknown as object,
           rawJson: r as unknown as object,
         },
@@ -236,7 +261,7 @@ export async function runSync(): Promise<SyncResult> {
       // Otro error: lo registramos como inválido (no aborta el sync)
       skippedInvalid++;
       console.error(
-        `[dynatech-sync] error insertando mCjId=${r.contexto.mCjId}`,
+        `[dynatech-sync] error insertando id=${r.contexto.id}`,
         e instanceof Error ? e.message : e
       );
     }
