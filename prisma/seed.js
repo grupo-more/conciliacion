@@ -49,6 +49,19 @@ const ACCOUNTS = [
     holderRut: null,
     currency: "CLP",
   },
+  {
+    // Banco de Chile NO participa en el motor de conciliación
+    // (no está en REGISTERED_BANK_CODES de reconciliation/match.ts).
+    // Se registra solo para que aparezca en el dashboard y se pueda importar
+    // su cartola sin caer en "Sin asignar".
+    bankCode: "CHILE",
+    bankName: "Banco de Chile",
+    accountNumber: "51541406",
+    displayNumber: "000051541406",
+    holderName: "ME SPA",
+    holderRut: "77333096-4",
+    currency: "CLP",
+  },
   // Cuentas "Sin asignar" — buffer para movimientos cuyo archivo de cartola
   // no matchea con una cuenta real registrada. Se identifican por accountNumber
   // con prefijo "_UNASSIGNED_". El usuario reasigna manualmente desde el UI.
