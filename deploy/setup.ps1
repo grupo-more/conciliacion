@@ -201,6 +201,9 @@ DATABASE_URL="postgresql://postgres:$pgPassPlain@localhost:5432/conciliacion?sch
 
 # Auth
 JWT_SECRET="$jwtSecret"
+# Cookie Secure: false porque el deploy interno es HTTP (sobre VPN).
+# Pon true sólo si vas a servir la app por HTTPS.
+COOKIE_SECURE=false
 
 # Usuario gerencia inicial
 SEED_ADMIN_EMAIL="$adminEmail"

@@ -48,9 +48,12 @@ export async function getSession(): Promise<SessionPayload | null> {
 }
 
 export function setSessionCookie(token: string) {
+  // COOKIE_SECURE=true exige HTTPS. En despliegues internos por VPN (HTTP)
+  // debe quedar en false, si no el navegador descarta la cookie.
+  const secure = process.env.COOKIE_SECURE === "true";
   cookies().set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure,
     sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 24 * 7,
