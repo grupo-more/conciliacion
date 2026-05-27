@@ -32,12 +32,32 @@ model BankAccount {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  imports   StatementImport[]
-  movements BankMovement[]
+  imports     StatementImport[]
+  movements   BankMovement[]
   branchHints BranchAccountHint[]
+  aliases     BankAccountAlias[]
 
   @@unique([bankCode, accountNumber])
   @@index([active])
+}
+
+// Mapeo explícito de TesoreriaMovement.banco → BankAccount.
+// El motor de Consolidados consulta esta tabla para resolver con certeza a qué
+// cuenta corresponde cada movimiento de Tesorería. Es la pieza clave que
+// reemplaza el fuzzy matching por bankCode (que confundía las múltiples
+// cuentas Santander entre sí).
+model BankAccountAlias {
+  id          String      @id @default(uuid())
+  // String exacto que viene en TesoreriaMovement.banco (ej. "Santander ME",
+  // "BCI ME", "Santander BAGO"). Único.
+  bancoString String      @unique @map("banco_string")
+  accountId   String      @map("account_id")
+  account     BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  notes       String?     @db.Text
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  @@index([accountId])
 }
 
 model StatementImport {

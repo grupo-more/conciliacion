@@ -5,3 +5,13 @@ node_modules
 *.tsbuildinfo
 next-env.d.ts
 .DS_Store
+
+# Dumps de BD (contienen datos sensibles, nunca commitear)
+*.dump
+*.sql.gz
+backups/
+dumps/
+
+# Reportes y exploraciones temporales
+reports/
+scripts/analyze/

@@ -1,15 +1,24 @@
 /**
- * Motor de matching para Consolidados (Tesoreria ↔ BankMovement).
+ * Motor de matching V2 para Consolidados (Tesoreria <-> BankMovement).
  *
- * Diferencias con el motor de Reconciliation (Dynatech):
- *  - Tesoreria trae el campo `banco` resuelto desde la API, así que NO
- *    necesitamos heurísticas para detectar el banco (parser de glosa,
- *    branch hints, historial). Resolvemos cuenta bancaria por fuzzy
- *    match directo entre tesoreria.banco y BankAccount.
- *  - Si `esExcepcion === true` → REVIEW automático (la API ya marcó el
- *    movimiento como sospechoso).
- *  - V1 solo soporta 1:1. Splits 1:N quedan para una iteración futura
- *    si los datos reales lo justifican.
+ * Cambios clave vs V1 (basados en analisis sobre datos reales):
+ *  1. Resolucion de cuenta ESTRICTA via BankAccountAlias. Sin alias para el
+ *     string `banco` de Tesoreria => OUT_OF_SCOPE (con razon explicita).
+ *     El fuzzy matching por bankCode (V1) confundia las multiples cuentas
+ *     Santander entre si y por eso AUTO_MATCHED quedaba en 0.
+ *  2. Distancia de fechas por fecha CALENDARIO (no datetime). El delta antes
+ *     se calculaba en horas y daba "abono anterior a venta" (-15) para casos
+ *     same-day que solo diferian en horas.
+ *  3. RUT del cliente con peso bajo (+10) y sin penalizacion por contradiccion:
+ *     el banco suele registrar el RUT de la empresa procesadora, no del
+ *     cliente final, asi que el contraste no es señal confiable.
+ *  4. Match por NOMBRE en multiples direcciones:
+ *     - apellido de t.clienteName aparece en bm.counterpartyName (+25)
+ *     - tokens significativos de t.glosa aparecen en bm.counterpartyName (+15)
+ *  5. Threshold de AUTO_MATCHED baja a 50 (de 80) cuando la cuenta esta firme
+ *     por alias y el candidato es UNICO en la ventana.
+ *  6. Splits 1:N (2-3 partes) para casos donde un movimiento de Tesoreria se
+ *     concilia con multiples abonos del mismo dia.
  */
 import { prisma } from "@/lib/db";
 import { normalizeRut } from "@/lib/cartolas/normalize";
@@ -21,26 +30,39 @@ import type {
 
 /* ============================== Constantes ============================== */
 
-const DATE_WINDOW_DAYS = 7; // ventana ±N días para buscar candidatos
+const DATE_WINDOW_DAYS = 7;
 
 const THRESHOLDS = {
-  AUTO_MATCHED: 80,
-  SUGGESTED: 60,
-  REVIEW: 40,
+  // Con cuenta firme por alias y candidato unico, basta score >= 50.
+  AUTO_MATCHED: 50,
+  SUGGESTED: 35,
+  REVIEW: 20,
 } as const;
 
 const WEIGHTS = {
-  amount_exact: 30, // siempre, es precondición de candidato
-  same_day: 20,
-  diff_1d: 15,
-  diff_2d: 10,
-  diff_3_7d: 5,
-  rut_match: 35,
-  rut_contradicts: -100,
-  name_high: 20,
-  name_mid: 10,
-  temporal_after: 5, // abono posterior a la venta (lógico)
-  temporal_before: -15, // abono anterior a la venta (sospechoso)
+  // Monto exacto (precondicion, siempre presente)
+  amount_exact: 30,
+
+  // Fecha (calendario)
+  same_day: 25,
+  diff_1d: 18,
+  diff_2d: 12,
+  diff_3d: 6,
+  diff_4_7d: 3,
+
+  // RUT (peso bajo, ver doc del archivo)
+  rut_match: 10,
+
+  // Nombre del cliente Tesoreria vs counterparty del banco
+  name_apellido_match: 25, // apellido (primer token de clienteName) aparece en counterpartyName
+  name_token_match: 12, // cualquier otro token significativo coincide
+
+  // Tokens de la glosa de Tesoreria coincidiendo con counterparty
+  glosa_token_match: 15,
+
+  // Coherencia temporal
+  temporal_after: 3, // abono posterior o igual a venta (lógico)
+  temporal_far_after: -5, // abono > 7d despues (cartola retrasada o caso raro)
 } as const;
 
 /* ================================ Tipos ================================ */
@@ -49,7 +71,6 @@ export interface ScoreFactor {
   key: keyof typeof WEIGHTS;
   label: string;
   weight: number;
-  detail?: string;
 }
 
 export interface ScoredCandidate {
@@ -64,13 +85,13 @@ export interface MatchDecision {
     | "EXACT_SAME_DAY"
     | "EXACT_PM3"
     | "EXACT_PM7"
-    | "SPLIT_SAME_RUT"
-    | "SPLIT"
+    | "SPLIT_SAME_DAY"
+    | "SPLIT_PM3"
     | "MANUAL"
     | null;
   score: number | null;
   resolvedAccountId: string | null;
-  bestCandidateId: string | null;
+  bestCandidateIds: string[]; // 1 para 1:1, N para splits
   alternatives: string[];
   outOfScopeReason: string | null;
 }
@@ -83,6 +104,7 @@ export interface RunSummary {
   review: number;
   noMatch: number;
   outOfScope: number;
+  splits: number; // cuantos resolvieron como split 1:N
   errors: number;
   ms: number;
 }
@@ -90,173 +112,176 @@ export interface RunSummary {
 /* ============================ Bank resolution ============================ */
 
 /**
- * Normaliza un string de banco para comparación tolerante.
- * "Santander ME" → "SANTANDERME"
- * "  BCI  ME  "  → "BCIME"
+ * Resuelve la cuenta bancaria para un string `banco` de Tesoreria, usando
+ * el catalogo BankAccountAlias. Sin alias => null (caera en OUT_OF_SCOPE).
+ *
+ * Implementacion: cache en memoria por llamada de runConsolidados.
  */
-function normalizeBankString(s: string | null | undefined): string {
-  if (!s) return "";
+async function loadAliasMap(): Promise<Map<string, BankAccount>> {
+  const aliases = await prisma.bankAccountAlias.findMany({
+    include: { account: true },
+  });
+  const m = new Map<string, BankAccount>();
+  for (const a of aliases) m.set(a.bancoString, a.account);
+  return m;
+}
+
+/* ============================ Glosa / Nombres ============================ */
+
+// Stopwords del dominio: no aportan a la identificacion del cliente
+const GLOSA_STOPWORDS = new Set([
+  "DEP", "DEPOSITO", "DEPOSITOS",
+  "BCI", "ME", "BAGO", "MG",
+  "SANTANDER", "CHILE", "INTERNACIONAL",
+  "BOL", "BOLETA", "BOLETAS",
+  "FACT", "FACTURA",
+  "TICKET", "TKT", "TCKT", "TKTS",
+  "REF", "AUT", "OP", "ENVIO", "APP",
+  "TRF", "TRANSF", "TRANSFERENCIA", "TRANSFIERE",
+  "GIRO", "GIROS",
+  "DE", "DEL", "LA", "EL", "Y", "EN", "POR",
+  "SPA", "LTDA", "LIMITADA", "S A", "SA",
+  "REG", "MOV",
+  "MAS", "X",
+]);
+
+function stripDiacritics(s: string): string {
   return s
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, "");
+    .toUpperCase();
+}
+
+function tokenize(s: string | null | undefined, minLen = 3): string[] {
+  if (!s) return [];
+  return stripDiacritics(s)
+    .split(/[^A-Z0-9]+/)
+    .filter((t) => t.length >= minLen && !/^[0-9]+$/.test(t) && !GLOSA_STOPWORDS.has(t));
 }
 
 /**
- * Mapeo de tokens conocidos en el campo `banco` de Tesoreria a bankCode.
- * Si la API agrega bancos nuevos, hay que extender aquí o usar alias en
- * BankAccount para que matchee solo.
+ * Calcula factores de scoring relacionados a nombres y glosa.
  */
-const BANK_CODE_TOKENS: Array<{ token: string; bankCode: string }> = [
-  { token: "SANTANDER", bankCode: "SANTANDER" },
-  { token: "BCI", bankCode: "BCI" },
-  { token: "INTERNACIONAL", bankCode: "INTERNACIONAL" },
-];
+function scoreNameAndGlosa(
+  t: TesoreriaMovement,
+  bm: BankMovement
+): ScoreFactor[] {
+  const factors: ScoreFactor[] = [];
 
-/**
- * Dado el string `banco` de Tesoreria (ej "Santander ME"), retorna las
- * cuentas candidatas. Estrategia:
- *  1. Identificar bankCode por token contenido.
- *  2. Filtrar cuentas activas con ese bankCode.
- *  3. Si Tesoreria.banco tiene un sufijo (ej "ME", "BAGO"), priorizar
- *     cuentas cuyo alias/purpose/bankName lo mencione.
- *  4. Si nada calza, devolver todas las cuentas activas del bankCode
- *     como candidatas (deja que el filtrado por monto+fecha desambigüe).
- */
-export async function resolveCandidateAccounts(
-  banco: string | null | undefined
-): Promise<BankAccount[]> {
-  if (!banco) return [];
-  const norm = normalizeBankString(banco);
+  const cpName = stripDiacritics(bm.counterpartyName ?? "");
+  if (!cpName) return factors;
 
-  // 1. Detectar bankCode
-  const codeMatch = BANK_CODE_TOKENS.find((t) => norm.includes(t.token));
-  if (!codeMatch) return [];
+  // 1. Apellido del clienteName (primer token antes de la coma) en counterparty
+  if (t.clienteName) {
+    const apellido = stripDiacritics(t.clienteName.split(",")[0] ?? "").trim();
+    if (apellido.length >= 3 && cpName.includes(apellido)) {
+      factors.push({
+        key: "name_apellido_match",
+        label: `Apellido "${apellido}" en banco`,
+        weight: WEIGHTS.name_apellido_match,
+      });
+      return factors; // No doble contar con token_match
+    }
 
-  const accounts = await prisma.bankAccount.findMany({
-    where: { bankCode: codeMatch.bankCode, active: true },
-  });
-  if (accounts.length === 0) return [];
-  if (accounts.length === 1) return accounts;
+    // 2. Tokens del clienteName en counterparty (caso "BANMEDICA S A" vs "BANMEDICA")
+    const tokensCliente = tokenize(t.clienteName);
+    const matched = tokensCliente.filter((tok) => cpName.includes(tok));
+    if (matched.length > 0) {
+      factors.push({
+        key: "name_token_match",
+        label: `Token cliente "${matched[0]}" en banco`,
+        weight: WEIGHTS.name_token_match,
+      });
+      return factors;
+    }
+  }
 
-  // 2. Desambiguar por alias/purpose/bankName si hay varias del mismo bankCode
-  const suffix = norm.replace(codeMatch.token, "");
-  if (!suffix) return accounts;
+  // 3. Tokens de la GLOSA en counterparty (cuando clienteName=null pero
+  //    la glosa menciona al cliente, ej. "DEP. BCI ME SUSANA VENEGAS BOL...")
+  const tokensGlosa = tokenize(t.glosa);
+  for (const tok of tokensGlosa) {
+    if (cpName.includes(tok)) {
+      factors.push({
+        key: "glosa_token_match",
+        label: `Token glosa "${tok}" en banco`,
+        weight: WEIGHTS.glosa_token_match,
+      });
+      break;
+    }
+  }
 
-  const prioritized = accounts.filter((a) => {
-    const haystack = normalizeBankString(
-      `${a.alias ?? ""} ${a.purpose ?? ""} ${a.bankName} ${a.displayNumber ?? ""}`
-    );
-    return haystack.includes(suffix);
-  });
-
-  return prioritized.length > 0 ? prioritized : accounts;
-}
-
-/* ============================ Name similarity ============================ */
-
-/**
- * Similitud entre dos nombres de personas/empresas. Devuelve 0..1.
- * Estrategia: tokenizar, normalizar, calcular Jaccard sobre tokens ≥3 chars.
- */
-function nameSimilarity(a: string | null, b: string | null): number {
-  if (!a || !b) return 0;
-  const tok = (s: string) =>
-    s
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .toUpperCase()
-      .split(/[^A-Z0-9]+/)
-      .filter((t) => t.length >= 3);
-  const ta = new Set(tok(a));
-  const tb = new Set(tok(b));
-  if (ta.size === 0 || tb.size === 0) return 0;
-  let inter = 0;
-  for (const t of ta) if (tb.has(t)) inter++;
-  const union = ta.size + tb.size - inter;
-  return union === 0 ? 0 : inter / union;
+  return factors;
 }
 
 /* =============================== Scoring =============================== */
 
+/** Diferencia en dias CALENDARIO (no datetime). Positivo = bm despues de t. */
+function calendarDaysDelta(t: TesoreriaMovement, bm: BankMovement): number {
+  const tDay = new Date(t.fecha.getFullYear(), t.fecha.getMonth(), t.fecha.getDate());
+  const bDay = new Date(
+    bm.postDate.getFullYear(),
+    bm.postDate.getMonth(),
+    bm.postDate.getDate()
+  );
+  return Math.round((bDay.getTime() - tDay.getTime()) / (24 * 60 * 60 * 1000));
+}
+
 export function scoreCandidate(
   t: TesoreriaMovement,
-  b: BankMovement
+  bm: BankMovement
 ): { score: number; factors: ScoreFactor[] } {
   const factors: ScoreFactor[] = [];
 
-  // 1. Monto exacto (siempre presente, es precondición)
+  // 1. Monto exacto
   factors.push({
     key: "amount_exact",
     label: "Monto exacto",
     weight: WEIGHTS.amount_exact,
   });
 
-  // 2. Distancia de fechas
-  const dayMs = 24 * 60 * 60 * 1000;
-  const deltaMs = b.postDate.getTime() - t.fecha.getTime();
-  const deltaDays = Math.round(deltaMs / dayMs);
-  const absDays = Math.abs(deltaDays);
-  if (absDays === 0) {
+  // 2. Distancia de fechas (calendario)
+  const delta = calendarDaysDelta(t, bm);
+  const abs = Math.abs(delta);
+  if (abs === 0) {
     factors.push({ key: "same_day", label: "Mismo día", weight: WEIGHTS.same_day });
-  } else if (absDays === 1) {
+  } else if (abs === 1) {
     factors.push({ key: "diff_1d", label: "±1 día", weight: WEIGHTS.diff_1d });
-  } else if (absDays === 2) {
+  } else if (abs === 2) {
     factors.push({ key: "diff_2d", label: "±2 días", weight: WEIGHTS.diff_2d });
-  } else if (absDays <= 7) {
+  } else if (abs === 3) {
+    factors.push({ key: "diff_3d", label: "±3 días", weight: WEIGHTS.diff_3d });
+  } else if (abs <= 7) {
     factors.push({
-      key: "diff_3_7d",
-      label: `±${absDays} días`,
-      weight: WEIGHTS.diff_3_7d,
+      key: "diff_4_7d",
+      label: `±${abs} días`,
+      weight: WEIGHTS.diff_4_7d,
     });
   }
 
-  // 3. Coherencia temporal (abono debe ser igual o posterior a la venta)
-  if (deltaDays >= 0 && absDays > 0) {
+  // 3. Coherencia temporal (suave)
+  if (delta >= 0 && abs > 0 && abs <= 7) {
     factors.push({
       key: "temporal_after",
       label: "Abono posterior a venta",
       weight: WEIGHTS.temporal_after,
     });
-  } else if (deltaDays < 0) {
+  } else if (delta > 7) {
     factors.push({
-      key: "temporal_before",
-      label: "Abono anterior a venta",
-      weight: WEIGHTS.temporal_before,
+      key: "temporal_far_after",
+      label: "Abono > 7d después (sospechoso)",
+      weight: WEIGHTS.temporal_far_after,
     });
   }
 
-  // 4. RUT
+  // 4. RUT (peso bajo)
   const tRut = normalizeRut(t.clienteRut);
-  const bRut = normalizeRut(b.counterpartyRut);
-  if (tRut && bRut) {
-    if (tRut === bRut) {
-      factors.push({ key: "rut_match", label: "RUT coincide", weight: WEIGHTS.rut_match });
-    } else {
-      factors.push({
-        key: "rut_contradicts",
-        label: `RUT distinto (${tRut} vs ${bRut})`,
-        weight: WEIGHTS.rut_contradicts,
-      });
-    }
+  const bRut = normalizeRut(bm.counterpartyRut);
+  if (tRut && bRut && tRut === bRut) {
+    factors.push({ key: "rut_match", label: "RUT coincide", weight: WEIGHTS.rut_match });
   }
 
-  // 5. Nombre
-  const nameSim = nameSimilarity(t.clienteName, b.counterpartyName);
-  if (nameSim >= 0.5) {
-    factors.push({
-      key: "name_high",
-      label: `Nombre similar (${nameSim.toFixed(2)})`,
-      weight: WEIGHTS.name_high,
-    });
-  } else if (nameSim >= 0.3) {
-    factors.push({
-      key: "name_mid",
-      label: `Nombre parcial (${nameSim.toFixed(2)})`,
-      weight: WEIGHTS.name_mid,
-    });
-  }
+  // 5. Nombre / glosa
+  factors.push(...scoreNameAndGlosa(t, bm));
 
   const total = factors.reduce((sum, f) => sum + f.weight, 0);
   return { score: total, factors };
@@ -264,58 +289,124 @@ export function scoreCandidate(
 
 /* ============================== Match logic ============================== */
 
+function inferMatchType(delta: number, isSplit: boolean): MatchDecision["matchType"] {
+  const abs = Math.abs(delta);
+  if (isSplit) {
+    return abs === 0 ? "SPLIT_SAME_DAY" : "SPLIT_PM3";
+  }
+  if (abs === 0) return "EXACT_SAME_DAY";
+  if (abs <= 3) return "EXACT_PM3";
+  return "EXACT_PM7";
+}
+
 /**
- * Decide el match para un movimiento Tesoreria contra sus candidatos.
+ * Detecta un split: combinacion de 2 o 3 BankMovements en la cuenta correcta,
+ * dentro de ±3 dias, que sumen exacto al monto de Tesoreria.
+ *
+ * Devuelve el mejor grupo (preferentemente del mismo dia) o null.
+ */
+function detectSplit(
+  t: TesoreriaMovement,
+  candidatesAnyAmount: Array<BankMovement & { account: BankAccount }>
+): Array<BankMovement & { account: BankAccount }> | null {
+  // Solo considerar BMs cuyo monto < total de Tesoreria
+  const pool = candidatesAnyAmount.filter((bm) => bm.amount < t.monto);
+  if (pool.length < 2) return null;
+
+  const targetAmount = t.monto;
+
+  // Probar pares
+  for (let i = 0; i < pool.length; i++) {
+    for (let j = i + 1; j < pool.length; j++) {
+      if (pool[i].amount + pool[j].amount === targetAmount) {
+        return [pool[i], pool[j]];
+      }
+    }
+  }
+
+  // Probar tripletas (limite de busqueda para no explotar)
+  if (pool.length <= 20) {
+    for (let i = 0; i < pool.length; i++) {
+      for (let j = i + 1; j < pool.length; j++) {
+        const remaining = targetAmount - pool[i].amount - pool[j].amount;
+        if (remaining <= 0n) continue;
+        for (let k = j + 1; k < pool.length; k++) {
+          if (pool[k].amount === remaining) {
+            return [pool[i], pool[j], pool[k]];
+          }
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Toma la decision de match para un movimiento Tesoreria.
  */
 export function decideMatch(
   t: TesoreriaMovement,
-  accounts: BankAccount[],
-  candidates: Array<BankMovement & { account: BankAccount }>
+  resolvedAccount: BankAccount | null,
+  candidates: Array<BankMovement & { account: BankAccount }>,
+  splitPool: Array<BankMovement & { account: BankAccount }>
 ): MatchDecision {
-  // No se pudo resolver cuenta → OUT_OF_SCOPE
-  if (accounts.length === 0) {
+  // 1. Sin cuenta resuelta por alias => OUT_OF_SCOPE
+  if (!resolvedAccount) {
     return {
       status: "OUT_OF_SCOPE",
       matchType: null,
       score: null,
       resolvedAccountId: null,
-      bestCandidateId: null,
+      bestCandidateIds: [],
       alternatives: [],
       outOfScopeReason: t.banco
-        ? `No se pudo resolver cuenta bancaria desde "${t.banco}"`
+        ? `Sin alias configurado para "${t.banco}". Crear en Configuracion -> Mapeo de cuentas.`
         : "Tesoreria sin banco asignado",
     };
   }
 
-  // esExcepcion=true → REVIEW directo aunque haya candidatos. La API ya marcó
-  // este movimiento como sospechoso y debe revisarlo un humano.
+  // 2. Excepcion API => REVIEW directo (la API marca el movimiento como sospechoso)
   if (t.esExcepcion) {
     const best = candidates[0];
     return {
       status: "REVIEW",
       matchType: null,
       score: null,
-      resolvedAccountId: accounts.length === 1 ? accounts[0].id : null,
-      bestCandidateId: best?.id ?? null,
+      resolvedAccountId: resolvedAccount.id,
+      bestCandidateIds: best ? [best.id] : [],
       alternatives: candidates.slice(1, 6).map((c) => c.id),
       outOfScopeReason: null,
     };
   }
 
-  // Sin candidatos por monto+fecha → NO_MATCH
+  // 3. Sin candidatos por monto exacto => intentar split
   if (candidates.length === 0) {
+    const splitGroup = detectSplit(t, splitPool);
+    if (splitGroup) {
+      const minDelta = Math.min(...splitGroup.map((bm) => Math.abs(calendarDaysDelta(t, bm))));
+      return {
+        status: "SUGGESTED", // Splits siempre revisados, no AUTO
+        matchType: inferMatchType(minDelta, true),
+        score: 50,
+        resolvedAccountId: resolvedAccount.id,
+        bestCandidateIds: splitGroup.map((bm) => bm.id),
+        alternatives: [],
+        outOfScopeReason: null,
+      };
+    }
     return {
       status: "NO_MATCH",
       matchType: null,
       score: null,
-      resolvedAccountId: accounts.length === 1 ? accounts[0].id : null,
-      bestCandidateId: null,
+      resolvedAccountId: resolvedAccount.id,
+      bestCandidateIds: [],
       alternatives: [],
       outOfScopeReason: null,
     };
   }
 
-  // Scorear todos y ordenar
+  // 4. Scorear todos los candidatos y ordenar
   const scored: ScoredCandidate[] = candidates
     .map((c) => {
       const { score, factors } = scoreCandidate(t, c);
@@ -324,63 +415,48 @@ export function decideMatch(
     .sort((a, b) => b.score - a.score);
 
   const best = scored[0];
-  const matchType = inferMatchType(t, best.bankMovement);
+  const delta = calendarDaysDelta(t, best.bankMovement);
+  const matchType = inferMatchType(delta, false);
 
-  // Status según score del best
+  // 5. Decision por score + unicidad
   let status: MatchDecision["status"];
-  if (best.score >= THRESHOLDS.AUTO_MATCHED) {
-    // Si hay un segundo muy cercano, mejor SUGGESTED para revisión
-    if (scored.length > 1 && scored[1].score >= best.score - 5) {
-      status = "SUGGESTED";
-    } else {
-      status = "AUTO_MATCHED";
-    }
-  } else if (best.score >= THRESHOLDS.SUGGESTED) {
-    status = "SUGGESTED";
-  } else if (best.score >= THRESHOLDS.REVIEW) {
-    status = "REVIEW";
+  if (scored.length === 1) {
+    // Unico candidato en cuenta correcta + monto exacto = altísima confianza
+    if (best.score >= THRESHOLDS.AUTO_MATCHED) status = "AUTO_MATCHED";
+    else if (best.score >= THRESHOLDS.SUGGESTED) status = "SUGGESTED";
+    else status = "REVIEW";
   } else {
-    status = "NO_MATCH";
+    // Multiples candidatos: requiere margen claro para AUTO
+    const margin = best.score - scored[1].score;
+    if (best.score >= THRESHOLDS.AUTO_MATCHED && margin >= 12) {
+      status = "AUTO_MATCHED";
+    } else if (best.score >= THRESHOLDS.SUGGESTED) {
+      status = "SUGGESTED";
+    } else if (best.score >= THRESHOLDS.REVIEW) {
+      status = "REVIEW";
+    } else {
+      status = "NO_MATCH";
+    }
   }
 
   return {
     status,
     matchType: status === "NO_MATCH" ? null : matchType,
     score: best.score,
-    resolvedAccountId: best.bankMovement.accountId,
-    bestCandidateId: status === "NO_MATCH" ? null : best.bankMovement.id,
+    resolvedAccountId: resolvedAccount.id,
+    bestCandidateIds: status === "NO_MATCH" ? [] : [best.bankMovement.id],
     alternatives: scored.slice(1, 6).map((s) => s.bankMovement.id),
     outOfScopeReason: null,
   };
 }
 
-function inferMatchType(
-  t: TesoreriaMovement,
-  b: BankMovement
-): MatchDecision["matchType"] {
-  const dayMs = 24 * 60 * 60 * 1000;
-  const abs = Math.abs(
-    Math.round((b.postDate.getTime() - t.fecha.getTime()) / dayMs)
-  );
-  if (abs === 0) return "EXACT_SAME_DAY";
-  if (abs <= 3) return "EXACT_PM3";
-  return "EXACT_PM7";
-}
-
 /* =============================== Orchestrator =============================== */
 
 interface RunOptions {
-  /** Re-evaluar Consolidados en estados abiertos (NO_MATCH, SUGGESTED, REVIEW). */
   reEvaluateOpen?: boolean;
-  /** Solo procesar un subconjunto por ID Tesoreria (útil para tests). */
   tesoreriaIds?: string[];
 }
 
-/**
- * Corre el matching sobre TesoreriaMovements sin Consolidado, opcionalmente
- * también sobre los que están en estado abierto (re-evaluación al subir
- * cartolas nuevas).
- */
 export async function runConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
   const t0 = Date.now();
   const summary: RunSummary = {
@@ -391,12 +467,14 @@ export async function runConsolidados(opts: RunOptions = {}): Promise<RunSummary
     review: 0,
     noMatch: 0,
     outOfScope: 0,
+    splits: 0,
     errors: 0,
     ms: 0,
   };
 
-  // 1. Determinar qué TesoreriaMovements procesar
-  const openStatuses = ["NO_MATCH", "SUGGESTED", "REVIEW"];
+  const aliasMap = await loadAliasMap();
+
+  const openStatuses = ["NO_MATCH", "SUGGESTED", "REVIEW", "OUT_OF_SCOPE"];
   const tesorerias = await prisma.tesoreriaMovement.findMany({
     where: {
       ...(opts.tesoreriaIds ? { id: { in: opts.tesoreriaIds } } : {}),
@@ -416,7 +494,7 @@ export async function runConsolidados(opts: RunOptions = {}): Promise<RunSummary
     return summary;
   }
 
-  // 2. Pre-cargar todos los BankMovements de tipo IN dentro del rango total
+  // Pre-cargar BankMovements en el rango total
   const minFecha = tesorerias.reduce(
     (m, t) => (t.fecha < m ? t.fecha : m),
     tesorerias[0].fecha
@@ -426,59 +504,74 @@ export async function runConsolidados(opts: RunOptions = {}): Promise<RunSummary
     tesorerias[0].fecha
   );
   const dayMs = 24 * 60 * 60 * 1000;
-  const lowerBound = new Date(minFecha.getTime() - DATE_WINDOW_DAYS * dayMs);
-  const upperBound = new Date(maxFecha.getTime() + DATE_WINDOW_DAYS * dayMs);
+  const lower = new Date(minFecha.getTime() - DATE_WINDOW_DAYS * dayMs);
+  const upper = new Date(maxFecha.getTime() + DATE_WINDOW_DAYS * dayMs);
 
-  const bankMovementsInRange = await prisma.bankMovement.findMany({
+  // Set de bm IDs ya ligados (no se reusan en este run)
+  const linkedRows = await prisma.consolidadoLink.findMany({
+    select: { bankMovementId: true },
+  });
+  const alreadyLinked = new Set(linkedRows.map((l) => l.bankMovementId));
+
+  const allBms = await prisma.bankMovement.findMany({
     where: {
       direction: "IN",
-      postDate: { gte: lowerBound, lte: upperBound },
-      // No incluidos en otro Consolidado (un BM solo puede estar en uno)
-      consolidadoLinks: { none: {} },
+      postDate: { gte: lower, lte: upper },
+      id: { notIn: Array.from(alreadyLinked).length > 0 ? Array.from(alreadyLinked) : [""] },
     },
     include: { account: true },
     orderBy: { postDate: "asc" },
   });
 
-  // Index para búsqueda rápida: amount → BM[]
-  const byAmount = new Map<string, Array<typeof bankMovementsInRange[number]>>();
-  for (const bm of bankMovementsInRange) {
-    const key = bm.amount.toString();
-    const arr = byAmount.get(key) ?? [];
+  // Indices
+  const bmsByAccount = new Map<string, typeof allBms>();
+  for (const bm of allBms) {
+    const arr = bmsByAccount.get(bm.accountId) ?? [];
     arr.push(bm);
-    byAmount.set(key, arr);
+    bmsByAccount.set(bm.accountId, arr);
   }
 
-  // 3. Procesar uno a uno
+  // Procesar uno a uno
   for (const t of tesorerias) {
     summary.processed++;
     try {
-      const accounts = await resolveCandidateAccounts(t.banco);
-      const accountIds = new Set(accounts.map((a) => a.id));
+      const resolvedAccount = t.banco ? aliasMap.get(t.banco) ?? null : null;
 
-      // Candidatos: mismo monto, dentro de la cuenta resuelta, en ventana
-      const lowerT = new Date(t.fecha.getTime() - DATE_WINDOW_DAYS * dayMs);
-      const upperT = new Date(t.fecha.getTime() + DATE_WINDOW_DAYS * dayMs);
-      const sameAmount = byAmount.get(t.monto.toString()) ?? [];
-      const candidates = sameAmount.filter(
-        (bm) =>
-          accountIds.has(bm.accountId) &&
-          bm.postDate >= lowerT &&
-          bm.postDate <= upperT
-      );
+      let candidates: typeof allBms = [];
+      let splitPool: typeof allBms = [];
 
-      const decision = decideMatch(t, accounts, candidates);
+      if (resolvedAccount) {
+        const lowerT = new Date(t.fecha.getTime() - DATE_WINDOW_DAYS * dayMs);
+        const upperT = new Date(t.fecha.getTime() + DATE_WINDOW_DAYS * dayMs);
+        const inAccount = bmsByAccount.get(resolvedAccount.id) ?? [];
+        candidates = inAccount.filter(
+          (bm) =>
+            bm.amount === t.monto &&
+            bm.postDate >= lowerT &&
+            bm.postDate <= upperT
+        );
 
-      // Persistir
+        // Para splits, usamos ventana mas estrecha (±3d) y monto != exacto
+        const splitLower = new Date(t.fecha.getTime() - 3 * dayMs);
+        const splitUpper = new Date(t.fecha.getTime() + 3 * dayMs);
+        splitPool = inAccount.filter(
+          (bm) =>
+            bm.amount !== t.monto &&
+            bm.postDate >= splitLower &&
+            bm.postDate <= splitUpper
+        );
+      }
+
+      const decision = decideMatch(t, resolvedAccount, candidates, splitPool);
       await applyDecision(t.id, decision);
 
-      // Contadores
       switch (decision.status) {
         case "AUTO_MATCHED":
           summary.autoMatched++;
           break;
         case "SUGGESTED":
           summary.suggested++;
+          if (decision.bestCandidateIds.length > 1) summary.splits++;
           break;
         case "REVIEW":
           summary.review++;
@@ -503,9 +596,6 @@ export async function runConsolidados(opts: RunOptions = {}): Promise<RunSummary
   return summary;
 }
 
-/**
- * Persiste la decisión en BD: upsert del Consolidado + sus links.
- */
 async function applyDecision(
   tesoreriaId: string,
   d: MatchDecision
@@ -515,7 +605,6 @@ async function applyDecision(
       where: { tesoreriaMovementId: tesoreriaId },
     });
 
-    // Reset links previos (re-evaluación puede cambiar la elección)
     if (existing) {
       await tx.consolidadoLink.deleteMany({
         where: { consolidadoId: existing.id },
@@ -536,24 +625,37 @@ async function applyDecision(
           data: { ...data, matchedAt: new Date() },
         })
       : await tx.consolidado.create({
-          data: {
-            tesoreriaMovementId: tesoreriaId,
-            ...data,
-          },
+          data: { tesoreriaMovementId: tesoreriaId, ...data },
         });
 
-    // Crear links: solo si AUTO_MATCHED o SUGGESTED (con bestCandidateId)
-    // En REVIEW dejamos al usuario elegir; en NO_MATCH/OUT_OF_SCOPE no hay links.
+    // Crear links cuando hay candidatos (AUTO_MATCHED / SUGGESTED)
     if (
       (d.status === "AUTO_MATCHED" || d.status === "SUGGESTED") &&
-      d.bestCandidateId
+      d.bestCandidateIds.length > 0
     ) {
-      await tx.consolidadoLink.create({
-        data: {
+      await tx.consolidadoLink.createMany({
+        data: d.bestCandidateIds.map((bmId) => ({
           consolidadoId: consolidado.id,
-          bankMovementId: d.bestCandidateId,
-        },
+          bankMovementId: bmId,
+        })),
+        skipDuplicates: true,
       });
     }
   });
+}
+
+/* ============== Compat: resolveCandidateAccounts (legacy API route) ============== */
+/**
+ * Mantenida por compatibilidad con /api/consolidados/[id]/route.ts que la
+ * importaba. Ahora devuelve la cuenta resuelta por alias (o vacio).
+ */
+export async function resolveCandidateAccounts(
+  banco: string | null | undefined
+): Promise<BankAccount[]> {
+  if (!banco) return [];
+  const alias = await prisma.bankAccountAlias.findUnique({
+    where: { bancoString: banco },
+    include: { account: true },
+  });
+  return alias ? [alias.account] : [];
 }
