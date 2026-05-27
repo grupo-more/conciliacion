@@ -196,8 +196,11 @@ function normalizeRut(rut: string | null): string {
  *  - Uno de los nombres es vacio (asumimos compatible con cualquier), O
  *  - Un nombre es substring/prefijo del otro (truncamiento), O
  *  - Jaccard de tokens >= 0.5
+ *
+ * (Sin `export` porque Next.js no permite exports adicionales en route.ts —
+ *  solo handlers HTTP y config. Helper interno.)
  */
-export function areCompatible(a: NamedMov, b: NamedMov): boolean {
+function areCompatible(a: NamedMov, b: NamedMov): boolean {
   const rutA = normalizeRut(a.counterpartyRut);
   const rutB = normalizeRut(b.counterpartyRut);
   if (rutA && rutB) {
