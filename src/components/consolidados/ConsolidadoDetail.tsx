@@ -127,7 +127,22 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                   Excepción API
                 </span>
               )}
+              {data.consolidado?.matchType === "ACCOUNT_MISMATCH" && (
+                <span className="badge border-orange-400/60 bg-orange-50 text-orange-700">
+                  ⚠ Banco distinto al asignado
+                </span>
+              )}
             </div>
+
+            {/* Banner explicativo de excepcion de cuenta */}
+            {data.consolidado?.matchType === "ACCOUNT_MISMATCH" && (
+              <div className="rounded-md border border-orange-300 bg-orange-50 p-3 text-sm mb-4">
+                <strong>Excepción de banco:</strong> la API de Tesorería asignó
+                este movimiento a <strong>{data.tesoreria.banco}</strong>, pero el
+                match real está en otra cuenta del mismo banco. Verificá manualmente
+                si el match es correcto. Si lo es, podés confirmarlo desde acá.
+              </div>
+            )}
 
             {/* Datos Tesoreria */}
             <div className="grid grid-cols-2 gap-3 text-sm">

@@ -5,12 +5,14 @@ import { runConsolidados } from "@/lib/consolidados/match";
 /**
  * POST /api/consolidados/run
  *
- * Body opcional: { reEvaluateOpen?: boolean, tesoreriaIds?: string[] }
+ * Body opcional: { dryRun?: boolean, preserveManual?: boolean }
  *
- * Por defecto procesa solo TesoreriaMovements sin Consolidado todavía.
- * Con reEvaluateOpen=true también re-evalúa los que están en estado
- * abierto (NO_MATCH / SUGGESTED / REVIEW). Útil después de subir cartolas
- * nuevas que pueden destrabar matches anteriores.
+ * El motor V3 hace WIPE + REBUILD en cada corrida (la asignacion bipartita
+ * global requiere considerar todos los pares posibles, no solo los abiertos).
+ * Los Consolidados con status=MANUAL se preservan por defecto.
+ *
+ *  - dryRun=true: NO escribe en BD, solo devuelve el summary con lo que haria.
+ *  - preserveManual=false: tambien re-evalua los MANUAL (cuidado).
  */
 export async function POST(req: Request) {
   const session = await getSession();
@@ -19,11 +21,9 @@ export async function POST(req: Request) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const reEvaluateOpen = body?.reEvaluateOpen === true;
-  const tesoreriaIds = Array.isArray(body?.tesoreriaIds)
-    ? (body.tesoreriaIds as string[]).filter((s) => typeof s === "string")
-    : undefined;
+  const dryRun = body?.dryRun === true;
+  const preserveManual = body?.preserveManual !== false; // default true
 
-  const result = await runConsolidados({ reEvaluateOpen, tesoreriaIds });
+  const result = await runConsolidados({ dryRun, preserveManual });
   return NextResponse.json(result);
 }

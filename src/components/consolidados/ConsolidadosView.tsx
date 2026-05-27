@@ -12,10 +12,13 @@ import {
   STATUS_ORDER,
 } from "./types";
 import { ConsolidadoDetail } from "./ConsolidadoDetail";
+import { CompareView } from "./CompareView";
 
 type Period = "day" | "week" | "month";
+type Tab = "list" | "compare";
 
 export function ConsolidadosView() {
+  const [tab, setTab] = useState<Tab>("list");
   const [period, setPeriod] = useState<Period>("month");
   const [statusFilter, setStatusFilter] = useState<Set<ConsolidadoStatus>>(new Set());
   const [bancoFilter, setBancoFilter] = useState<string>("");
@@ -47,18 +50,19 @@ export function ConsolidadosView() {
     }
   }
 
-  async function runMatching(reEvaluate = false) {
+  async function runMatching() {
+    if (running) return; // doble seguro client-side
     setRunning(true);
     setRunResult(null);
     try {
       const res = await fetch("/api/consolidados/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reEvaluateOpen: reEvaluate }),
+        body: JSON.stringify({}),
       });
       if (res.ok) {
-        const data: RunResult = await res.json();
-        setRunResult(data);
+        const result: RunResult = await res.json();
+        setRunResult(result);
         await load();
       }
     } finally {
@@ -71,7 +75,6 @@ export function ConsolidadosView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period, bancoFilter]);
 
-  // Reload cuando cambia el filter de status (con un pequeño debounce visual no es necesario)
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,7 +91,7 @@ export function ConsolidadosView() {
 
   return (
     <div className="space-y-4">
-      {/* Header con acciones */}
+      {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-brand">Consolidados</h1>
@@ -96,139 +99,189 @@ export function ConsolidadosView() {
             Matching entre movimientos de Tesorería y cartolas bancarias
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value as Period)}
-            className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white"
-          >
-            <option value="day">Hoy</option>
-            <option value="week">Última semana</option>
-            <option value="month">Último mes</option>
-          </select>
-          <button
-            onClick={() => runMatching(false)}
-            disabled={running}
-            className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
-          >
-            {running ? "Procesando..." : "Procesar nuevos"}
-          </button>
-          <button
-            onClick={() => runMatching(true)}
-            disabled={running}
-            className="rounded-md border border-border-soft px-3 py-1.5 text-sm font-semibold hover:bg-bg-soft disabled:opacity-50"
-            title="Re-evalúa también los movimientos en estado abierto"
-          >
-            Re-evaluar todo
-          </button>
-        </div>
-      </div>
-
-      {/* Banner de resultado del run */}
-      {runResult && (
-        <div className="rounded-md border border-brand/20 bg-brand/5 px-4 py-3 text-sm">
-          <strong>Procesados {runResult.processed} movimientos en {runResult.ms} ms.</strong>{" "}
-          {runResult.autoMatched} conciliados auto · {runResult.suggested} sugeridos ·{" "}
-          {runResult.review} a revisar · {runResult.noMatch} sin match · {runResult.outOfScope} fuera de scope
-          {runResult.errors > 0 ? ` · ${runResult.errors} errores` : ""}
-        </div>
-      )}
-
-      {/* Chips de status (filtros) */}
-      <div className="flex flex-wrap gap-2">
-        {STATUS_ORDER.map((s) => {
-          const count = data?.counts[s] ?? 0;
-          const active = statusFilter.has(s);
-          return (
-            <button
-              key={s}
-              onClick={() => toggleStatus(s)}
-              className={`rounded-full border px-3 py-1 text-xs font-semibold transition-all ${
-                active
-                  ? `${STATUS_COLORS[s]} ring-2 ring-offset-1 ring-brand/40`
-                  : "border-border-soft bg-white text-text-muted hover:bg-bg-soft"
-              }`}
+        {tab === "list" && (
+          <div className="flex items-center gap-2">
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value as Period)}
+              className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white"
             >
-              {STATUS_LABELS[s]}{" "}
-              <span className="font-bold ml-1">{count}</span>
+              <option value="day">Hoy</option>
+              <option value="week">Última semana</option>
+              <option value="month">Último mes</option>
+            </select>
+            <button
+              onClick={runMatching}
+              disabled={running}
+              className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+              title="Wipea y reconstruye todo el matching (preserva los MANUAL)"
+            >
+              {running ? "Procesando..." : "Re-evaluar todo"}
             </button>
-          );
-        })}
-      </div>
-
-      {/* Filtros extra */}
-      <div className="flex flex-wrap gap-2 items-center">
-        <select
-          value={bancoFilter}
-          onChange={(e) => setBancoFilter(e.target.value)}
-          className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white"
-        >
-          <option value="">Todos los bancos</option>
-          {data?.facets.bancos.map((b) => (
-            <option key={b} value={b}>{b}</option>
-          ))}
-        </select>
-        <input
-          type="text"
-          placeholder="Buscar cliente / glosa / RUT..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && load()}
-          className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white flex-1 min-w-[200px]"
-        />
-        <button
-          onClick={load}
-          className="rounded-md border border-border-soft px-3 py-1.5 text-sm hover:bg-bg-soft"
-        >
-          Buscar
-        </button>
-      </div>
-
-      {/* Tabla */}
-      <div className="rounded-lg border border-border-soft bg-white overflow-hidden">
-        {loading && (
-          <div className="text-center py-8 text-sm text-text-muted">Cargando...</div>
-        )}
-        {!loading && data && data.rows.length === 0 && (
-          <div className="text-center py-8 text-sm text-text-muted">
-            No hay movimientos en este filtro.
-          </div>
-        )}
-        {!loading && data && data.rows.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-bg-soft text-xs uppercase tracking-wider text-text-muted">
-                <tr>
-                  <th className="px-3 py-2 text-left">Fecha</th>
-                  <th className="px-3 py-2 text-left">Sucursal</th>
-                  <th className="px-3 py-2 text-left">Banco</th>
-                  <th className="px-3 py-2 text-right">Monto</th>
-                  <th className="px-3 py-2 text-left">Cliente</th>
-                  <th className="px-3 py-2 text-left">Glosa</th>
-                  <th className="px-3 py-2 text-left">Estado</th>
-                  <th className="px-3 py-2 text-right">Score</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.rows.map((row) => (
-                  <Row key={row.id} row={row} onClick={() => setSelectedId(row.id)} />
-                ))}
-              </tbody>
-            </table>
           </div>
         )}
       </div>
+
+      {/* Tabs */}
+      <div className="border-b border-border-soft">
+        <nav className="flex gap-1">
+          <TabButton active={tab === "list"} onClick={() => setTab("list")}>
+            Lista
+          </TabButton>
+          <TabButton active={tab === "compare"} onClick={() => setTab("compare")}>
+            Comparar
+          </TabButton>
+        </nav>
+      </div>
+
+      {/* Contenido por tab */}
+      {tab === "compare" && <CompareView />}
+
+      {tab === "list" && (
+        <>
+          {/* Banner de resultado del run */}
+          {runResult && (
+            <div className="rounded-md border border-brand/20 bg-brand/5 px-4 py-3 text-sm">
+              <strong>
+                Procesados {runResult.processed} movimientos en {runResult.ms} ms.
+              </strong>{" "}
+              {runResult.autoMatched} conciliados auto · {runResult.suggested} sugeridos ·{" "}
+              {runResult.review} a revisar · {runResult.noMatch} sin match ·{" "}
+              {runResult.outOfScope} fuera de scope
+              {runResult.errors > 0 ? ` · ${runResult.errors} errores` : ""}
+            </div>
+          )}
+
+          {/* Chips de status */}
+          <div className="flex flex-wrap gap-2">
+            {STATUS_ORDER.map((s) => {
+              const count = data?.counts[s] ?? 0;
+              const active = statusFilter.has(s);
+              return (
+                <button
+                  key={s}
+                  onClick={() => toggleStatus(s)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition-all ${
+                    active
+                      ? `${STATUS_COLORS[s]} ring-2 ring-offset-1 ring-brand/40`
+                      : "border-border-soft bg-white text-text-muted hover:bg-bg-soft"
+                  }`}
+                >
+                  {STATUS_LABELS[s]} <span className="font-bold ml-1">{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Filtros extra */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <select
+              value={bancoFilter}
+              onChange={(e) => setBancoFilter(e.target.value)}
+              className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white"
+            >
+              <option value="">Todos los bancos</option>
+              {data?.facets.bancos.map((b) => (
+                <option key={b} value={b}>
+                  {b}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              placeholder="Buscar cliente / glosa / RUT..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && load()}
+              className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white flex-1 min-w-[200px]"
+            />
+            <button
+              onClick={load}
+              className="rounded-md border border-border-soft px-3 py-1.5 text-sm hover:bg-bg-soft"
+            >
+              Buscar
+            </button>
+          </div>
+
+          {/* Tabla */}
+          <div className="rounded-lg border border-border-soft bg-white overflow-hidden">
+            {loading && (
+              <div className="text-center py-8 text-sm text-text-muted">Cargando...</div>
+            )}
+            {!loading && data && data.rows.length === 0 && (
+              <div className="text-center py-8 text-sm text-text-muted">
+                No hay movimientos en este filtro.
+              </div>
+            )}
+            {!loading && data && data.rows.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-bg-soft text-xs uppercase tracking-wider text-text-muted">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Fecha</th>
+                      <th className="px-3 py-2 text-left">Sucursal</th>
+                      <th className="px-3 py-2 text-left">Banco</th>
+                      <th className="px-3 py-2 text-right">Monto</th>
+                      <th className="px-3 py-2 text-left">Cliente</th>
+                      <th className="px-3 py-2 text-left">Glosa</th>
+                      <th className="px-3 py-2 text-left">Estado</th>
+                      <th className="px-3 py-2 text-right">Score</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.rows.map((row) => (
+                      <Row
+                        key={row.id}
+                        row={row}
+                        onClick={() => setSelectedId(row.id)}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {selectedId && (
         <ConsolidadoDetail
           tesoreriaId={selectedId}
           onClose={() => setSelectedId(null)}
-          onChanged={() => {
-            load();
-          }}
+          onChanged={() => load()}
         />
       )}
     </div>
+  );
+}
+
+/* ============================== Subcomponentes ============================== */
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={
+        "relative px-4 py-2.5 text-sm font-semibold transition-colors duration-200 " +
+        (active ? "text-brand" : "text-text-muted hover:text-brand")
+      }
+    >
+      {children}
+      {active && (
+        <span
+          className="absolute inset-x-2 -bottom-px h-0.5 bg-brand rounded-full"
+          aria-hidden
+        />
+      )}
+    </button>
   );
 }
 
