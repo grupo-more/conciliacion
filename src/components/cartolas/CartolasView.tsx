@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ImportModal } from "./ImportModal";
 import { ReassignModal } from "./ReassignModal";
+import { DuplicatesModal } from "./DuplicatesModal";
 import type {
   AccountsResponse,
   BankAccountDTO,
@@ -32,6 +33,7 @@ export function CartolasView() {
   // Modales
   const [importOpen, setImportOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
+  const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const selectedAccount = useMemo(
@@ -168,9 +170,18 @@ export function CartolasView() {
             Movimientos de cartolas bancarias.
           </p>
         </div>
-        <button onClick={() => setImportOpen(true)} className="btn-primary">
-          Subir cartola
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setDuplicatesOpen(true)}
+            className="btn-ghost text-sm"
+            title="Buscar y limpiar movimientos duplicados"
+          >
+            Detectar duplicados
+          </button>
+          <button onClick={() => setImportOpen(true)} className="btn-primary">
+            Subir cartola
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-4">
@@ -472,6 +483,17 @@ export function CartolasView() {
           accounts={accounts}
           onClose={() => setReassignOpen(false)}
           onDone={onReassigned}
+        />
+      )}
+
+      {duplicatesOpen && (
+        <DuplicatesModal
+          onClose={() => {
+            setDuplicatesOpen(false);
+            // Recargar movimientos por si se fusionaron items
+            loadMovements();
+            loadAccounts();
+          }}
         />
       )}
     </div>

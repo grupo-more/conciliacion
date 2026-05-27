@@ -91,12 +91,15 @@ export async function GET(req: Request) {
   ): { rowKey: string; rowLabel: string; colKey: string; colLabel: string } => {
     if (groupBy === "banco") {
       const rowKey = r.bancoSucursal ?? "__null__";
-      const colKey = r.bancoDetectado ?? "__null__";
+      // El "(sin banco detectado)" es el caso NORMAL — la API no detecto nada
+      // raro, el movimiento va al banco que la sucursal tenia asignado. Lo
+      // etiquetamos como "Normal" para que sea evidente que no es un problema.
+      const colKey = r.bancoDetectado ?? "__normal__";
       return {
         rowKey,
         rowLabel: r.bancoSucursal ?? "(sin banco sucursal)",
         colKey,
-        colLabel: r.bancoDetectado ?? "(sin banco detectado)",
+        colLabel: r.bancoDetectado ?? "Normal · sin detección",
       };
     }
     if (groupBy === "sucursal") {
