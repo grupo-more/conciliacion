@@ -175,16 +175,18 @@ interface VentasCounts {
 }
 
 async function countVentasByStatus(start: Date, end: Date): Promise<VentasCounts> {
+  // Migrado a TesoreriaMovement + Consolidado (motor V3 de Consolidados).
+  // Cuenta movimientos cuyos items contienen "Venta...".
   const rows = await prisma.$queryRaw<Array<{ status: string | null; n: bigint }>>`
-    SELECT r.status, COUNT(*)::bigint AS n
-    FROM "DynatechMovement" dm
-    LEFT JOIN "Reconciliation" r ON r.dynatech_movement_id = dm.id
-    WHERE dm.occurred_at >= ${start} AND dm.occurred_at < ${end}
+    SELECT c.status, COUNT(*)::bigint AS n
+    FROM "TesoreriaMovement" t
+    LEFT JOIN "Consolidado" c ON c.tesoreria_movement_id = t.id
+    WHERE t.fecha >= ${start} AND t.fecha < ${end}
       AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements(dm.items) AS item
+        SELECT 1 FROM jsonb_array_elements(t.items) AS item
         WHERE (item->>'nombre') ILIKE 'Venta%'
       )
-    GROUP BY r.status
+    GROUP BY c.status
   `;
   const out: VentasCounts = {
     AUTO_MATCHED: 0, SUGGESTED: 0, REVIEW: 0, MANUAL: 0,
@@ -276,10 +278,10 @@ export async function computeAccountBalances(
         COALESCE(SUM(
           CASE
             WHEN bm.direction='IN' AND EXISTS (
-              SELECT 1 FROM "ReconciliationLink" rl
-              JOIN "Reconciliation" r ON r.id = rl.reconciliation_id
-              WHERE rl.bank_movement_id = bm.id
-                AND r.status IN ('AUTO_MATCHED','MANUAL')
+              SELECT 1 FROM "ConsolidadoLink" cl
+              JOIN "Consolidado" c ON c.id = cl.consolidado_id
+              WHERE cl.bank_movement_id = bm.id
+                AND c.status IN ('AUTO_MATCHED','MANUAL')
             )
             THEN bm.amount
             ELSE 0
@@ -342,12 +344,12 @@ export async function computePipeline(range: PeriodRange): Promise<PipelineData>
   const sevenDaysAgo = new Date();
   sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-  const backlog = await prisma.reconciliation.count({
+  const backlog = await prisma.consolidado.count({
     where: {
       status: { in: ["NO_MATCH", "REVIEW", "SUGGESTED"] },
       matchedAt: { lt: sevenDaysAgo },
-      dynatechMovement: {
-        occurredAt: { gte: range.start, lt: range.end },
+      tesoreriaMovement: {
+        fecha: { gte: range.start, lt: range.end },
       },
     },
   });
@@ -449,29 +451,30 @@ export interface BranchSummary {
 }
 
 export async function computeTopBranches(range: PeriodRange): Promise<BranchSummary[]> {
+  // Migrado a TesoreriaMovement + Consolidado.
   const rows = await prisma.$queryRaw<
     Array<{
-      branch_external_id: number;
-      branch_external_name: string | null;
+      sucursal_id: number;
+      sucursal_name: string | null;
       ventas_count: bigint;
       ventas_total: bigint;
       matched_count: bigint;
     }>
   >`
     SELECT
-      dm.branch_external_id,
-      dm.branch_external_name,
+      t.sucursal_id,
+      t.sucursal_name,
       COUNT(*)::bigint AS ventas_count,
-      COALESCE(SUM(dm.total_amount), 0)::bigint AS ventas_total,
-      COUNT(CASE WHEN r.status IN ('AUTO_MATCHED','MANUAL') THEN 1 END)::bigint AS matched_count
-    FROM "DynatechMovement" dm
-    LEFT JOIN "Reconciliation" r ON r.dynatech_movement_id = dm.id
-    WHERE dm.occurred_at >= ${range.start} AND dm.occurred_at < ${range.end}
+      COALESCE(SUM(t.monto), 0)::bigint AS ventas_total,
+      COUNT(CASE WHEN c.status IN ('AUTO_MATCHED','MANUAL') THEN 1 END)::bigint AS matched_count
+    FROM "TesoreriaMovement" t
+    LEFT JOIN "Consolidado" c ON c.tesoreria_movement_id = t.id
+    WHERE t.fecha >= ${range.start} AND t.fecha < ${range.end}
       AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements(dm.items) AS item
+        SELECT 1 FROM jsonb_array_elements(t.items) AS item
         WHERE (item->>'nombre') ILIKE 'Venta%'
       )
-    GROUP BY dm.branch_external_id, dm.branch_external_name
+    GROUP BY t.sucursal_id, t.sucursal_name
     ORDER BY ventas_total DESC
     LIMIT 10
   `;
@@ -480,8 +483,8 @@ export async function computeTopBranches(range: PeriodRange): Promise<BranchSumm
     const ventas = Number(r.ventas_count);
     const matched = Number(r.matched_count);
     return {
-      branchExternalId: r.branch_external_id,
-      branchExternalName: r.branch_external_name,
+      branchExternalId: r.sucursal_id,
+      branchExternalName: r.sucursal_name,
       ventasCount: ventas,
       ventasTotal: Number(r.ventas_total),
       matchedCount: matched,
@@ -504,15 +507,16 @@ export interface CashierSummary {
  * Calcula la calidad parseando cada glosa (en memoria, escala bien a miles).
  */
 export async function computeTopCashiers(range: PeriodRange): Promise<CashierSummary[]> {
-  const movs = await prisma.dynatechMovement.findMany({
+  // Migrado a TesoreriaMovement.
+  const movs = await prisma.tesoreriaMovement.findMany({
     where: {
-      occurredAt: { gte: range.start, lt: range.end },
+      fecha: { gte: range.start, lt: range.end },
     },
     select: {
-      cashierUsername: true,
-      cashierName: true,
-      observation: true,
-      totalAmount: true,
+      cajeroUsername: true,
+      cajeroName: true,
+      glosa: true,
+      monto: true,
       items: true,
     },
   });
@@ -525,12 +529,12 @@ export async function computeTopCashiers(range: PeriodRange): Promise<CashierSum
 
   const grouped = new Map<string, CashierSummary>();
   for (const m of ventas) {
-    const key = m.cashierUsername;
+    const key = m.cajeroUsername;
     let agg = grouped.get(key);
     if (!agg) {
       agg = {
         cashierUsername: key,
-        cashierName: m.cashierName,
+        cashierName: m.cajeroName,
         ventasCount: 0,
         ventasTotal: 0,
         glosaQualityCounts: { excellent: 0, good: 0, fair: 0, poor: 0 },
@@ -539,11 +543,11 @@ export async function computeTopCashiers(range: PeriodRange): Promise<CashierSum
       grouped.set(key, agg);
     }
     // Si entró sin nombre y un movimiento posterior lo trae, completarlo
-    if (!agg.cashierName && m.cashierName) agg.cashierName = m.cashierName;
+    if (!agg.cashierName && m.cajeroName) agg.cashierName = m.cajeroName;
     agg.ventasCount++;
-    agg.ventasTotal += Number(m.totalAmount);
+    agg.ventasTotal += Number(m.monto);
 
-    const q = parseGlosa(m.observation || "").quality;
+    const q = parseGlosa(m.glosa || "").quality;
     if (q === "EXCELLENT") agg.glosaQualityCounts.excellent++;
     else if (q === "GOOD") agg.glosaQualityCounts.good++;
     else if (q === "FAIR") agg.glosaQualityCounts.fair++;
@@ -585,8 +589,8 @@ export async function computeAlerts(): Promise<AlertItem[]> {
   const fiveDaysAgo = new Date();
   fiveDaysAgo.setDate(fiveDaysAgo.getDate() - 5);
 
-  // Backlog: NO_MATCH/REVIEW/SUGGESTED viejos
-  const backlog = await prisma.reconciliation.count({
+  // Backlog: NO_MATCH/REVIEW/SUGGESTED viejos (migrado a Consolidado).
+  const backlog = await prisma.consolidado.count({
     where: {
       status: { in: ["NO_MATCH", "REVIEW", "SUGGESTED"] },
       matchedAt: { lt: sevenDaysAgo },
@@ -601,7 +605,7 @@ export async function computeAlerts(): Promise<AlertItem[]> {
     });
   }
 
-  const reviewPending = await prisma.reconciliation.count({
+  const reviewPending = await prisma.consolidado.count({
     where: { status: "REVIEW" },
   });
   if (reviewPending > 0) {
@@ -641,22 +645,22 @@ export async function computeAlerts(): Promise<AlertItem[]> {
     }
   }
 
-  // Sucursales inactivas (>5 días sin Dynatech)
-  const branches = await prisma.dynatechMovement.groupBy({
-    by: ["branchExternalId", "branchExternalName"],
+  // Sucursales inactivas (>5 días sin movimientos en Tesoreria).
+  const branches = await prisma.tesoreriaMovement.groupBy({
+    by: ["sucursalId", "sucursalName"],
   });
   for (const b of branches) {
-    const last = await prisma.dynatechMovement.findFirst({
-      where: { branchExternalId: b.branchExternalId },
-      orderBy: { occurredAt: "desc" },
-      select: { occurredAt: true },
+    const last = await prisma.tesoreriaMovement.findFirst({
+      where: { sucursalId: b.sucursalId },
+      orderBy: { fecha: "desc" },
+      select: { fecha: true },
     });
-    if (last && last.occurredAt < fiveDaysAgo) {
-      const days = Math.floor((Date.now() - last.occurredAt.getTime()) / 86400000);
+    if (last && last.fecha < fiveDaysAgo) {
+      const days = Math.floor((Date.now() - last.fecha.getTime()) / 86400000);
       alerts.push({
         kind: "SUCURSAL_INACTIVE",
         severity: "warn",
-        message: `Sucursal ${b.branchExternalName ?? `#${b.branchExternalId}`} sin Dynatech hace ${days} días`,
+        message: `Sucursal ${b.sucursalName ?? `#${b.sucursalId}`} sin movimientos hace ${days} días`,
       });
     }
   }
