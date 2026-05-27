@@ -22,12 +22,19 @@ export interface AccountBalance {
   displayNumber: string | null;
   holderName: string;
   balance: number;
+  balanceAtStart: number;
   lastMovementDate: string | null;
   daysSinceLastMovement: number | null;
   movementCountInPeriod: number;
   inSumInPeriod: number;
+  inCountInPeriod: number;
   outSumInPeriod: number;
+  outCountInPeriod: number;
   reconciledInSum: number;
+  reconciledInCount: number;
+  unreconciledInSum: number;
+  unreconciledInCount: number;
+  /** Alias legacy de unreconciledInSum, mantenido para BalancesTable existente. */
   otherInSum: number;
 }
 

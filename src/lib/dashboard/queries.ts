@@ -209,14 +209,30 @@ export interface AccountBalanceRow {
   accountNumber: string;
   displayNumber: string | null;
   holderName: string;
+  /** Saldo actual (último balance_after conocido al cierre del período). */
   balance: number;
+  /** Saldo al inicio del período (cierre del período anterior). Útil para
+   *  calcular la variación contable: balance - balanceAtStart. */
+  balanceAtStart: number;
   lastMovementDate: string | null;
   daysSinceLastMovement: number | null;
   movementCountInPeriod: number;
+  /* ------ Ingresos del período (direction=IN) ------ */
   inSumInPeriod: number;
-  outSumInPeriod: number;
+  inCountInPeriod: number;
+  /** Cantidad de movimientos IN ya vinculados a un Consolidado AUTO/MANUAL. */
+  reconciledInCount: number;
+  /** Suma de montos IN ya conciliados. */
   reconciledInSum: number;
+  /** Cantidad de movimientos IN sin matchear todavía. */
+  unreconciledInCount: number;
+  /** Suma de montos IN sin matchear. Alias visual de "otherInSum" pero más explícito. */
+  unreconciledInSum: number;
+  /** Alias histórico (mantener compat con BalancesTable existente). */
   otherInSum: number;
+  /* ------ Egresos del período (direction=OUT) ------ */
+  outSumInPeriod: number;
+  outCountInPeriod: number;
 }
 
 export async function computeAccountBalances(
@@ -241,16 +257,25 @@ export async function computeAccountBalances(
   todayMidnight.setHours(0, 0, 0, 0);
 
   for (const a of accounts) {
-    // Saldo: tomar el último movimiento con balance_after no nulo. Algunos
-    // formatos (Santander Histórica/Provisoria) no traen saldo por movimiento,
-    // así que esto puede quedar en 0 aunque la cuenta tenga movimientos.
+    // Saldo actual: último movimiento con balance_after no nulo antes de asOf.
     const lastWithBalance = await prisma.bankMovement.findFirst({
       where: { accountId: a.id, postDate: { lt: asOf }, balanceAfter: { not: null } },
       orderBy: [{ postDate: "desc" }, { createdAt: "desc" }],
       select: { balanceAfter: true, postDate: true },
     });
 
-    // Frescura: tomar el último movimiento de cualquier tipo (no requiere saldo).
+    // Saldo al inicio del periodo: último balance_after antes de range.start.
+    const lastAtStart = await prisma.bankMovement.findFirst({
+      where: {
+        accountId: a.id,
+        postDate: { lt: range.start },
+        balanceAfter: { not: null },
+      },
+      orderBy: [{ postDate: "desc" }, { createdAt: "desc" }],
+      select: { balanceAfter: true },
+    });
+
+    // Frescura
     const lastAny = await prisma.bankMovement.findFirst({
       where: { accountId: a.id },
       orderBy: [{ postDate: "desc" }, { createdAt: "desc" }],
@@ -258,23 +283,41 @@ export async function computeAccountBalances(
     });
 
     const balance = lastWithBalance?.balanceAfter ? Number(lastWithBalance.balanceAfter) : 0;
+    const balanceAtStart = lastAtStart?.balanceAfter ? Number(lastAtStart.balanceAfter) : 0;
     const lastDate = lastAny?.postDate ?? null;
     const daysSince = lastDate
       ? Math.max(0, Math.floor((todayMidnight.getTime() - lastDate.getTime()) / 86400000))
       : null;
 
+    // Agregados del periodo: count + sum por direccion, y conciliados.
     const periodAggs = await prisma.$queryRaw<
       Array<{
         n: bigint;
+        in_n: bigint;
+        out_n: bigint;
         in_sum: bigint | null;
         out_sum: bigint | null;
+        reconciled_in_n: bigint;
         reconciled_in_sum: bigint | null;
       }>
     >`
       SELECT
         COUNT(*)::bigint AS n,
+        COUNT(CASE WHEN bm.direction='IN' THEN 1 END)::bigint AS in_n,
+        COUNT(CASE WHEN bm.direction='OUT' THEN 1 END)::bigint AS out_n,
         COALESCE(SUM(CASE WHEN bm.direction='IN' THEN bm.amount ELSE 0 END), 0)::bigint AS in_sum,
         COALESCE(SUM(CASE WHEN bm.direction='OUT' THEN ABS(bm.amount) ELSE 0 END), 0)::bigint AS out_sum,
+        COUNT(
+          CASE
+            WHEN bm.direction='IN' AND EXISTS (
+              SELECT 1 FROM "ConsolidadoLink" cl
+              JOIN "Consolidado" c ON c.id = cl.consolidado_id
+              WHERE cl.bank_movement_id = bm.id
+                AND c.status IN ('AUTO_MATCHED','MANUAL')
+            )
+            THEN 1
+          END
+        )::bigint AS reconciled_in_n,
         COALESCE(SUM(
           CASE
             WHEN bm.direction='IN' AND EXISTS (
@@ -294,7 +337,11 @@ export async function computeAccountBalances(
     `;
     const agg = periodAggs[0];
     const inSum = Number(agg?.in_sum ?? 0);
+    const inCount = Number(agg?.in_n ?? 0);
+    const outSum = Number(agg?.out_sum ?? 0);
+    const outCount = Number(agg?.out_n ?? 0);
     const reconciledIn = Number(agg?.reconciled_in_sum ?? 0);
+    const reconciledInCount = Number(agg?.reconciled_in_n ?? 0);
 
     result.push({
       id: a.id,
@@ -304,13 +351,19 @@ export async function computeAccountBalances(
       displayNumber: a.displayNumber,
       holderName: a.holderName,
       balance,
+      balanceAtStart,
       lastMovementDate: lastDate?.toISOString() ?? null,
       daysSinceLastMovement: daysSince,
       movementCountInPeriod: Number(agg?.n ?? 0),
       inSumInPeriod: inSum,
-      outSumInPeriod: Number(agg?.out_sum ?? 0),
+      inCountInPeriod: inCount,
+      outSumInPeriod: outSum,
+      outCountInPeriod: outCount,
       reconciledInSum: reconciledIn,
-      otherInSum: Math.max(0, inSum - reconciledIn),
+      reconciledInCount,
+      unreconciledInSum: Math.max(0, inSum - reconciledIn),
+      unreconciledInCount: Math.max(0, inCount - reconciledInCount),
+      otherInSum: Math.max(0, inSum - reconciledIn), // alias legacy
     });
   }
 

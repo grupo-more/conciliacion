@@ -1,14 +1,16 @@
 "use client";
 
 import type { KPIData } from "./types";
+import type { KPIKind } from "./KPIDetailModal";
 import { formatMoney } from "@/lib/format";
 
 interface Props {
   kpis: KPIData;
   periodLabel: string;
+  onSelect?: (kind: KPIKind) => void;
 }
 
-export function KPICards({ kpis, periodLabel }: Props) {
+export function KPICards({ kpis, periodLabel, onSelect }: Props) {
   const balanceChangePct = kpis.consolidatedBalanceChangePct;
   const inChangePct =
     kpis.totalInPrev > 0
@@ -38,26 +40,21 @@ export function KPICards({ kpis, periodLabel }: Props) {
             ? kpis.consolidatedBalanceChange >= 0
             : null
         }
+        onClick={onSelect ? () => onSelect("saldo") : undefined}
       />
       <Card
         label={`Ingresos · ${periodLabel.toLowerCase()}`}
         value={formatMoney(kpis.totalIn)}
         delta={inChangePct !== null ? formatPct(inChangePct, "vs anterior") : null}
-        deltaPositive={
-          inChangePct !== null
-            ? inChangePct >= 0
-            : null
-        }
+        deltaPositive={inChangePct !== null ? inChangePct >= 0 : null}
+        onClick={onSelect ? () => onSelect("ingresos") : undefined}
       />
       <Card
         label={`Egresos · ${periodLabel.toLowerCase()}`}
         value={formatMoney(kpis.totalOut)}
         delta={outChangePct !== null ? formatPct(outChangePct, "vs anterior") : null}
-        deltaPositive={
-          outChangePct !== null
-            ? outChangePct <= 0 // bajar egresos es bueno
-            : null
-        }
+        deltaPositive={outChangePct !== null ? outChangePct <= 0 : null}
+        onClick={onSelect ? () => onSelect("egresos") : undefined}
       />
       <Card
         label="Tasa conciliación auto"
@@ -69,6 +66,7 @@ export function KPICards({ kpis, periodLabel }: Props) {
             : null
         }
         deltaPositive={matchRateChange !== null ? matchRateChange >= 0 : null}
+        onClick={onSelect ? () => onSelect("tasa") : undefined}
       />
     </div>
   );
@@ -80,12 +78,14 @@ function Card({
   sub,
   delta,
   deltaPositive,
+  onClick,
 }: {
   label: string;
   value: string;
   sub?: string;
   delta?: string | null;
   deltaPositive?: boolean | null;
+  onClick?: () => void;
 }) {
   const deltaCls =
     deltaPositive === true
@@ -95,8 +95,22 @@ function Card({
       : "text-text-muted";
   const deltaIcon =
     deltaPositive === true ? "▲" : deltaPositive === false ? "▼" : "·";
+
+  const interactive = !!onClick;
+  const Wrapper: keyof JSX.IntrinsicElements = interactive ? "button" : "div";
+
   return (
-    <div className="card relative overflow-hidden group hover:border-accent/40 hover:shadow-card-hover hover:-translate-y-1 transition-all duration-350 ease-spring">
+    <Wrapper
+      onClick={onClick}
+      type={interactive ? "button" : undefined}
+      className={
+        "card relative overflow-hidden group transition-all duration-350 ease-spring text-left w-full " +
+        (interactive
+          ? "cursor-pointer hover:border-accent/40 hover:shadow-card-hover hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          : "hover:border-accent/40 hover:shadow-card-hover hover:-translate-y-1")
+      }
+      aria-label={interactive ? `Ver detalle de ${label}` : undefined}
+    >
       <div
         className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-brand via-accent to-brand-tonal scale-x-0 group-hover:scale-x-100 transition-transform duration-450 ease-out origin-left"
         aria-hidden
@@ -105,8 +119,16 @@ function Card({
         className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-accent/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-2xl"
         aria-hidden
       />
-      <div className="text-[11px] uppercase tracking-wider text-text-muted font-semibold">
-        {label}
+      <div className="text-[11px] uppercase tracking-wider text-text-muted font-semibold flex items-center justify-between gap-2">
+        <span>{label}</span>
+        {interactive && (
+          <span
+            className="text-[10px] text-text-dim opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+            aria-hidden
+          >
+            ver detalle →
+          </span>
+        )}
       </div>
       <div className="text-2xl font-bold mt-1.5 tabular-nums tracking-tight text-brand transition-colors duration-300 group-hover:text-brand-hover">
         {value}
@@ -118,7 +140,7 @@ function Card({
           <span>{delta}</span>
         </div>
       )}
-    </div>
+    </Wrapper>
   );
 }
 

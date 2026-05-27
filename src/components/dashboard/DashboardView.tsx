@@ -5,6 +5,7 @@ import { Alerts } from "./Alerts";
 import { BalancesTable } from "./BalancesTable";
 import { FlowsChart } from "./FlowsChart";
 import { KPICards } from "./KPICards";
+import { KPIDetailModal, type KPIKind } from "./KPIDetailModal";
 import { PipelineCard } from "./PipelineCard";
 import { TopBranches } from "./TopBranches";
 import { TopCashiers } from "./TopCashiers";
@@ -18,6 +19,7 @@ export function DashboardView() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedKPI, setSelectedKPI] = useState<KPIKind | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function load(silent = false) {
@@ -120,9 +122,13 @@ export function DashboardView() {
 
       {data && (
         <div className="space-y-5 animate-fade-in">
-          <KPICards kpis={data.kpis} periodLabel={periodLabel} />
-
           {data.alerts.length > 0 && <Alerts alerts={data.alerts} />}
+
+          <KPICards
+            kpis={data.kpis}
+            periodLabel={periodLabel}
+            onSelect={setSelectedKPI}
+          />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 space-y-4">
@@ -138,6 +144,17 @@ export function DashboardView() {
 
           {data.alerts.length === 0 && <Alerts alerts={data.alerts} />}
         </div>
+      )}
+
+      {/* Modal de detalle de KPI */}
+      {selectedKPI && data && (
+        <KPIDetailModal
+          kind={selectedKPI}
+          balances={data.balances}
+          pipeline={data.pipeline}
+          periodLabel={periodLabel}
+          onClose={() => setSelectedKPI(null)}
+        />
       )}
     </div>
   );
