@@ -23,10 +23,14 @@ interface DuplicateGroup {
   postDate: string;
   reference: string;
   movements: DuplicateMovement[];
+  confidence: "HIGH" | "MEDIUM";
+  confidenceReason: string;
 }
 
 interface DuplicatesResponse {
   totalDuplicateGroups: number;
+  highConfidenceGroups: number;
+  mediumConfidenceGroups: number;
   totalDuplicateMovements: number;
   excessMovements: number;
   groups: DuplicateGroup[];
@@ -114,14 +118,23 @@ export function DuplicatesModal({ onClose }: { onClose: () => void }) {
 
   async function mergeAll() {
     if (!data) return;
+    // Solo procesamos automaticamente los de ALTA confianza. Los MEDIUM
+    // requieren confirmacion manual uno por uno.
+    const highOnly = data.groups.filter((g) => g.confidence === "HIGH");
+    if (highOnly.length === 0) {
+      alert(
+        "No hay grupos de alta confianza para fusionar automáticamente. Revisá los de confianza media uno por uno."
+      );
+      return;
+    }
     if (
       !confirm(
-        `Fusionar TODOS los ${data.groups.length} grupos? Para cada uno se queda el seleccionado en verde y se eliminan los demás.`
+        `Fusionar automáticamente ${highOnly.length} grupos de ALTA confianza? Los de confianza media quedan sin tocar para que los revises manualmente.`
       )
     ) {
       return;
     }
-    for (const g of data.groups) {
+    for (const g of highOnly) {
       await mergeGroup(g);
     }
   }
@@ -189,18 +202,31 @@ export function DuplicatesModal({ onClose }: { onClose: () => void }) {
           <>
             <div className="rounded-md border border-warn/40 bg-warn/10 p-3 text-sm mb-3 flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <strong>{data.totalDuplicateGroups}</strong> grupos detectados ·{" "}
-                <strong>{data.totalDuplicateMovements}</strong> movimientos involucrados
-                · {" "}
-                <strong className="text-danger">{data.excessMovements}</strong> de más
-                a eliminar
+                <div>
+                  <strong>{data.totalDuplicateGroups}</strong> grupos detectados ·{" "}
+                  <strong className="text-danger">{data.excessMovements}</strong> de
+                  más a eliminar
+                </div>
+                <div className="text-xs text-text-muted mt-1">
+                  <span className="inline-flex items-center gap-1 mr-3">
+                    <span className="inline-block w-2 h-2 rounded-sm bg-success/70" />
+                    <strong>{data.highConfidenceGroups}</strong> de alta confianza
+                    (seguro fusionar)
+                  </span>
+                  <span className="inline-flex items-center gap-1">
+                    <span className="inline-block w-2 h-2 rounded-sm bg-warn/70" />
+                    <strong>{data.mediumConfidenceGroups}</strong> de confianza media
+                    (revisá manualmente)
+                  </span>
+                </div>
               </div>
               <button
                 onClick={mergeAll}
-                disabled={merging !== null}
+                disabled={merging !== null || data.highConfidenceGroups === 0}
                 className="btn-primary text-xs"
+                title="Solo fusiona automáticamente los grupos de ALTA confianza. Los MEDIUM quedan para revisar manualmente."
               >
-                Fusionar todos
+                Fusionar {data.highConfidenceGroups} de alta confianza
               </button>
             </div>
 
@@ -239,24 +265,45 @@ function GroupCard({
   onMerge: () => void;
   merging: boolean;
 }) {
+  const isHigh = group.confidence === "HIGH";
   return (
-    <div className="rounded-md border border-border-soft bg-white p-3">
+    <div
+      className={`rounded-md border p-3 ${
+        isHigh
+          ? "border-success/30 bg-white"
+          : "border-warn/40 bg-warn/[0.04]"
+      }`}
+    >
       <div className="flex justify-between items-start gap-2 mb-2">
-        <div className="text-sm">
-          <div className="font-semibold">
+        <div className="text-sm min-w-0">
+          <div className="font-semibold flex items-center gap-2 flex-wrap">
             {group.accountLabel}
+            {isHigh ? (
+              <span className="badge border-success/40 bg-success/10 text-success">
+                ✓ Alta confianza
+              </span>
+            ) : (
+              <span className="badge border-warn/40 bg-warn/10 text-warn">
+                ⚠ Revisar manualmente
+              </span>
+            )}
           </div>
           <div className="text-xs text-text-muted">
             {formatDate(group.postDate)} · {formatMoney(BigInt(group.amount))} ·
             Ref. <span className="font-mono">{group.reference}</span>
           </div>
+          {!isHigh && (
+            <div className="text-[11px] text-warn mt-1">
+              {group.confidenceReason}
+            </div>
+          )}
         </div>
         <button
           onClick={onMerge}
           disabled={merging || !keepId}
-          className="btn-primary text-xs disabled:opacity-50"
+          className="btn-primary text-xs disabled:opacity-50 shrink-0"
         >
-          {merging ? "Fusionando..." : "Fusionar este grupo"}
+          {merging ? "Fusionando..." : "Fusionar"}
         </button>
       </div>
 
