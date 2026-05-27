@@ -1,21 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ImportModal } from "./ImportModal";
 import { ReassignModal } from "./ReassignModal";
 import type {
   AccountsResponse,
   BankAccountDTO,
+  CartolaSummary,
   MovementDTO,
   MovementsResponse,
 } from "./types";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export function CartolasView() {
+  const router = useRouter();
   const [accounts, setAccounts] = useState<BankAccountDTO[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [movements, setMovements] = useState<MovementDTO[]>([]);
   const [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState<CartolaSummary | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Filtros
@@ -23,6 +27,7 @@ export function CartolasView() {
   const [search, setSearch] = useState("");
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
+  const [onlyUnmatched, setOnlyUnmatched] = useState(false);
 
   // Modales
   const [importOpen, setImportOpen] = useState(false);
@@ -50,22 +55,26 @@ export function CartolasView() {
     const params = new URLSearchParams({
       accountId: selectedAccountId,
       limit: "200",
+      includeSummary: "true",
     });
     if (direction) params.set("direction", direction);
     if (search) params.set("q", search);
     if (since) params.set("since", since);
     if (until) params.set("until", until);
+    if (onlyUnmatched) params.set("onlyUnmatched", "true");
 
     try {
       const res = await fetch(`/api/bank-movements?${params}`);
       if (!res.ok) {
         setMovements([]);
         setTotal(0);
+        setSummary(null);
         return;
       }
       const data: MovementsResponse = await res.json();
       setMovements(data.movements);
       setTotal(data.total);
+      setSummary(data.summary);
       setSelectedIds(new Set());
     } finally {
       setLoading(false);
@@ -78,7 +87,8 @@ export function CartolasView() {
 
   useEffect(() => {
     loadMovements();
-  }, [selectedAccountId, direction, since, until]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAccountId, direction, since, until, onlyUnmatched]);
 
   // Buscar con debounce ligero
   useEffect(() => {
@@ -86,7 +96,19 @@ export function CartolasView() {
       loadMovements();
     }, 300);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  /** Lleva al usuario al modulo Consolidados, tab Comparar, con esta cuenta
+   *  pre-seleccionada para hacer matching manual. */
+  function jumpToCompareWithAccount() {
+    if (!selectedAccountId) return;
+    const qs = new URLSearchParams({
+      tab: "compare",
+      accountId: selectedAccountId,
+    });
+    router.push(`/dashboard/consolidados?${qs}`);
+  }
 
   function onImported() {
     loadAccounts();
@@ -220,6 +242,8 @@ export function CartolasView() {
                 className="input"
                 value={direction}
                 onChange={(e) => setDirection(e.target.value as "" | "IN" | "OUT")}
+                disabled={onlyUnmatched}
+                title={onlyUnmatched ? "El filtro de no conciliados ya implica IN" : undefined}
               >
                 <option value="">Todos</option>
                 <option value="IN">Abonos</option>
@@ -244,6 +268,47 @@ export function CartolasView() {
                 onChange={(e) => setUntil(e.target.value)}
               />
             </div>
+          </div>
+
+          {/* Chip filtro + atajo a Comparar */}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setOnlyUnmatched((v) => !v)}
+                className={
+                  "rounded-full border px-3 py-1 text-xs font-semibold transition-all " +
+                  (onlyUnmatched
+                    ? "border-amber-400 bg-amber-50 text-amber-800 ring-2 ring-offset-1 ring-amber-300"
+                    : "border-border-soft bg-white text-text-muted hover:bg-bg-soft")
+                }
+              >
+                {onlyUnmatched ? "✓ " : ""}Solo sin conciliar
+                {summary && (
+                  <span className="ml-1 font-bold">{summary.inPending}</span>
+                )}
+              </button>
+              {/* Leyenda */}
+              <div className="hidden md:flex items-center gap-2 text-[11px] text-text-muted ml-3">
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-1 h-3 bg-success rounded-sm" /> Conciliado
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-1 h-3 bg-warn rounded-sm" /> Sin matchear
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-1 h-3 bg-text-muted/30 rounded-sm" /> Egreso (no aplica)
+                </span>
+              </div>
+            </div>
+            {summary && summary.inPending > 0 && (
+              <button
+                onClick={jumpToCompareWithAccount}
+                className="btn-ghost text-xs"
+                title="Abre la vista Comparar de Consolidados con esta cuenta pre-seleccionada"
+              >
+                Conciliar pendientes →
+              </button>
+            )}
           </div>
 
           {/* Acciones masivas (solo en Sin asignar) */}
@@ -278,10 +343,12 @@ export function CartolasView() {
                       />
                     </th>
                   )}
+                  <th className="px-3 py-2 text-left w-3" aria-label="estado" />
                   <th className="px-3 py-2 text-left">Fecha</th>
                   <th className="px-3 py-2 text-right">Monto</th>
                   <th className="px-3 py-2 text-left">Glosa</th>
                   <th className="px-3 py-2 text-left">Contraparte</th>
+                  <th className="px-3 py-2 text-left">Estado</th>
                   <th className="px-3 py-2 text-left">Ext ID</th>
                 </tr>
               </thead>
@@ -289,7 +356,7 @@ export function CartolasView() {
                 {loading && (
                   <tr>
                     <td
-                      colSpan={showCheckboxes ? 6 : 5}
+                      colSpan={showCheckboxes ? 8 : 7}
                       className="px-3 py-6 text-center text-text-muted"
                     >
                       Cargando…
@@ -299,10 +366,12 @@ export function CartolasView() {
                 {!loading && movements.length === 0 && (
                   <tr>
                     <td
-                      colSpan={showCheckboxes ? 6 : 5}
+                      colSpan={showCheckboxes ? 8 : 7}
                       className="px-3 py-6 text-center text-text-muted"
                     >
-                      Sin movimientos.
+                      {onlyUnmatched
+                        ? "✓ No hay abonos pendientes de conciliar en esta cuenta."
+                        : "Sin movimientos."}
                     </td>
                   </tr>
                 )}
@@ -310,10 +379,11 @@ export function CartolasView() {
                   movements.map((m) => {
                     const amount = BigInt(m.amount);
                     const isIn = m.direction === "IN";
+                    const status = computeRowStatus(m);
                     return (
                       <tr
                         key={m.id}
-                        className="border-t border-border-soft/40 hover:bg-bg-elevated/40 table-row-hover"
+                        className={`border-t border-border-soft/40 hover:bg-bg-elevated/40 table-row-hover ${status.rowBg}`}
                       >
                         {showCheckboxes && (
                           <td className="px-3 py-2">
@@ -324,6 +394,7 @@ export function CartolasView() {
                             />
                           </td>
                         )}
+                        <td className={`p-0 ${status.borderCls}`} aria-hidden />
                         <td className="px-3 py-2 whitespace-nowrap">
                           {formatDate(m.postDate)}
                         </td>
@@ -348,6 +419,14 @@ export function CartolasView() {
                             </div>
                           )}
                         </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span
+                            className={`inline-block rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${status.badgeCls}`}
+                            title={status.title}
+                          >
+                            {status.label}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-xs text-text-muted font-mono">
                           {m.externalId || ""}
                         </td>
@@ -363,6 +442,15 @@ export function CartolasView() {
               Mostrando {movements.length} de {total} movimientos. Refina los filtros
               para ver el resto.
             </div>
+          )}
+
+          {/* Resumen al pie de la cuenta */}
+          {!loading && summary && summary.total > 0 && (
+            <CartolaSummaryStrip
+              summary={summary}
+              accountLabel={selectedAccount?.holderName ?? ""}
+              onAct={jumpToCompareWithAccount}
+            />
           )}
         </div>
       </div>
@@ -386,6 +474,198 @@ export function CartolasView() {
           onDone={onReassigned}
         />
       )}
+    </div>
+  );
+}
+
+/* =============================== Helpers =============================== */
+
+interface RowStatus {
+  label: string;
+  title: string;
+  /** Tailwind class para el border-left (3px de color). */
+  borderCls: string;
+  /** Tailwind class para el badge. */
+  badgeCls: string;
+  /** Tailwind class para el background sutil de la fila (opcional). */
+  rowBg: string;
+}
+
+function computeRowStatus(m: MovementDTO): RowStatus {
+  // Egresos: no aplica conciliación
+  if (m.direction === "OUT") {
+    return {
+      label: "Egreso",
+      title: "Movimiento de salida — la conciliación no aplica.",
+      borderCls: "w-[3px] bg-text-muted/20",
+      badgeCls: "border-border-soft bg-bg-soft text-text-muted",
+      rowBg: "",
+    };
+  }
+
+  // IN sin link → pendiente
+  if (!m.consolidado) {
+    return {
+      label: "Sin matchear",
+      title: "Ingreso bancario sin contraparte en Tesorería. Requiere acción.",
+      borderCls: "w-[3px] bg-warn",
+      badgeCls: "border-warn/40 bg-warn/10 text-warn",
+      rowBg: "bg-warn/[0.03]",
+    };
+  }
+
+  // IN con link según status del Consolidado
+  switch (m.consolidado.status) {
+    case "AUTO_MATCHED":
+      return {
+        label: "Conciliado auto",
+        title: "Vinculado automáticamente por el motor.",
+        borderCls: "w-[3px] bg-success",
+        badgeCls: "border-success/40 bg-success/10 text-success",
+        rowBg: "",
+      };
+    case "MANUAL":
+      return {
+        label: "Conciliado manual",
+        title: "Vinculado manualmente por un operador.",
+        borderCls: "w-[3px] bg-success",
+        badgeCls: "border-success/40 bg-success/10 text-success",
+        rowBg: "",
+      };
+    case "SUGGESTED":
+      return {
+        label: "Sugerido",
+        title: "El motor sugiere este match. Requiere confirmación.",
+        borderCls: "w-[3px] bg-amber-400",
+        badgeCls: "border-amber-400/50 bg-amber-50 text-amber-700",
+        rowBg: "bg-amber-50/30",
+      };
+    case "REVIEW":
+      return {
+        label: "Revisar",
+        title: "Vinculado pero requiere revisión humana.",
+        borderCls: "w-[3px] bg-orange-400",
+        badgeCls: "border-orange-400/50 bg-orange-50 text-orange-700",
+        rowBg: "bg-orange-50/30",
+      };
+    default:
+      return {
+        label: m.consolidado.status,
+        title: "Estado: " + m.consolidado.status,
+        borderCls: "w-[3px] bg-text-muted/30",
+        badgeCls: "border-border-soft bg-bg-soft text-text-muted",
+        rowBg: "",
+      };
+  }
+}
+
+function CartolaSummaryStrip({
+  summary,
+  accountLabel,
+  onAct,
+}: {
+  summary: CartolaSummary;
+  accountLabel: string;
+  onAct: () => void;
+}) {
+  const inPendingSum = BigInt(summary.inPendingSum);
+  const inConciliatedSum = BigInt(summary.inConciliatedSum);
+  const inSum = BigInt(summary.inSum);
+  const outSum = BigInt(summary.outSum);
+  const pctOk =
+    summary.inTotal > 0
+      ? (summary.inConciliated / summary.inTotal) * 100
+      : 0;
+
+  return (
+    <div className="card mt-1">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="text-xs text-text-muted uppercase tracking-wider font-semibold">
+            Resumen de la cuenta
+          </div>
+          <div className="text-sm font-semibold mt-0.5">{accountLabel}</div>
+        </div>
+        {summary.inPending > 0 && (
+          <button onClick={onAct} className="btn-primary text-xs">
+            Conciliar pendientes →
+          </button>
+        )}
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <SummaryItem
+          label="Abonos totales"
+          value={`${summary.inTotal}`}
+          sub={formatMoney(Number(inSum))}
+          tone="brand"
+        />
+        <SummaryItem
+          label="Conciliados"
+          value={`${summary.inConciliated} (${pctOk.toFixed(0)}%)`}
+          sub={formatMoney(Number(inConciliatedSum))}
+          tone="good"
+        />
+        <SummaryItem
+          label="Sin matchear"
+          value={`${summary.inPending}`}
+          sub={formatMoney(Number(inPendingSum))}
+          tone={summary.inPending > 0 ? "warn" : "muted"}
+        />
+        <SummaryItem
+          label="Cargos (egresos)"
+          value={`${summary.outTotal}`}
+          sub={formatMoney(Number(outSum))}
+          tone="muted"
+        />
+      </div>
+
+      {/* Barra visual conciliado vs pendiente */}
+      {summary.inTotal > 0 && (
+        <>
+          <div className="mt-3 flex h-2.5 rounded-full overflow-hidden bg-bg-elevated ring-1 ring-border-soft">
+            <div
+              className="bg-success/80"
+              style={{ width: `${pctOk}%` }}
+              title={`${pctOk.toFixed(1)}% conciliado`}
+            />
+            <div
+              className="bg-warn/70 flex-1"
+              title={`${(100 - pctOk).toFixed(1)}% sin matchear`}
+            />
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SummaryItem({
+  label,
+  value,
+  sub,
+  tone,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  tone: "brand" | "good" | "warn" | "muted";
+}) {
+  const toneCls =
+    tone === "brand"
+      ? "text-brand"
+      : tone === "good"
+      ? "text-success"
+      : tone === "warn"
+      ? "text-warn"
+      : "text-text-muted";
+  return (
+    <div>
+      <div className="text-[10px] uppercase tracking-wider text-text-muted font-semibold">
+        {label}
+      </div>
+      <div className={`text-base font-bold tabular-nums ${toneCls}`}>{value}</div>
+      <div className="text-xs text-text-muted font-mono mt-0.5">{sub}</div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { formatMoney, formatDate } from "@/lib/format";
 
 interface BankMovementDTO {
@@ -63,13 +64,18 @@ function defaultUntil(): string {
 }
 
 export function CompareView() {
+  // Si se llega aca desde Cartolas (atajo "Conciliar pendientes"), trae el
+  // accountId en el query string para pre-filtrar.
+  const searchParams = useSearchParams();
+  const presetAccountId = searchParams.get("accountId") ?? "";
+
   const [data, setData] = useState<CompareResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Filtros
   const [since, setSince] = useState(defaultSince());
   const [until, setUntil] = useState(defaultUntil());
-  const [accountId, setAccountId] = useState("");
+  const [accountId, setAccountId] = useState(presetAccountId);
   const [banco, setBanco] = useState("");
   const [onlyUnmatched, setOnlyUnmatched] = useState(true);
   const [search, setSearch] = useState("");
@@ -273,6 +279,16 @@ export function CompareView() {
         </label>
       </div>
 
+      {/* Leyenda de colores (oculta en móvil) */}
+      <div className="hidden md:flex items-center gap-3 text-[11px] text-text-muted px-1">
+        <span className="font-semibold uppercase tracking-wider">Leyenda:</span>
+        <LegendDot color="bg-success/70" label="Conciliado" />
+        <LegendDot color="bg-amber-400" label="Sugerido / Excepción" />
+        <LegendDot color="bg-orange-400" label="Revisar" />
+        <LegendDot color="bg-warn/70" label="Sin matchear" />
+        <LegendDot color="bg-rose-400" label="Fuera de scope" />
+      </div>
+
       {/* Barra de acción flotante */}
       {(selectedBankIds.size > 0 || selectedTesoreriaId) && (
         <div className="sticky top-16 z-20 rounded-md border border-brand/40 bg-brand/5 backdrop-blur p-3 shadow-soft flex items-center justify-between gap-4 flex-wrap">
@@ -409,29 +425,49 @@ function BankCard({
   highlightAmount: boolean;
   onClick: () => void;
 }) {
+  // Color de la barra lateral según estado
+  //   verde   = vinculado (conciliado)
+  //   ámbar   = sin matchear (pendiente de acción)
+  //   brand   = seleccionado
+  //   esmeralda = highlight de match potencial (mismo monto que la T° seleccionada)
+  const stripCls = selected
+    ? "bg-brand"
+    : highlightAmount
+    ? "bg-emerald-500"
+    : bm.isLinked
+    ? "bg-success/70"
+    : "bg-warn/70";
+  const cardBgCls = selected
+    ? "border-brand bg-brand/10 shadow-soft"
+    : highlightAmount
+    ? "border-emerald-400 bg-emerald-50/50 hover:bg-emerald-50"
+    : bm.isLinked
+    ? "border-border-soft bg-zinc-50 opacity-70 hover:opacity-100"
+    : "border-warn/30 bg-warn/[0.04] hover:bg-warn/[0.07]";
+
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left rounded-md border p-3 text-sm transition-all ${
-        selected
-          ? "border-brand bg-brand/10 shadow-soft"
-          : highlightAmount
-          ? "border-emerald-400 bg-emerald-50/50 hover:bg-emerald-50"
-          : bm.isLinked
-          ? "border-border-soft bg-zinc-50 opacity-70 hover:opacity-100"
-          : "border-border-soft bg-white hover:bg-bg-soft"
-      }`}
+      className={`relative w-full text-left rounded-md border p-3 pl-4 text-sm transition-all overflow-hidden ${cardBgCls}`}
     >
+      {/* Barra lateral de estado (3px) */}
+      <span
+        className={`absolute left-0 top-0 bottom-0 w-[3px] ${stripCls}`}
+        aria-hidden
+      />
+
       <div className="flex justify-between items-start gap-2">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold">{bm.account.bankName}</span>
-            <span className="text-xs text-text-muted">
-              {bm.account.accountNumber}
-            </span>
-            {bm.isLinked && (
-              <span className="badge border-emerald-300 bg-emerald-50 text-emerald-700">
-                vinculado
+            <span className="text-xs text-text-muted">{bm.account.accountNumber}</span>
+            {bm.isLinked ? (
+              <span className="badge border-success/40 bg-success/10 text-success">
+                ✓ vinculado
+              </span>
+            ) : (
+              <span className="badge border-warn/40 bg-warn/10 text-warn">
+                ⚠ sin matchear
               </span>
             )}
           </div>
@@ -473,22 +509,32 @@ function TesoreriaCard({
   highlightAmount: boolean;
   onClick: () => void;
 }) {
-  const isUnmatched =
-    !t.consolidado ||
-    ["NO_MATCH", "REVIEW", "OUT_OF_SCOPE"].includes(t.consolidado.status);
+  const status = t.consolidado?.status ?? "UNPROCESSED";
+  const visualState = getTesoreriaVisualState(status, t.esExcepcion);
+
+  const stripCls = selected
+    ? "bg-brand"
+    : highlightAmount
+    ? "bg-emerald-500"
+    : visualState.stripCls;
+
+  const cardBgCls = selected
+    ? "border-brand bg-brand/10 shadow-soft"
+    : highlightAmount
+    ? "border-emerald-400 bg-emerald-50/50 hover:bg-emerald-50"
+    : visualState.cardBgCls;
+
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left rounded-md border p-3 text-sm transition-all ${
-        selected
-          ? "border-brand bg-brand/10 shadow-soft"
-          : highlightAmount
-          ? "border-emerald-400 bg-emerald-50/50 hover:bg-emerald-50"
-          : !isUnmatched
-          ? "border-border-soft bg-zinc-50 opacity-70 hover:opacity-100"
-          : "border-border-soft bg-white hover:bg-bg-soft"
-      }`}
+      className={`relative w-full text-left rounded-md border p-3 pl-4 text-sm transition-all overflow-hidden ${cardBgCls}`}
     >
+      {/* Barra lateral de estado */}
+      <span
+        className={`absolute left-0 top-0 bottom-0 w-[3px] ${stripCls}`}
+        aria-hidden
+      />
+
       <div className="flex justify-between items-start gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
@@ -496,12 +542,12 @@ function TesoreriaCard({
             {t.sucursalName && (
               <span className="text-xs text-text-muted">{t.sucursalName}</span>
             )}
+            <span className={`badge ${visualState.badgeCls}`}>
+              {visualState.label}
+            </span>
             {t.esExcepcion && (
-              <span className="badge border-warn/40 bg-warn/10 text-warn">EXC</span>
-            )}
-            {t.consolidado?.status && (
-              <span className="text-xs text-text-muted font-mono">
-                {t.consolidado.status}
+              <span className="badge border-amber-400/50 bg-amber-50 text-amber-700">
+                EXC
               </span>
             )}
           </div>
@@ -529,5 +575,84 @@ function TesoreriaCard({
         {t.glosa}
       </div>
     </button>
+  );
+}
+
+/* =============================== Visual state =============================== */
+
+interface VisualState {
+  label: string;
+  stripCls: string;
+  cardBgCls: string;
+  badgeCls: string;
+}
+
+function getTesoreriaVisualState(
+  status: string,
+  esExcepcion: boolean
+): VisualState {
+  // Excepción API tiene prioridad visual (es un caso especial sin importar status)
+  if (esExcepcion && (status === "REVIEW" || status === "UNPROCESSED")) {
+    return {
+      label: "EXCEPCIÓN",
+      stripCls: "bg-amber-400",
+      cardBgCls: "border-amber-300 bg-amber-50/40 hover:bg-amber-50/70",
+      badgeCls: "border-amber-400/50 bg-amber-50 text-amber-700",
+    };
+  }
+
+  switch (status) {
+    case "AUTO_MATCHED":
+    case "MANUAL":
+      return {
+        label: status === "MANUAL" ? "Manual" : "Conciliado",
+        stripCls: "bg-success/70",
+        cardBgCls: "border-border-soft bg-zinc-50 opacity-70 hover:opacity-100",
+        badgeCls: "border-success/40 bg-success/10 text-success",
+      };
+    case "SUGGESTED":
+      return {
+        label: "Sugerido",
+        stripCls: "bg-amber-400",
+        cardBgCls: "border-amber-300 bg-amber-50/40 hover:bg-amber-50/70",
+        badgeCls: "border-amber-400/50 bg-amber-50 text-amber-700",
+      };
+    case "REVIEW":
+      return {
+        label: "Revisar",
+        stripCls: "bg-orange-400",
+        cardBgCls: "border-orange-300 bg-orange-50/40 hover:bg-orange-50/70",
+        badgeCls: "border-orange-400/50 bg-orange-50 text-orange-700",
+      };
+    case "NO_MATCH":
+      return {
+        label: "Sin matchear",
+        stripCls: "bg-warn/70",
+        cardBgCls: "border-warn/30 bg-warn/[0.04] hover:bg-warn/[0.07]",
+        badgeCls: "border-warn/40 bg-warn/10 text-warn",
+      };
+    case "OUT_OF_SCOPE":
+      return {
+        label: "Fuera de scope",
+        stripCls: "bg-rose-400",
+        cardBgCls: "border-rose-300 bg-rose-50/30 hover:bg-rose-50/60",
+        badgeCls: "border-rose-400/50 bg-rose-50 text-rose-700",
+      };
+    default:
+      return {
+        label: "Sin procesar",
+        stripCls: "bg-sky-400",
+        cardBgCls: "border-sky-300 bg-sky-50/30 hover:bg-sky-50/60",
+        badgeCls: "border-sky-400/50 bg-sky-50 text-sky-700",
+      };
+  }
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={`inline-block w-1 h-3 rounded-sm ${color}`} />
+      {label}
+    </span>
   );
 }

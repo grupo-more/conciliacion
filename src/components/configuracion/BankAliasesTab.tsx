@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface Account {
   id: string;
@@ -38,6 +38,8 @@ interface Suggestion {
     dominance: number;
   } | null;
   reason: string;
+  requiresManualConfirm?: boolean;
+  accountAlreadyUsedBy?: string[];
 }
 
 export function BankAliasesTab() {
@@ -87,7 +89,11 @@ export function BankAliasesTab() {
       });
       if (res.ok) {
         const json = await res.json();
-        alert(`${json.applied} alias creados.`);
+        const skippedNote =
+          json.skipped > 0
+            ? ` · ${json.skipped} omitidos (cuenta ya en uso por otro alias — agregalos manualmente si corresponde)`
+            : "";
+        alert(`${json.applied} alias creados${skippedNote}.`);
         setSuggestions([]);
         await load();
       }
@@ -101,6 +107,25 @@ export function BankAliasesTab() {
     const res = await fetch(`/api/bank-aliases/${id}`, { method: "DELETE" });
     if (res.ok) load();
   }
+
+  // Detectar duplicados: cuentas usadas por mas de un alias
+  const aliasesByAccountId = useMemo(() => {
+    const m = new Map<string, string[]>();
+    if (!data) return m;
+    for (const a of data.aliases) {
+      const arr = m.get(a.accountId) ?? [];
+      arr.push(a.bancoString);
+      m.set(a.accountId, arr);
+    }
+    return m;
+  }, [data]);
+  const duplicatedAccounts = useMemo(() => {
+    const s = new Set<string>();
+    for (const [accId, list] of aliasesByAccountId.entries()) {
+      if (list.length > 1) s.add(accId);
+    }
+    return s;
+  }, [aliasesByAccountId]);
 
   return (
     <div className="space-y-4">
@@ -141,22 +166,45 @@ export function BankAliasesTab() {
             )}
           </div>
           <div className="space-y-1.5">
-            {suggestions.map((s) => (
-              <div key={s.bancoString} className="text-sm flex justify-between items-start gap-2">
-                <div>
-                  <span className="font-mono font-semibold">{s.bancoString}</span>
-                  {s.suggestion ? (
-                    <span className="ml-2 text-emerald-700">
-                      → {s.suggestion.bankName} {s.suggestion.accountNumber}{" "}
-                      <span className="text-xs text-text-muted">({s.reason})</span>
-                    </span>
-                  ) : (
-                    <span className="ml-2 text-rose-700 text-xs">{s.reason}</span>
+            {suggestions.map((s) => {
+              const conflict = s.requiresManualConfirm;
+              return (
+                <div
+                  key={s.bancoString}
+                  className="text-sm flex justify-between items-start gap-2"
+                >
+                  <div className="min-w-0">
+                    <span className="font-mono font-semibold">{s.bancoString}</span>
+                    {s.suggestion ? (
+                      <span
+                        className={`ml-2 ${conflict ? "text-amber-700" : "text-emerald-700"}`}
+                      >
+                        → {s.suggestion.bankName} {s.suggestion.accountNumber}{" "}
+                        <span className="text-xs text-text-muted">({s.reason})</span>
+                      </span>
+                    ) : (
+                      <span className="ml-2 text-rose-700 text-xs">{s.reason}</span>
+                    )}
+                  </div>
+                  {conflict && s.suggestion && (
+                    <button
+                      onClick={() => setCreating(s.bancoString)}
+                      className="btn-ghost text-xs whitespace-nowrap"
+                    >
+                      Crear manualmente
+                    </button>
                   )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
+          {suggestions.some((s) => s.requiresManualConfirm) && (
+            <div className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md p-2">
+              ⚠ Las sugerencias en ámbar apuntan a cuentas que <strong>ya están mapeadas</strong>{" "}
+              por otro alias. <em>No se aplican automáticamente</em> — si querés
+              tenerlas duplicadas (caso raro), creálas a mano con "Crear manualmente".
+            </div>
+          )}
         </div>
       )}
 
@@ -200,15 +248,44 @@ export function BankAliasesTab() {
                 Sin mapeos. Usa "Auto-detectar faltantes" para empezar.
               </td></tr>
             )}
-            {!loading && data?.aliases.map((a) => (
-              <tr key={a.id} className="border-t border-border-soft/40">
+            {!loading && data?.aliases.map((a) => {
+              const isDuplicated = duplicatedAccounts.has(a.accountId);
+              const otherAliases = isDuplicated
+                ? (aliasesByAccountId.get(a.accountId) ?? []).filter(
+                    (s) => s !== a.bancoString
+                  )
+                : [];
+              return (
+              <tr
+                key={a.id}
+                className={
+                  "border-t border-border-soft/40 " +
+                  (isDuplicated ? "bg-amber-50/40" : "")
+                }
+              >
                 <td className="px-4 py-3 font-mono font-semibold">{a.bancoString}</td>
                 <td className="px-4 py-3">
-                  <div className="font-semibold">{a.account.bankName}</div>
+                  <div className="font-semibold flex items-center gap-2 flex-wrap">
+                    {a.account.bankName}
+                    {isDuplicated && (
+                      <span
+                        className="inline-block text-[10px] font-semibold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded"
+                        title={`También usada por: ${otherAliases.join(", ")}`}
+                      >
+                        ⚠ Compartida
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-text-muted">
                     {a.account.accountNumber}
                     {a.account.alias && ` · ${a.account.alias}`}
                   </div>
+                  {isDuplicated && (
+                    <div className="text-[11px] text-amber-700 mt-0.5">
+                      También usada por:{" "}
+                      <span className="font-mono">{otherAliases.join(", ")}</span>
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-text-muted text-xs">
                   {a.notes || <span className="text-text-dim">—</span>}
@@ -225,7 +302,8 @@ export function BankAliasesTab() {
                   </button>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

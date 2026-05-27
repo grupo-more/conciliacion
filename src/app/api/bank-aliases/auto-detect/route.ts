@@ -13,10 +13,14 @@ import { prisma } from "@/lib/db";
  *   - apply=false (default): solo devuelve sugerencias
  *   - apply=true: inserta los alias detectados automaticamente
  *
- * La heuristica: por cada banco_string, contar cuantos BankMovements
- * coinciden en monto y dentro de +/-7 dias para cada cuenta. La cuenta
- * con mas coincidencias es la sugerencia. Solo sugiere si tiene >= 3
- * coincidencias y > 60% de dominancia sobre la segunda mejor.
+ * Reglas de seguridad:
+ *   - Solo sugiere si el candidato tiene >= 3 coincidencias y > 60% de
+ *     dominancia sobre el segundo mejor.
+ *   - Si el candidato sugerido APUNTA A UNA CUENTA QUE YA ESTA MAPEADA POR
+ *     OTRO ALIAS, no se autoaplica con `apply=true` (evita duplicados como
+ *     "Santander" + "Santander ME" apuntando ambos a 94157609). La sugerencia
+ *     se devuelve igual pero marcada con `requiresManualConfirm=true` y el
+ *     usuario puede crearla manualmente si confirma que es lo que quiere.
  */
 export async function POST(req: Request) {
   const session = await getSession();
@@ -25,16 +29,28 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const apply = body?.apply === true;
 
-  // Bancos de Tesoreria sin alias
-  const existing = await prisma.bankAccountAlias.findMany({ select: { bancoString: true } });
-  const existingSet = new Set(existing.map((a) => a.bancoString));
+  // Aliases existentes
+  const existingAliases = await prisma.bankAccountAlias.findMany({
+    select: { bancoString: true, accountId: true },
+  });
+  const existingBancoStrings = new Set(existingAliases.map((a) => a.bancoString));
+  // Mapeo accountId -> bancoStrings que ya lo usan (puede ser >1 ya, en cuyo caso
+  // tambien marcamos como conflicto cualquier sugerencia que apunte ahi)
+  const aliasesByAccount = new Map<string, string[]>();
+  for (const a of existingAliases) {
+    const arr = aliasesByAccount.get(a.accountId) ?? [];
+    arr.push(a.bancoString);
+    aliasesByAccount.set(a.accountId, arr);
+  }
 
   const bancos = await prisma.tesoreriaMovement.findMany({
     where: { banco: { not: null } },
     select: { banco: true },
     distinct: ["banco"],
   });
-  const missing = bancos.map((b) => b.banco!).filter((b) => b && !existingSet.has(b));
+  const missing = bancos
+    .map((b) => b.banco!)
+    .filter((b) => b && !existingBancoStrings.has(b));
 
   if (missing.length === 0) {
     return NextResponse.json({ suggestions: [], applied: 0 });
@@ -42,9 +58,19 @@ export async function POST(req: Request) {
 
   const suggestions: Array<{
     bancoString: string;
-    suggestion: { accountId: string; accountNumber: string; bankName: string; matches: number; dominance: number } | null;
+    suggestion: {
+      accountId: string;
+      accountNumber: string;
+      bankName: string;
+      matches: number;
+      dominance: number;
+    } | null;
     runnerUp?: { accountNumber: string; matches: number } | null;
     reason: string;
+    /** Si true, no se autoaplica con `apply=true` (cuenta ya tiene otro alias). */
+    requiresManualConfirm?: boolean;
+    /** Otros alias que ya apuntan a la cuenta sugerida. */
+    accountAlreadyUsedBy?: string[];
   }> = [];
 
   for (const banco of missing) {
@@ -73,11 +99,14 @@ export async function POST(req: Request) {
       }
     }
 
-    const ranked = Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1]);
+    const ranked = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
 
     if (ranked.length === 0) {
-      suggestions.push({ bancoString: banco, suggestion: null, reason: "Sin coincidencias en BD" });
+      suggestions.push({
+        bancoString: banco,
+        suggestion: null,
+        reason: "Sin coincidencias en BD",
+      });
       continue;
     }
 
@@ -100,13 +129,35 @@ export async function POST(req: Request) {
         bancoString: banco,
         suggestion: null,
         reason: `Empate (${bestCount} vs ${runnerCount}). Asignar manualmente.`,
-        runnerUp: acc ? { accountNumber: acc.accountNumber, matches: runnerCount ?? 0 } : null,
+        runnerUp: acc
+          ? { accountNumber: acc.accountNumber, matches: runnerCount ?? 0 }
+          : null,
       });
       continue;
     }
 
     const acc = await prisma.bankAccount.findUnique({ where: { id: bestId } });
     if (!acc) continue;
+
+    const otherAliases = aliasesByAccount.get(bestId) ?? [];
+    if (otherAliases.length > 0) {
+      // La cuenta sugerida ya esta mapeada por otro(s) alias.
+      // No autoaplicamos para evitar duplicados accidentales.
+      suggestions.push({
+        bancoString: banco,
+        suggestion: {
+          accountId: acc.id,
+          accountNumber: acc.accountNumber,
+          bankName: acc.bankName,
+          matches: bestCount,
+          dominance: Math.round(dominance * 100),
+        },
+        reason: `${bestCount} coincidencias, ${Math.round(dominance * 100)}% dominancia · ⚠ Cuenta ya usada por: ${otherAliases.join(", ")}`,
+        requiresManualConfirm: true,
+        accountAlreadyUsedBy: otherAliases,
+      });
+      continue;
+    }
 
     suggestions.push({
       bancoString: banco,
@@ -122,9 +173,14 @@ export async function POST(req: Request) {
   }
 
   let applied = 0;
+  let skipped = 0;
   if (apply) {
     for (const s of suggestions) {
       if (!s.suggestion) continue;
+      if (s.requiresManualConfirm) {
+        skipped++;
+        continue;
+      }
       try {
         await prisma.bankAccountAlias.create({
           data: {
@@ -135,10 +191,10 @@ export async function POST(req: Request) {
         });
         applied++;
       } catch {
-        // ignore duplicates
+        // ignore duplicates (race)
       }
     }
   }
 
-  return NextResponse.json({ suggestions, applied });
+  return NextResponse.json({ suggestions, applied, skipped });
 }

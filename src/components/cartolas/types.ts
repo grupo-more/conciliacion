@@ -37,6 +37,21 @@ export interface MovementDTO {
   counterpartyBank: string | null;
   branchLabel: string | null;
   txType: string | null;
+  /** Si el BankMovement esta vinculado a un Consolidado, se incluye su id+status.
+   *  null = no esta vinculado (sin matchear o egreso). */
+  consolidado: { id: string; status: string } | null;
+}
+
+export interface CartolaSummary {
+  total: number;
+  inTotal: number;
+  inConciliated: number;
+  inPending: number;
+  inSum: string;
+  inConciliatedSum: string;
+  inPendingSum: string;
+  outTotal: number;
+  outSum: string;
 }
 
 export interface MovementsResponse {
@@ -44,6 +59,7 @@ export interface MovementsResponse {
   limit: number;
   offset: number;
   movements: MovementDTO[];
+  summary: CartolaSummary | null;
 }
 
 export interface AccountsResponse {

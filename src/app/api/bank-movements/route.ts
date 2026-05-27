@@ -3,6 +3,25 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 
+/**
+ * GET /api/bank-movements
+ *
+ * Lista de movimientos bancarios filtrados. Por cada movimiento devuelve
+ * tambien el estado de conciliacion (`consolidado`) para que el UI pueda
+ * distinguir visualmente los matcheados de los pendientes.
+ *
+ * Filtros:
+ *   ?accountId=<uuid>
+ *   ?direction=IN|OUT
+ *   ?since, ?until (YYYY-MM-DD)
+ *   ?q=<search>
+ *   ?minAmount, ?maxAmount
+ *   ?onlyUnmatched=true   (default false; cuando true, solo IN sin Consolidado)
+ *
+ * Si se pasa ?accountId tambien devuelve `summary` con los conteos del
+ * conjunto FILTRADO por cuenta (no afectado por los demas filtros, para que
+ * el resumen del pie sea estable). Use `includeSummary=true` para incluirlo.
+ */
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session) {
@@ -11,12 +30,14 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const accountId = url.searchParams.get("accountId");
-  const direction = url.searchParams.get("direction"); // "IN" | "OUT"
+  const direction = url.searchParams.get("direction");
   const since = url.searchParams.get("since");
   const until = url.searchParams.get("until");
   const search = url.searchParams.get("q");
   const minAmount = url.searchParams.get("minAmount");
   const maxAmount = url.searchParams.get("maxAmount");
+  const onlyUnmatched = url.searchParams.get("onlyUnmatched") === "true";
+  const includeSummary = url.searchParams.get("includeSummary") === "true";
   const limit = clampInt(url.searchParams.get("limit"), 1, 500, 200);
   const offset = clampInt(url.searchParams.get("offset"), 0, 100000, 0);
 
@@ -49,6 +70,12 @@ export async function GET(req: Request) {
     ];
   }
 
+  if (onlyUnmatched) {
+    // Solo IN sin link a ningun Consolidado
+    where.direction = "IN";
+    where.consolidadoLinks = { none: {} };
+  }
+
   const [rows, total] = await Promise.all([
     prisma.bankMovement.findMany({
       where,
@@ -66,33 +93,123 @@ export async function GET(req: Request) {
             accountNumber: true,
           },
         },
+        consolidadoLinks: {
+          include: {
+            consolidado: { select: { id: true, status: true } },
+          },
+          take: 1,
+        },
       },
     }),
     prisma.bankMovement.count({ where }),
   ]);
 
+  // Summary opcional por cuenta (cantidad y monto por categoria)
+  let summary:
+    | {
+        total: number;
+        inTotal: number;
+        inConciliated: number;
+        inPending: number;
+        inSum: string;
+        inConciliatedSum: string;
+        inPendingSum: string;
+        outTotal: number;
+        outSum: string;
+      }
+    | null = null;
+  if (includeSummary && accountId) {
+    // Computar solo sobre cuenta (sin filtros adicionales de busqueda/fecha,
+    // para que el pie sea estable y comparable).
+    const accountAggs = await prisma.$queryRaw<
+      Array<{
+        in_n: bigint;
+        in_sum: bigint | null;
+        in_rec_n: bigint;
+        in_rec_sum: bigint | null;
+        out_n: bigint;
+        out_sum: bigint | null;
+      }>
+    >`
+      SELECT
+        COUNT(CASE WHEN direction='IN' THEN 1 END)::bigint AS in_n,
+        COALESCE(SUM(CASE WHEN direction='IN' THEN amount ELSE 0 END), 0)::bigint AS in_sum,
+        COUNT(
+          CASE
+            WHEN direction='IN' AND EXISTS (
+              SELECT 1 FROM "ConsolidadoLink" cl
+              JOIN "Consolidado" c ON c.id = cl.consolidado_id
+              WHERE cl.bank_movement_id = bm.id
+                AND c.status IN ('AUTO_MATCHED','MANUAL')
+            )
+            THEN 1
+          END
+        )::bigint AS in_rec_n,
+        COALESCE(SUM(
+          CASE
+            WHEN direction='IN' AND EXISTS (
+              SELECT 1 FROM "ConsolidadoLink" cl
+              JOIN "Consolidado" c ON c.id = cl.consolidado_id
+              WHERE cl.bank_movement_id = bm.id
+                AND c.status IN ('AUTO_MATCHED','MANUAL')
+            )
+            THEN amount
+            ELSE 0
+          END
+        ), 0)::bigint AS in_rec_sum,
+        COUNT(CASE WHEN direction='OUT' THEN 1 END)::bigint AS out_n,
+        COALESCE(SUM(CASE WHEN direction='OUT' THEN ABS(amount) ELSE 0 END), 0)::bigint AS out_sum
+      FROM "BankMovement" bm
+      WHERE bm.account_id = ${accountId}
+    `;
+    const a = accountAggs[0];
+    const inTotal = Number(a?.in_n ?? 0);
+    const inRecCount = Number(a?.in_rec_n ?? 0);
+    const inSum = a?.in_sum ?? 0n;
+    const inRecSum = a?.in_rec_sum ?? 0n;
+    summary = {
+      total: inTotal + Number(a?.out_n ?? 0),
+      inTotal,
+      inConciliated: inRecCount,
+      inPending: inTotal - inRecCount,
+      inSum: inSum.toString(),
+      inConciliatedSum: inRecSum.toString(),
+      inPendingSum: (inSum - inRecSum).toString(),
+      outTotal: Number(a?.out_n ?? 0),
+      outSum: (a?.out_sum ?? 0n).toString(),
+    };
+  }
+
   return NextResponse.json({
     total,
     limit,
     offset,
-    movements: rows.map((m) => ({
-      id: m.id,
-      accountId: m.accountId,
-      account: m.account,
-      externalId: m.externalId,
-      postDate: m.postDate.toISOString(),
-      transactionDate: m.transactionDate?.toISOString() ?? null,
-      amount: m.amount.toString(),
-      currency: m.currency,
-      direction: m.direction,
-      description: m.description,
-      balanceAfter: m.balanceAfter?.toString() ?? null,
-      counterpartyName: m.counterpartyName,
-      counterpartyRut: m.counterpartyRut,
-      counterpartyBank: m.counterpartyBank,
-      branchLabel: m.branchLabel,
-      txType: m.txType,
-    })),
+    movements: rows.map((m) => {
+      const link = m.consolidadoLinks[0];
+      const consolidado = link
+        ? { id: link.consolidado.id, status: link.consolidado.status }
+        : null;
+      return {
+        id: m.id,
+        accountId: m.accountId,
+        account: m.account,
+        externalId: m.externalId,
+        postDate: m.postDate.toISOString(),
+        transactionDate: m.transactionDate?.toISOString() ?? null,
+        amount: m.amount.toString(),
+        currency: m.currency,
+        direction: m.direction,
+        description: m.description,
+        balanceAfter: m.balanceAfter?.toString() ?? null,
+        counterpartyName: m.counterpartyName,
+        counterpartyRut: m.counterpartyRut,
+        counterpartyBank: m.counterpartyBank,
+        branchLabel: m.branchLabel,
+        txType: m.txType,
+        consolidado,
+      };
+    }),
+    summary,
   });
 }
 
