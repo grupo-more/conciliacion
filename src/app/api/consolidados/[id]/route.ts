@@ -5,6 +5,7 @@ import {
   resolveCandidateAccounts,
   scoreCandidate,
 } from "@/lib/consolidados/match";
+import { extractEmbeddedReference } from "@/lib/cartolas/dedup";
 
 /**
  * GET /api/consolidados/[id]
@@ -81,27 +82,53 @@ export async function GET(
         take: 20,
       });
 
-      candidates = bms
-        .map((bm) => {
-          const { score, factors } = scoreCandidate(t, bm);
+      // PROTECCION DEFENSIVA: si en BD hay BankMovements duplicados (mismo
+      // movimiento real cargado desde dos cartolas), agruparlos visualmente
+      // como UN solo candidato con un badge "duplicado en cartola". Asi el
+      // usuario no ve dos botones "Vincular" idénticos. El dedup definitivo
+      // se hace en Cartolas → "Detectar duplicados".
+      const dedupGroups = new Map<string, typeof bms>();
+      for (const bm of bms) {
+        const ref = extractEmbeddedReference(bm.description);
+        // Solo agrupa si hay ref embebida (señal fuerte). Sino, cada candidato
+        // queda como un grupo de uno.
+        const key = ref
+          ? `${bm.accountId}|${bm.postDate.toISOString().slice(0, 10)}|${bm.amount.toString()}|${ref}`
+          : `__solo__${bm.id}`;
+        const arr = dedupGroups.get(key) ?? [];
+        arr.push(bm);
+        dedupGroups.set(key, arr);
+      }
+
+      candidates = Array.from(dedupGroups.values())
+        .map((group) => {
+          // Representante: el más antiguo (createdAt asc) o el que tenga link
+          // a Consolidado si alguno lo tiene (improbable, ya filtramos).
+          const rep = group.slice().sort((a, b) =>
+            a.createdAt.getTime() - b.createdAt.getTime()
+          )[0];
+          const { score, factors } = scoreCandidate(t, rep);
+          const isDuplicate = group.length > 1;
           return {
-            bankMovementId: bm.id,
+            bankMovementId: rep.id,
             score,
             factors: factors.map((f) => ({
               key: f.key as string,
               label: f.label,
               weight: f.weight,
             })),
-            postDate: bm.postDate.toISOString(),
-            amount: bm.amount.toString(),
-            description: bm.description,
-            counterpartyName: bm.counterpartyName,
-            counterpartyRut: bm.counterpartyRut,
+            postDate: rep.postDate.toISOString(),
+            amount: rep.amount.toString(),
+            description: rep.description,
+            counterpartyName: rep.counterpartyName,
+            counterpartyRut: rep.counterpartyRut,
             account: {
-              id: bm.account.id,
-              bankName: bm.account.bankName,
-              accountNumber: bm.account.accountNumber,
+              id: rep.account.id,
+              bankName: rep.account.bankName,
+              accountNumber: rep.account.accountNumber,
             },
+            duplicateInCartola: isDuplicate,
+            duplicateCount: group.length,
           };
         })
         .sort((a, b) => b.score - a.score);

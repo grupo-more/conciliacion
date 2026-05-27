@@ -118,50 +118,94 @@ export async function GET(req: Request) {
         outSum: string;
       }
     | null = null;
-  if (includeSummary && accountId) {
-    // Computar solo sobre cuenta (sin filtros adicionales de busqueda/fecha,
-    // para que el pie sea estable y comparable).
-    const accountAggs = await prisma.$queryRaw<
-      Array<{
-        in_n: bigint;
-        in_sum: bigint | null;
-        in_rec_n: bigint;
-        in_rec_sum: bigint | null;
-        out_n: bigint;
-        out_sum: bigint | null;
-      }>
-    >`
-      SELECT
-        COUNT(CASE WHEN direction='IN' THEN 1 END)::bigint AS in_n,
-        COALESCE(SUM(CASE WHEN direction='IN' THEN amount ELSE 0 END), 0)::bigint AS in_sum,
-        COUNT(
-          CASE
-            WHEN direction='IN' AND EXISTS (
-              SELECT 1 FROM "ConsolidadoLink" cl
-              JOIN "Consolidado" c ON c.id = cl.consolidado_id
-              WHERE cl.bank_movement_id = bm.id
-                AND c.status IN ('AUTO_MATCHED','MANUAL')
-            )
-            THEN 1
-          END
-        )::bigint AS in_rec_n,
-        COALESCE(SUM(
-          CASE
-            WHEN direction='IN' AND EXISTS (
-              SELECT 1 FROM "ConsolidadoLink" cl
-              JOIN "Consolidado" c ON c.id = cl.consolidado_id
-              WHERE cl.bank_movement_id = bm.id
-                AND c.status IN ('AUTO_MATCHED','MANUAL')
-            )
-            THEN amount
-            ELSE 0
-          END
-        ), 0)::bigint AS in_rec_sum,
-        COUNT(CASE WHEN direction='OUT' THEN 1 END)::bigint AS out_n,
-        COALESCE(SUM(CASE WHEN direction='OUT' THEN ABS(amount) ELSE 0 END), 0)::bigint AS out_sum
-      FROM "BankMovement" bm
-      WHERE bm.account_id = ${accountId}
-    `;
+  if (includeSummary) {
+    // Computar agregados. Cuando hay accountId, sobre esa cuenta; sino global
+    // (todas las cuentas excepto _UNASSIGNED_*).
+    // No aplicamos filtros de búsqueda/fecha para que el pie sea estable.
+    const accountAggs = accountId
+      ? await prisma.$queryRaw<
+          Array<{
+            in_n: bigint;
+            in_sum: bigint | null;
+            in_rec_n: bigint;
+            in_rec_sum: bigint | null;
+            out_n: bigint;
+            out_sum: bigint | null;
+          }>
+        >`
+          SELECT
+            COUNT(CASE WHEN direction='IN' THEN 1 END)::bigint AS in_n,
+            COALESCE(SUM(CASE WHEN direction='IN' THEN amount ELSE 0 END), 0)::bigint AS in_sum,
+            COUNT(
+              CASE
+                WHEN direction='IN' AND EXISTS (
+                  SELECT 1 FROM "ConsolidadoLink" cl
+                  JOIN "Consolidado" c ON c.id = cl.consolidado_id
+                  WHERE cl.bank_movement_id = bm.id
+                    AND c.status IN ('AUTO_MATCHED','MANUAL')
+                )
+                THEN 1
+              END
+            )::bigint AS in_rec_n,
+            COALESCE(SUM(
+              CASE
+                WHEN direction='IN' AND EXISTS (
+                  SELECT 1 FROM "ConsolidadoLink" cl
+                  JOIN "Consolidado" c ON c.id = cl.consolidado_id
+                  WHERE cl.bank_movement_id = bm.id
+                    AND c.status IN ('AUTO_MATCHED','MANUAL')
+                )
+                THEN amount
+                ELSE 0
+              END
+            ), 0)::bigint AS in_rec_sum,
+            COUNT(CASE WHEN direction='OUT' THEN 1 END)::bigint AS out_n,
+            COALESCE(SUM(CASE WHEN direction='OUT' THEN ABS(amount) ELSE 0 END), 0)::bigint AS out_sum
+          FROM "BankMovement" bm
+          WHERE bm.account_id = ${accountId}
+        `
+      : await prisma.$queryRaw<
+          Array<{
+            in_n: bigint;
+            in_sum: bigint | null;
+            in_rec_n: bigint;
+            in_rec_sum: bigint | null;
+            out_n: bigint;
+            out_sum: bigint | null;
+          }>
+        >`
+          SELECT
+            COUNT(CASE WHEN direction='IN' THEN 1 END)::bigint AS in_n,
+            COALESCE(SUM(CASE WHEN direction='IN' THEN amount ELSE 0 END), 0)::bigint AS in_sum,
+            COUNT(
+              CASE
+                WHEN direction='IN' AND EXISTS (
+                  SELECT 1 FROM "ConsolidadoLink" cl
+                  JOIN "Consolidado" c ON c.id = cl.consolidado_id
+                  WHERE cl.bank_movement_id = bm.id
+                    AND c.status IN ('AUTO_MATCHED','MANUAL')
+                )
+                THEN 1
+              END
+            )::bigint AS in_rec_n,
+            COALESCE(SUM(
+              CASE
+                WHEN direction='IN' AND EXISTS (
+                  SELECT 1 FROM "ConsolidadoLink" cl
+                  JOIN "Consolidado" c ON c.id = cl.consolidado_id
+                  WHERE cl.bank_movement_id = bm.id
+                    AND c.status IN ('AUTO_MATCHED','MANUAL')
+                )
+                THEN amount
+                ELSE 0
+              END
+            ), 0)::bigint AS in_rec_sum,
+            COUNT(CASE WHEN direction='OUT' THEN 1 END)::bigint AS out_n,
+            COALESCE(SUM(CASE WHEN direction='OUT' THEN ABS(amount) ELSE 0 END), 0)::bigint AS out_sum
+          FROM "BankMovement" bm
+          JOIN "BankAccount" ba ON ba.id = bm.account_id
+          WHERE ba.account_number NOT LIKE '_UNASSIGNED_%'
+        `;
     const a = accountAggs[0];
     const inTotal = Number(a?.in_n ?? 0);
     const inRecCount = Number(a?.in_rec_n ?? 0);

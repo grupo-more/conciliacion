@@ -276,11 +276,21 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                       >
                         <div className="flex justify-between items-start gap-2">
                           <div className="flex-1 min-w-0">
-                            <div className="font-semibold">
-                              {c.account.bankName}{" "}
-                              <span className="text-xs text-text-muted font-normal">
-                                · {formatDate(c.postDate)}
+                            <div className="font-semibold flex items-center gap-2 flex-wrap">
+                              <span>
+                                {c.account.bankName}{" "}
+                                <span className="text-xs text-text-muted font-normal">
+                                  · {formatDate(c.postDate)}
+                                </span>
                               </span>
+                              {c.duplicateInCartola && (
+                                <span
+                                  className="badge border-warn/40 bg-warn/10 text-warn"
+                                  title={`Hay ${c.duplicateCount} movimientos idénticos en BD (mismo monto, día y referencia). Limpialos desde Cartolas → Detectar duplicados.`}
+                                >
+                                  ⚠ duplicado x{c.duplicateCount} — limpiar
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-text-muted mt-0.5 break-words">
                               {c.description}

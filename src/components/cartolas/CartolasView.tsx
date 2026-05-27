@@ -14,9 +14,15 @@ import type {
 } from "./types";
 import { formatDate, formatMoney } from "@/lib/format";
 
+/** Sentinel para "Vista general" (todas las cuentas). */
+const ALL_ACCOUNTS = "__all__";
+
 export function CartolasView() {
   const router = useRouter();
   const [accounts, setAccounts] = useState<BankAccountDTO[]>([]);
+  // null = aun no se cargaron las cuentas
+  // ALL_ACCOUNTS = vista general (todas)
+  // UUID = una cuenta especifica
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [movements, setMovements] = useState<MovementDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -36,9 +42,13 @@ export function CartolasView() {
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  const isGlobalView = selectedAccountId === ALL_ACCOUNTS;
   const selectedAccount = useMemo(
-    () => accounts.find((a) => a.id === selectedAccountId) ?? null,
-    [accounts, selectedAccountId]
+    () =>
+      isGlobalView
+        ? null
+        : accounts.find((a) => a.id === selectedAccountId) ?? null,
+    [accounts, selectedAccountId, isGlobalView]
   );
 
   async function loadAccounts() {
@@ -46,19 +56,20 @@ export function CartolasView() {
     if (!res.ok) return;
     const data: AccountsResponse = await res.json();
     setAccounts(data.accounts);
-    if (selectedAccountId === null && data.accounts.length > 0) {
-      setSelectedAccountId(data.accounts[0].id);
+    // Default: vista general
+    if (selectedAccountId === null) {
+      setSelectedAccountId(ALL_ACCOUNTS);
     }
   }
 
   async function loadMovements() {
-    if (!selectedAccountId) return;
+    if (selectedAccountId === null) return;
     setLoading(true);
     const params = new URLSearchParams({
-      accountId: selectedAccountId,
       limit: "200",
       includeSummary: "true",
     });
+    if (!isGlobalView) params.set("accountId", selectedAccountId);
     if (direction) params.set("direction", direction);
     if (search) params.set("q", search);
     if (since) params.set("since", since);
@@ -187,6 +198,34 @@ export function CartolasView() {
       <div className="grid grid-cols-1 lg:grid-cols-[280px,1fr] gap-4">
         {/* Sidebar de cuentas */}
         <aside className="card p-3 h-fit">
+          {/* Vista general (todas las cuentas) */}
+          <button
+            onClick={() => setSelectedAccountId(ALL_ACCOUNTS)}
+            className={`w-full text-left rounded-md px-2 py-2 text-sm transition-all duration-200 mb-3 ${
+              isGlobalView
+                ? "bg-brand/10 border border-brand/40 text-brand shadow-sm"
+                : "border border-transparent hover:bg-bg-elevated text-text-muted hover:text-text"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="font-semibold flex items-center gap-1.5">
+                <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="7" height="7" rx="1" />
+                  <rect x="14" y="3" width="7" height="7" rx="1" />
+                  <rect x="3" y="14" width="7" height="7" rx="1" />
+                  <rect x="14" y="14" width="7" height="7" rx="1" />
+                </svg>
+                Vista general
+              </div>
+              <div className="text-xs text-text-muted shrink-0">
+                {accounts.reduce((s, a) => s + a.movementCount, 0)}
+              </div>
+            </div>
+            <div className="text-xs text-text-muted mt-0.5 ml-5">
+              Todas las cuentas
+            </div>
+          </button>
+
           <div className="text-xs text-text-muted mb-2 px-2">Cuentas</div>
           <div className="space-y-3">
             {groupedAccounts.map(({ bankName, accounts: bankAccs }) => (
@@ -311,13 +350,22 @@ export function CartolasView() {
                 </span>
               </div>
             </div>
-            {summary && summary.inPending > 0 && (
+            {summary && summary.inPending > 0 && !isGlobalView && (
               <button
                 onClick={jumpToCompareWithAccount}
                 className="btn-ghost text-xs"
                 title="Abre la vista Comparar de Consolidados con esta cuenta pre-seleccionada"
               >
                 Conciliar pendientes →
+              </button>
+            )}
+            {summary && summary.inPending > 0 && isGlobalView && (
+              <button
+                onClick={() => router.push("/dashboard/consolidados?tab=compare")}
+                className="btn-ghost text-xs"
+                title="Abre la vista Comparar para conciliar pendientes en todas las cuentas"
+              >
+                Conciliar todas las pendientes →
               </button>
             )}
           </div>
@@ -356,6 +404,9 @@ export function CartolasView() {
                   )}
                   <th className="px-3 py-2 text-left w-3" aria-label="estado" />
                   <th className="px-3 py-2 text-left">Fecha</th>
+                  {isGlobalView && (
+                    <th className="px-3 py-2 text-left">Cuenta</th>
+                  )}
                   <th className="px-3 py-2 text-right">Monto</th>
                   <th className="px-3 py-2 text-left">Glosa</th>
                   <th className="px-3 py-2 text-left">Contraparte</th>
@@ -367,7 +418,7 @@ export function CartolasView() {
                 {loading && (
                   <tr>
                     <td
-                      colSpan={showCheckboxes ? 8 : 7}
+                      colSpan={(showCheckboxes ? 8 : 7) + (isGlobalView ? 1 : 0)}
                       className="px-3 py-6 text-center text-text-muted"
                     >
                       Cargando…
@@ -377,11 +428,11 @@ export function CartolasView() {
                 {!loading && movements.length === 0 && (
                   <tr>
                     <td
-                      colSpan={showCheckboxes ? 8 : 7}
+                      colSpan={(showCheckboxes ? 8 : 7) + (isGlobalView ? 1 : 0)}
                       className="px-3 py-6 text-center text-text-muted"
                     >
                       {onlyUnmatched
-                        ? "✓ No hay abonos pendientes de conciliar en esta cuenta."
+                        ? "✓ No hay abonos pendientes de conciliar."
                         : "Sin movimientos."}
                     </td>
                   </tr>
@@ -409,6 +460,14 @@ export function CartolasView() {
                         <td className="px-3 py-2 whitespace-nowrap">
                           {formatDate(m.postDate)}
                         </td>
+                        {isGlobalView && (
+                          <td className="px-3 py-2 whitespace-nowrap text-xs">
+                            <div className="font-medium">{m.account.bankName}</div>
+                            <div className="text-text-muted font-mono">
+                              {m.account.displayNumber || m.account.accountNumber}
+                            </div>
+                          </td>
+                        )}
                         <td
                           className={`px-3 py-2 text-right whitespace-nowrap font-mono ${
                             isIn ? "text-success" : "text-danger"
@@ -455,12 +514,20 @@ export function CartolasView() {
             </div>
           )}
 
-          {/* Resumen al pie de la cuenta */}
+          {/* Resumen al pie (de cuenta o global) */}
           {!loading && summary && summary.total > 0 && (
             <CartolaSummaryStrip
               summary={summary}
-              accountLabel={selectedAccount?.holderName ?? ""}
-              onAct={jumpToCompareWithAccount}
+              accountLabel={
+                isGlobalView
+                  ? "Vista general · todas las cuentas"
+                  : selectedAccount?.holderName ?? ""
+              }
+              onAct={
+                isGlobalView
+                  ? () => router.push("/dashboard/consolidados?tab=compare")
+                  : jumpToCompareWithAccount
+              }
             />
           )}
         </div>
