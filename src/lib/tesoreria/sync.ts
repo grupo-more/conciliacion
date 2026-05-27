@@ -3,11 +3,21 @@ import { prisma } from "@/lib/db";
 import { normalizeRut } from "@/lib/cartolas/normalize";
 
 /* --------------------------- Schema de respuesta --------------------------- */
+//
+// Esta sync consume /api/dynatech (formato anidado con `contexto`). Es el
+// endpoint unificado que reemplaza al viejo /api/banco/conciliacion.
+//
+// El nombre "tesoreria" del modulo es legacy. La tabla y el modulo de UI
+// "Movimientos 200" siguen llamandose internamente Tesoreria por historia,
+// pero la fuente de datos es la misma API que usa Dynatech.
 
-const cajeroSchema = z.object({
-  id: z.string(),
-  nombre: z.string().optional().nullable(),
-});
+const cajeroSchema = z
+  .object({
+    id: z.string(),
+    nombre: z.string().optional().nullable(),
+  })
+  .optional()
+  .nullable();
 
 const clienteSchema = z
   .object({
@@ -18,26 +28,45 @@ const clienteSchema = z
   .optional()
   .nullable();
 
+const itemSchema = z.object({
+  nombre: z.string(),
+  cantidad: z.number(),
+  precioUnitario: z.number(),
+  monto: z.number(),
+});
+
 const rowSchema = z.object({
-  id: z.number().int(),
-  sucursalId: z.number().int(),
-  sucursal: z.string().optional().nullable(),
-  cajero: cajeroSchema,
-  cliente: clienteSchema,
-  folio: z.number().int().nonnegative().default(0),
-  tipoDocumento: z.string().optional().nullable(),
-  codigoDocumento: z.number().int().default(0),
+  // El payload viene anidado en `contexto`
+  contexto: z.object({
+    id: z.number().int().positive(),
+    sucursal: z.object({
+      id: z.number().int().positive(),
+      nombre: z.string().optional().nullable(),
+    }),
+    cajero: cajeroSchema,
+    cliente: clienteSchema,
+  }),
+  // documento es nullable a nivel root
+  documento: z
+    .object({
+      codigo: z.number().int(),
+      tipo: z.string().optional().nullable(),
+      folio: z.number().int().nonnegative().default(0),
+    })
+    .optional()
+    .nullable(),
   glosa: z.string().optional().default(""),
+  fecha: z.string(),
+  monto: z.number(),
+  currency: z.string().optional().default("CLP"),
   banco: z.string().optional().nullable(),
   rubroBanco: z.number().int().optional().nullable(),
   rubroSucursal: z.number().int().optional().nullable(),
-  monto: z.number(),
-  fecha: z.string(),
-  fechaCarga: z.string().optional().nullable(),
   bancoSucursal: z.string().optional().nullable(),
   bancoDetectado: z.string().optional().nullable(),
   esExcepcion: z.boolean().optional().default(false),
-  items: z.array(z.unknown()).optional().default([]),
+  items: z.array(itemSchema).optional().default([]),
+  fechaCarga: z.string().optional().nullable(),
 });
 
 export type TesoreriaRow = z.infer<typeof rowSchema>;
@@ -85,8 +114,9 @@ export async function syncTesoreriaIfStale(
 /* --------------------------------- runSync --------------------------------- */
 
 /**
- * Ejecuta el sync de Tesoreria. El feed viene del endpoint /api/banco/conciliacion
- * con el JSON ya clasificado por banco detectado vs banco asignado a sucursal.
+ * Ejecuta el sync. El feed viene del endpoint /api/dynatech (endpoint
+ * unificado que reemplaza al viejo /api/banco/conciliacion). El JSON viene
+ * ya clasificado por banco detectado vs banco asignado a sucursal.
  *
  * Usamos upsert (no insert-only) porque los movimientos pueden re-clasificarse
  * en el backend (cambia esExcepcion, bancoDetectado, rubroBanco) y queremos
@@ -160,7 +190,7 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
   }
 
   // Pre-fetch para distinguir insert vs update.
-  const validIds = valid.map((r) => BigInt(r.id));
+  const validIds = valid.map((r) => BigInt(r.contexto.id));
   const existing = validIds.length
     ? await prisma.tesoreriaMovement.findMany({
         where: { externalId: { in: validIds } },
@@ -171,25 +201,35 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
 
   let insertedRows = 0;
   let updatedRows = 0;
+  let skippedNoCashier = 0;
 
   for (const r of valid) {
-    const username = r.cajero.id.trim().toUpperCase();
+    // Sin cajero no podemos insertar (columna NOT NULL). En la practica todos
+    // los movimientos vienen con cajero; este check es defensivo.
+    const username = r.contexto.cajero?.id?.trim().toUpperCase();
+    if (!username) {
+      skippedNoCashier++;
+      skippedInvalid++;
+      continue;
+    }
+    const cajeroName = r.contexto.cajero?.nombre?.trim() || null;
+
     const clienteDocRaw =
-      (r.cliente?.documento ?? r.cliente?.rut ?? null) || null;
+      (r.contexto.cliente?.documento ?? r.contexto.cliente?.rut ?? null) || null;
     const clienteRut = clienteDocRaw ? normalizeRut(clienteDocRaw) : null;
-    const clienteName = r.cliente?.nombre?.trim() || null;
-    const wasExisting = existingSet.has(BigInt(r.id).toString());
+    const clienteName = r.contexto.cliente?.nombre?.trim() || null;
+    const wasExisting = existingSet.has(BigInt(r.contexto.id).toString());
 
     const payload = {
-      sucursalId: r.sucursalId,
-      sucursalName: r.sucursal ?? null,
+      sucursalId: r.contexto.sucursal.id,
+      sucursalName: r.contexto.sucursal.nombre ?? null,
       cajeroUsername: username,
-      cajeroName: r.cajero.nombre?.trim() || null,
+      cajeroName,
       clienteName,
       clienteRut,
-      folio: BigInt(r.folio ?? 0),
-      tipoDocumento: r.tipoDocumento ?? null,
-      codigoDocumento: r.codigoDocumento ?? 0,
+      folio: BigInt(r.documento?.folio ?? 0),
+      tipoDocumento: r.documento?.tipo ?? null,
+      codigoDocumento: r.documento?.codigo ?? 0,
       glosa: r.glosa ?? "",
       banco: r.banco ?? null,
       bancoSucursal: r.bancoSucursal ?? null,
@@ -206,8 +246,8 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
 
     try {
       await prisma.tesoreriaMovement.upsert({
-        where: { externalId: BigInt(r.id) },
-        create: { externalId: BigInt(r.id), ...payload },
+        where: { externalId: BigInt(r.contexto.id) },
+        create: { externalId: BigInt(r.contexto.id), ...payload },
         update: { ...payload, syncedAt: new Date() },
       });
       if (wasExisting) updatedRows++;
@@ -215,10 +255,16 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
     } catch (e) {
       skippedInvalid++;
       console.error(
-        `[tesoreria-sync] error en upsert id=${r.id}`,
+        `[tesoreria-sync] error en upsert id=${r.contexto.id}`,
         e instanceof Error ? e.message : e
       );
     }
+  }
+
+  if (skippedNoCashier > 0) {
+    console.warn(
+      `[tesoreria-sync] ${skippedNoCashier} movimiento(s) descartados por falta de cajero.`
+    );
   }
 
   await prisma.tesoreriaSyncRun.update({
