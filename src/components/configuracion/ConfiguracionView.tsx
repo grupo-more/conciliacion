@@ -4,9 +4,8 @@ import { useState } from "react";
 import { PerfilTab } from "./PerfilTab";
 import { RubrosTab } from "./RubrosTab";
 import { BankAliasesTab } from "./BankAliasesTab";
-import { BankAccountsTab } from "./BankAccountsTab";
 
-type Tab = "perfil" | "rubros" | "accounts" | "aliases";
+type Tab = "perfil" | "rubros" | "aliases";
 
 interface Props {
   user: { email: string; name: string | null };
@@ -32,9 +31,6 @@ export function ConfiguracionView({ user }: Props) {
           <TabButton active={tab === "rubros"} onClick={() => setTab("rubros")}>
             Rubros
           </TabButton>
-          <TabButton active={tab === "accounts"} onClick={() => setTab("accounts")}>
-            Cuentas bancarias
-          </TabButton>
           <TabButton active={tab === "aliases"} onClick={() => setTab("aliases")}>
             Mapeo de cuentas
           </TabButton>
@@ -44,7 +40,6 @@ export function ConfiguracionView({ user }: Props) {
       <div className="animate-fade-in">
         {tab === "perfil" && <PerfilTab user={user} />}
         {tab === "rubros" && <RubrosTab />}
-        {tab === "accounts" && <BankAccountsTab />}
         {tab === "aliases" && <BankAliasesTab />}
       </div>
     </div>

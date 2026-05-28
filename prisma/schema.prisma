@@ -29,11 +29,6 @@ model BankAccount {
   alias         String?
   purpose       String?
   active        Boolean  @default(true)
-  // Rubro contable "natural" de esta cuenta. Se usa en el asiento OK cuando
-  // se hace match MANUAL: como la persona eligió explícitamente esta cartola,
-  // su rubro predomina sobre el rubroBanco que vino en TesoreriaMovement
-  // (que puede estar mal si el operador tipeó otro banco al cargar).
-  accountingRubro Int?    @map("accounting_rubro")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 

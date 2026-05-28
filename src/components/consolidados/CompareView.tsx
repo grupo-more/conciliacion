@@ -17,7 +17,6 @@ interface BankMovementDTO {
     bankName: string;
     accountNumber: string;
     alias?: string | null;
-    accountingRubro?: number | null;
   };
   isLinked: boolean;
 }
@@ -101,7 +100,8 @@ export function CompareView() {
   >([]);
 
   // Override de rubro banco (opcional). Si el operador no lo cambia, el
-  // endpoint cae a la cascada: accountingRubro de la cuenta → tm.rubroBanco.
+  // asiento OK usa el rubroBanco que vino de Tesorería. Esto es lo que se
+  // ajusta cuando la sucursal tipeó mal el banco al cargar el movimiento.
   const [overrideRubroBanco, setOverrideRubroBanco] = useState<number | null>(
     null
   );
@@ -201,27 +201,16 @@ export function CompareView() {
     return data.tesoreriaMovements.find((t) => t.id === selectedTesoreriaId) ?? null;
   }, [data, selectedTesoreriaId]);
 
-  // Cartolas actualmente seleccionadas (para inferir rubro y detectar desajustes)
+  // Cartolas actualmente seleccionadas (para warning de banco distinto)
   const selectedBanks = useMemo(() => {
     if (!data) return [] as BankMovementDTO[];
     return data.bankMovements.filter((bm) => selectedBankIds.has(bm.id));
   }, [data, selectedBankIds]);
 
-  // Rubro banco "sugerido" por defecto a partir de las cartolas:
-  // si todas tienen el mismo accountingRubro, usar ese; si difieren, null.
-  const suggestedRubroBanco = useMemo<number | null>(() => {
-    if (selectedBanks.length === 0) return null;
-    const rubros = new Set(
-      selectedBanks
-        .map((b) => b.account.accountingRubro ?? null)
-        .filter((r): r is number => r !== null)
-    );
-    if (rubros.size === 1) return Array.from(rubros)[0];
-    return null;
-  }, [selectedBanks]);
-
   // Warning: ¿el bankName de las cartolas seleccionadas difiere del banco que
   // dijo Tesorería? Ej. Tesorería dice "Santander ME" y la cartola es "BCI".
+  // Si hay mismatch, mostramos un aviso para que el operador elija manualmente
+  // el rubro correcto en el select de override.
   const bankMismatch = useMemo<string | null>(() => {
     if (!selectedTesoreria || selectedBanks.length === 0) return null;
     const tBanco = (selectedTesoreria.banco || "").toLowerCase().trim();
@@ -229,19 +218,12 @@ export function CompareView() {
     const bankNames = Array.from(
       new Set(selectedBanks.map((b) => b.account.bankName))
     );
-    // Si el bankName de la cartola NO está contenido en el banco de Tesorería
-    // (ni viceversa), consideramos que hay mismatch real.
     const matches = bankNames.every((bn) => {
       const lower = bn.toLowerCase();
       return tBanco.includes(lower) || lower.includes(tBanco);
     });
     return matches ? null : bankNames.join(" / ");
   }, [selectedTesoreria, selectedBanks]);
-
-  // El override "efectivo" que se va a enviar: si el usuario eligió algo en el
-  // select usamos ese; sino, mandamos el suggested (cuando difiere del tm.rubroBanco
-  // o cuando es MANUAL con bancos distintos).
-  const effectiveOverride = overrideRubroBanco ?? suggestedRubroBanco;
 
   // Diferencia entre lo seleccionado (banco vs tesorería). Si !== 0n hay desajuste.
   const diff = useMemo(() => {
@@ -301,8 +283,8 @@ export function CompareView() {
           note: adjustNote.trim() || null,
         };
       }
-      if (effectiveOverride !== null) {
-        body.overrideRubroBanco = effectiveOverride;
+      if (overrideRubroBanco !== null) {
+        body.overrideRubroBanco = overrideRubroBanco;
       }
       const res = await fetch("/api/consolidados/manual-link", {
         method: "POST",
@@ -488,7 +470,7 @@ export function CompareView() {
                 <label className="label">Rubro banco (asiento OK)</label>
                 <select
                   className="input"
-                  value={overrideRubroBanco ?? suggestedRubroBanco ?? ""}
+                  value={overrideRubroBanco ?? ""}
                   onChange={(e) =>
                     setOverrideRubroBanco(
                       e.target.value ? Number(e.target.value) : null
@@ -511,10 +493,8 @@ export function CompareView() {
                   <strong>⚠ Banco distinto:</strong> Tesorería dice{" "}
                   <span className="font-mono">{selectedTesoreria.banco}</span>{" "}
                   pero la cartola es{" "}
-                  <span className="font-mono">{bankMismatch}</span>.{" "}
-                  {suggestedRubroBanco !== null
-                    ? "Se va a usar el rubro de la cartola en el asiento OK."
-                    : "Configurá el rubro contable de esa cuenta en Configuración → Cuentas bancarias para que predomine en el asiento."}
+                  <span className="font-mono">{bankMismatch}</span>. Elegí el
+                  rubro correcto arriba para que el asiento OK quede bien.
                 </div>
               )}
             </div>

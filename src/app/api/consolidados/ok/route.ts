@@ -62,7 +62,6 @@ export async function GET(req: Request) {
                   accountNumber: true,
                   displayNumber: true,
                   holderName: true,
-                  accountingRubro: true,
                 },
               },
             },
@@ -81,11 +80,6 @@ export async function GET(req: Request) {
     if (c.tesoreriaMovement.rubroSucursal !== null) rubroCodes.add(c.tesoreriaMovement.rubroSucursal);
     if (c.adjustmentRubro !== null) rubroCodes.add(c.adjustmentRubro);
     if (c.overrideRubroBanco !== null) rubroCodes.add(c.overrideRubroBanco);
-    for (const link of c.links) {
-      if (link.bankMovement.account.accountingRubro !== null) {
-        rubroCodes.add(link.bankMovement.account.accountingRubro);
-      }
-    }
   }
   const rubroLabels =
     rubroCodes.size > 0
@@ -122,12 +116,11 @@ export async function GET(req: Request) {
       tm.sucursalName ??
       (tm.sucursalId ? `Sucursal ${tm.sucursalId}` : "—");
 
-    // Cascada para el rubro banco efectivo (por link, porque cada cartola
-    // puede tener su propio accountingRubro):
-    //   override (Consolidado.overrideRubroBanco)
-    //   → account.accountingRubro (si es MANUAL)
-    //   → tm.rubroBanco (la API)
-    const isManual = c.status === "MANUAL";
+    // Cascada para el rubro banco efectivo:
+    //   override (Consolidado.overrideRubroBanco, se setea en el match manual
+    //   cuando el operador detecta que el rubroBanco que vino de Tesorería
+    //   está mal porque ellos tipearon mal el banco al cargar)
+    //   → tm.rubroBanco (la API, default)
 
     // 1 fila por cada BankMovement (lado banco)
     let bankSum = 0n;
@@ -136,9 +129,7 @@ export async function GET(req: Request) {
       const abs = bm.amount < 0n ? -bm.amount : bm.amount;
       bankSum += abs;
 
-      const effectiveRubroBanco =
-        c.overrideRubroBanco ??
-        (isManual ? bm.account.accountingRubro ?? tm.rubroBanco : tm.rubroBanco);
+      const effectiveRubroBanco = c.overrideRubroBanco ?? tm.rubroBanco;
       const detalleBanco =
         labelByRubro.get(effectiveRubroBanco ?? -1) ?? bm.account.bankName ?? "—";
 
