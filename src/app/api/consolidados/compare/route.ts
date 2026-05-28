@@ -123,39 +123,49 @@ export async function GET(req: Request) {
   });
   const bancos = bancosRows.map((b) => b.banco!).filter(Boolean).sort();
 
-  // Rubro sugerido por cuenta bancaria. Lo aprendemos del historial de
-  // Consolidados conciliados (AUTO_MATCHED + MANUAL): para cada cuenta,
-  // qué rubro_banco aparece más veces. Si el operador hizo overrides,
-  // esos ganan (porque son la corrección humana). Sirve como default
-  // del select "Rubro banco (asiento OK)" en el match manual.
+  // Rubro sugerido por cuenta bancaria. Se infiere SOLO desde info de la
+  // cartola (no de TesoreriaMovement.rubroBanco que puede estar mal cuando
+  // la sucursal tipeó mal el banco). Estrategia en 2 niveles:
+  //
+  //   1) Override previo: si el operador ya hizo overrides en matches anteriores
+  //      para esta cuenta, sugerimos el rubro más usado (la moda de overrides).
+  //
+  //   2) Match por nombre del catálogo: buscar un RubroLabel cuyo `name`
+  //      contenga el bankName + holderName de la cuenta (ej. cuenta BCI ME SPA
+  //      matchea con rubro "BCI ME"). Excluye los rubros marcados como
+  //      isDifference (esos son para ajustes, no para banco/sucursal).
+  //
+  // Si ninguna estrategia da resultado, no hay sugerencia y el operador elige.
   const accountIdsInUse = Array.from(
     new Set(bankMovements.map((bm) => bm.accountId))
   );
+
+  const suggestedRubroByAccount = new Map<string, number>();
+
+  // (1) Aprendizaje por overrides previos
   const historico =
     accountIdsInUse.length > 0
       ? await prisma.consolidado.findMany({
           where: {
             status: { in: ["AUTO_MATCHED", "MANUAL"] },
             resolvedAccountId: { in: accountIdsInUse },
+            overrideRubroBanco: { not: null },
           },
           select: {
             resolvedAccountId: true,
             overrideRubroBanco: true,
-            tesoreriaMovement: { select: { rubroBanco: true } },
           },
         })
       : [];
   const counts = new Map<string, Map<number, number>>();
   for (const c of historico) {
     const accId = c.resolvedAccountId;
-    if (!accId) continue;
-    const rubro = c.overrideRubroBanco ?? c.tesoreriaMovement.rubroBanco;
-    if (rubro === null) continue;
+    const rubro = c.overrideRubroBanco;
+    if (!accId || rubro === null) continue;
     if (!counts.has(accId)) counts.set(accId, new Map());
     const m = counts.get(accId)!;
     m.set(rubro, (m.get(rubro) ?? 0) + 1);
   }
-  const suggestedRubroByAccount = new Map<string, number>();
   for (const [accId, rubroCounts] of counts) {
     let best: number | null = null;
     let bestCount = 0;
@@ -166,6 +176,47 @@ export async function GET(req: Request) {
       }
     }
     if (best !== null) suggestedRubroByAccount.set(accId, best);
+  }
+
+  // (2) Match por nombre del catálogo para las cuentas que no tienen
+  // override previo.
+  const accountsWithoutSuggestion = accountIdsInUse.filter(
+    (id) => !suggestedRubroByAccount.has(id)
+  );
+  if (accountsWithoutSuggestion.length > 0) {
+    // Cargar info de las cuentas (necesitamos holderName + bankName) y los
+    // rubros candidatos (los no-isDifference).
+    const [accDetails, rubrosCat] = await Promise.all([
+      prisma.bankAccount.findMany({
+        where: { id: { in: accountsWithoutSuggestion } },
+        select: {
+          id: true,
+          bankName: true,
+          holderName: true,
+        },
+      }),
+      prisma.rubroLabel.findMany({
+        where: { isDifference: false },
+        select: { rubro: true, name: true },
+      }),
+    ]);
+    const norm = (s: string) =>
+      s.toLowerCase().replace(/\s+/g, " ").trim();
+    for (const acc of accDetails) {
+      const accKey = norm(`${acc.bankName} ${acc.holderName}`);
+      // Buscamos el rubro cuyo nombre normalizado matchee el accKey (igualdad
+      // exacta primero, luego "contains" en cualquier dirección).
+      const exact = rubrosCat.find((r) => norm(r.name) === accKey);
+      if (exact) {
+        suggestedRubroByAccount.set(acc.id, exact.rubro);
+        continue;
+      }
+      const partial = rubrosCat.find((r) => {
+        const rn = norm(r.name);
+        return rn.length >= 3 && (accKey.includes(rn) || rn.includes(accKey));
+      });
+      if (partial) suggestedRubroByAccount.set(acc.id, partial.rubro);
+    }
   }
 
   return NextResponse.json({
