@@ -22,21 +22,28 @@ export function extractEmbeddedReference(description: string): string {
 /**
  * Calcula la clave de deduplicación para cada movimiento del archivo.
  *
- * Estrategia en dos niveles:
+ * Estrategia en tres niveles, de más fuerte a más débil:
  *
- *   1. SEÑAL FUERTE: si encontramos una referencia embebida al inicio de la
- *      descripción (típico Santander), dedupKey = (day | amount | ref).
- *      No incluye el resto de la descripción porque distintos formatos del
- *      mismo banco pueden truncar/expandir el nombre del cliente — esa
- *      variación NO debe romper el dedup.
+ *   1. REF: referencia embebida al inicio de la descripción (típico Santander)
+ *      → dedupKey = (day | amount | ref). La descripción NO entra porque
+ *      distintos formatos del mismo banco truncan/expanden el nombre del
+ *      cliente y esa variación no debe romper el dedup.
  *
- *   2. SEÑAL DÉBIL (fallback): cuando no hay referencia embebida (ej. Banco
- *      Internacional, BCI sin N° doc, etc.) usamos el hash completo de
- *      descripción + contraparte + amount + día + ordinal, como antes.
+ *   2. EXT: cuando el banco entrega un `externalId` (ej. BCI "Código
+ *      Transferencia") y no hay ref embebida → dedupKey = (day | amount |
+ *      externalId). El externalId es el ID único de la transacción para ese
+ *      banco; no depende del resto de campos. Esto resuelve el caso BCI
+ *      donde counterparty_rut/counterparty_account a veces vienen y a veces
+ *      no, generando hashes distintos para el mismo movimiento.
  *
- * En ambos casos se agrega un ordinal-por-fila para sobrevivir el caso de
- * 5 transferencias idénticas el mismo día con la MISMA referencia (raro pero
- * posible — el banco las asigna como una sola transacción con varias filas).
+ *   3. FULL (fallback): cuando NO hay ni ref ni externalId (ej. Banco
+ *      Internacional sin N° doc) → hash completo de descripción + contraparte
+ *      + amount + día.
+ *
+ * En todos los casos se agrega un ordinal-por-fila para sobrevivir el caso
+ * de N transferencias idénticas el mismo día con el MISMO identificador
+ * (raro pero posible — el banco las asigna como una sola transacción con
+ * varias filas).
  */
 export function computeDedupKeys(movements: NormalizedMovement[]): string[] {
   const counters = new Map<string, number>();
@@ -45,18 +52,18 @@ export function computeDedupKeys(movements: NormalizedMovement[]): string[] {
   for (const m of movements) {
     const dayIso = m.postDate.toISOString().slice(0, 10);
     const ref = extractEmbeddedReference(m.description);
+    const ext = (m.externalId ?? "").trim();
 
     let baseInput: string;
     if (ref) {
-      // Señal fuerte: ID embebido + monto + día. La descripción no entra.
       baseInput = ["REF", dayIso, String(m.amount), ref].join("|");
+    } else if (ext) {
+      baseInput = ["EXT", dayIso, String(m.amount), ext].join("|");
     } else {
-      // Fallback al algoritmo anterior (con descripción y contraparte).
       baseInput = [
         "FULL",
         dayIso,
         String(m.amount),
-        m.externalId ?? "",
         normalizeDescription(m.description),
         m.counterpartyRut ?? "",
         m.counterpartyAccount ?? "",
