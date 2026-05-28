@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect } from "react";
 import { Logo } from "@/components/brand/Logo";
 
 interface NavItem {
@@ -9,6 +10,13 @@ interface NavItem {
   label: string;
   matchPrefix?: boolean;
   icon: React.ReactNode;
+}
+
+interface SidebarProps {
+  /** Estado del drawer en mobile. En desktop (md+) el sidebar siempre está visible. */
+  mobileOpen?: boolean;
+  /** Se invoca al cerrar el drawer (overlay click, navegación, tecla Escape). */
+  onMobileClose?: () => void;
 }
 
 // Los módulos Conciliación y Dynatech quedaron deshabilitados en el sidebar
@@ -77,7 +85,7 @@ const SETTINGS_ITEM: NavItem = {
   ),
 };
 
-export function Sidebar() {
+export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
 
   function isActive(item: NavItem): boolean {
@@ -85,57 +93,120 @@ export function Sidebar() {
     return pathname === item.href;
   }
 
+  // Cerrar drawer con Escape (solo aplica en mobile, en desktop no afecta).
+  useEffect(() => {
+    if (!mobileOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onMobileClose?.();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen, onMobileClose]);
+
+  // Bloquear scroll del body cuando el drawer está abierto en mobile.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mobileOpen]);
+
   return (
-    <aside className="w-64 shrink-0 border-r border-border-soft bg-white/80 backdrop-blur-md sticky top-0 h-screen self-start flex flex-col shadow-soft z-20">
-      {/* Logo en header del sidebar */}
-      <div className="px-5 py-5 border-b border-border-soft">
-        <Link href="/dashboard" className="block group" aria-label="MoreGiros">
-          <div className="flex items-center gap-3">
-            <Logo
-              variant="mark"
-              tone="brand"
-              className="h-11 w-11 shrink-0 transition-all duration-450 ease-spring group-hover:scale-110 group-hover:rotate-3"
-            />
-            <div>
-              <div className="text-base font-bold tracking-tight text-brand leading-tight">
-                MOREGIROS
-              </div>
-              <div className="text-[9px] uppercase tracking-[0.18em] text-text-muted leading-tight mt-0.5">
-                By More Exchange
+    <>
+      {/* Overlay para mobile cuando el drawer está abierto */}
+      {mobileOpen && (
+        <div
+          onClick={onMobileClose}
+          className="fixed inset-0 z-40 bg-brand/30 backdrop-blur-sm md:hidden animate-fade-in"
+          aria-hidden
+        />
+      )}
+
+      <aside
+        className={
+          "w-64 shrink-0 border-r border-border-soft bg-white/95 backdrop-blur-md shadow-soft flex flex-col " +
+          // Mobile: fixed off-canvas con transform
+          "fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-out " +
+          (mobileOpen ? "translate-x-0" : "-translate-x-full") +
+          // Desktop: sticky, siempre visible
+          " md:sticky md:top-0 md:h-screen md:self-start md:translate-x-0 md:z-20 md:bg-white/80"
+        }
+      >
+        {/* Logo en header del sidebar */}
+        <div className="px-5 py-5 border-b border-border-soft flex items-center justify-between gap-2">
+          <Link
+            href="/dashboard"
+            onClick={onMobileClose}
+            className="block group flex-1 min-w-0"
+            aria-label="MoreGiros"
+          >
+            <div className="flex items-center gap-3">
+              <Logo
+                variant="mark"
+                tone="brand"
+                className="h-11 w-11 shrink-0 transition-all duration-450 ease-spring group-hover:scale-110 group-hover:rotate-3"
+              />
+              <div>
+                <div className="text-base font-bold tracking-tight text-brand leading-tight">
+                  MOREGIROS
+                </div>
+                <div className="text-[9px] uppercase tracking-[0.18em] text-text-muted leading-tight mt-0.5">
+                  By More Exchange
+                </div>
               </div>
             </div>
-          </div>
-        </Link>
-      </div>
-
-      {/* Navegación */}
-      <nav className="flex-1 px-3 py-4 space-y-1 stagger overflow-y-auto flex flex-col">
-        {NAV_ITEMS.map((item) => renderNavLink(item, isActive(item)))}
-        <div className="flex-1" aria-hidden />
-        <div className="my-2 border-t border-border-soft/60" aria-hidden />
-        {renderNavLink(SETTINGS_ITEM, isActive(SETTINGS_ITEM))}
-      </nav>
-
-      {/* Footer del sidebar */}
-      <div className="border-t border-border-soft px-5 py-4">
-        <div className="flex items-center justify-between text-[10px]">
-          <span className="tracking-wider text-text-dim font-semibold">
-            © {new Date().getFullYear()}
-          </span>
-          <span className="rounded-full bg-accent/10 text-accent px-2 py-0.5 font-bold border border-accent/20 animate-pulse-soft">
-            v1.0
-          </span>
+          </Link>
+          {/* Botón de cerrar solo visible en mobile */}
+          <button
+            onClick={onMobileClose}
+            className="md:hidden h-9 w-9 grid place-items-center rounded-md text-text-muted hover:bg-brand-tint hover:text-brand transition-colors"
+            aria-label="Cerrar menú"
+          >
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 6 6 18" />
+              <path d="M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-      </div>
-    </aside>
+
+        {/* Navegación */}
+        <nav className="flex-1 px-3 py-4 space-y-1 stagger overflow-y-auto flex flex-col">
+          {NAV_ITEMS.map((item) =>
+            renderNavLink(item, isActive(item), onMobileClose)
+          )}
+          <div className="flex-1" aria-hidden />
+          <div className="my-2 border-t border-border-soft/60" aria-hidden />
+          {renderNavLink(SETTINGS_ITEM, isActive(SETTINGS_ITEM), onMobileClose)}
+        </nav>
+
+        {/* Footer del sidebar */}
+        <div className="border-t border-border-soft px-5 py-4">
+          <div className="flex items-center justify-between text-[10px]">
+            <span className="tracking-wider text-text-dim font-semibold">
+              © {new Date().getFullYear()}
+            </span>
+            <span className="rounded-full bg-accent/10 text-accent px-2 py-0.5 font-bold border border-accent/20 animate-pulse-soft">
+              v1.0
+            </span>
+          </div>
+        </div>
+      </aside>
+    </>
   );
 }
 
-function renderNavLink(item: NavItem, active: boolean) {
+function renderNavLink(
+  item: NavItem,
+  active: boolean,
+  onNavigate?: () => void
+) {
   return (
     <Link
       key={item.href}
       href={item.href}
+      onClick={onNavigate}
       className={
         "relative group flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-all duration-250 ease-out overflow-hidden " +
         (active
