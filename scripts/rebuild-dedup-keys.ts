@@ -200,20 +200,35 @@ async function main() {
   console.log("");
   console.log("APLICANDO CAMBIOS EN UNA TRANSACCIÓN...");
 
-  await prisma.$transaction(async (tx) => {
-    // 1) Borrar perdedores
-    for (const r of toDelete) {
-      await tx.bankMovement.delete({ where: { id: r.id } });
-    }
-    // 2) Actualizar dedup_keys
-    for (const r of toUpdate) {
-      const newKey = newKeyById.get(r.id)!;
-      await tx.bankMovement.update({
-        where: { id: r.id },
-        data: { dedupKey: newKey },
-      });
-    }
-  });
+  // Para evitar conflictos transitorios con el unique (accountId, dedup_key)
+  // hacemos los updates en dos fases:
+  //   Fase A: cada update va a un valor temporal único (TEMP::<id>) — nunca choca.
+  //   Fase B: cada update va al newKey definitivo — tampoco choca porque los
+  //   perdedores ya se borraron en el paso 1 y los demás ya están en TEMP.
+  await prisma.$transaction(
+    async (tx) => {
+      // 1) Borrar perdedores
+      for (const r of toDelete) {
+        await tx.bankMovement.delete({ where: { id: r.id } });
+      }
+      // 2.A) Fase intermedia: dedup_key temporal
+      for (const r of toUpdate) {
+        await tx.bankMovement.update({
+          where: { id: r.id },
+          data: { dedupKey: `TEMP::${r.id}` },
+        });
+      }
+      // 2.B) Fase final: dedup_key definitivo
+      for (const r of toUpdate) {
+        const newKey = newKeyById.get(r.id)!;
+        await tx.bankMovement.update({
+          where: { id: r.id },
+          data: { dedupKey: newKey },
+        });
+      }
+    },
+    { timeout: 60_000 }
+  );
 
   console.log(`OK. Borrados: ${toDelete.length}. Actualizados: ${toUpdate.length}.`);
 }
