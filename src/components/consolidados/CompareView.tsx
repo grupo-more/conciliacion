@@ -16,6 +16,8 @@ interface BankMovementDTO {
     bankCode: string;
     bankName: string;
     accountNumber: string;
+    displayNumber?: string | null;
+    holderName?: string;
     alias?: string | null;
   };
   isLinked: boolean;
@@ -48,6 +50,8 @@ interface CompareResponse {
     bankCode: string;
     bankName: string;
     accountNumber: string;
+    displayNumber?: string | null;
+    holderName?: string;
     alias?: string | null;
   }>;
   bancos: string[];
@@ -349,12 +353,18 @@ export function CompareView() {
             <option value="">Todas</option>
             {data?.accounts
               .filter((a) => !a.accountNumber.startsWith("_UNASSIGNED_"))
-              .map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.bankName} · {a.accountNumber}
-                  {a.alias && ` (${a.alias})`}
-                </option>
-              ))}
+              .map((a) => {
+                const label =
+                  a.holderName
+                    ? `${a.bankName} ${a.holderName} · ${a.displayNumber || a.accountNumber}`
+                    : `${a.bankName} · ${a.displayNumber || a.accountNumber}`;
+                return (
+                  <option key={a.id} value={a.id}>
+                    {label}
+                    {a.alias && ` (${a.alias})`}
+                  </option>
+                );
+              })}
           </select>
         </div>
         <div>
@@ -689,7 +699,14 @@ function BankCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold">{bm.account.bankName}</span>
-            <span className="text-xs text-text-muted">{bm.account.accountNumber}</span>
+            {bm.account.holderName && (
+              <span className="text-xs font-semibold text-brand/80 uppercase tracking-wide">
+                {bm.account.holderName}
+              </span>
+            )}
+            <span className="text-xs text-text-muted font-mono">
+              {bm.account.displayNumber || bm.account.accountNumber}
+            </span>
             {bm.isLinked ? (
               <span className="badge border-success/40 bg-success/10 text-success">
                 ✓ vinculado
