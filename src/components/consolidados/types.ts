@@ -111,9 +111,10 @@ export interface DetailResponse {
 /* ============================== Tab "OK" ============================== */
 
 export interface OKRow {
-  /** Identificador estable del par debe/haber (ej. "consolidadoId__linkId"). */
-  pairId: string;
-  side: "BANCO" | "SUCURSAL";
+  /** Identificador del asiento (consolidadoId). Filas con mismo groupId
+   *  pertenecen al mismo movimiento conciliado. */
+  groupId: string;
+  side: "BANCO" | "SUCURSAL" | "AJUSTE";
   fecha: string;
   rubro: number | null;
   rubroLabel: string | null;
@@ -127,7 +128,7 @@ export interface OKRow {
   // Trazabilidad
   consolidadoId: string;
   tesoreriaId: string;
-  bankMovementId: string;
+  bankMovementId: string | null;
 }
 
 export interface OKResponse {

@@ -8,14 +8,18 @@ import { prisma } from "@/lib/db";
  * Devuelve el asiento contable de partida doble para los Consolidados
  * conciliados (status AUTO_MATCHED | MANUAL) en el rango pedido.
  *
- * Cada ConsolidadoLink (vínculo BankMovement <-> TesoreriaMovement) genera
- * 2 filas: una con el rubro del banco y otra con el rubro de la sucursal.
+ * Reglas de armado por Consolidado:
+ *  - 1 fila BANCO por cada BankMovement vinculado (lado banco se desdobla
+ *    en splits para reflejar cada transferencia tal cual entra al extracto).
+ *  - 1 fila SUCURSAL con el monto del TesoreriaMovement (siempre una sola,
+ *    porque el origen es 1 documento de Tesorería).
+ *  - 1 fila AJUSTE si Consolidado.adjustmentAmount != null (diferencia
+ *    entre lo cobrado por la sucursal y lo que entró al banco).
  *
  * Convención Debe/Haber:
- *  - Abono al banco (direction "IN"):  Debe Banco / Haber Sucursal
- *  - Cargo al banco  (direction "OUT"): Haber Banco / Debe Sucursal
- *
- * Defaults: si no se pasan `from`/`to`, usa el mes calendario en curso.
+ *  - Abono al banco (direction IN):  Debe Banco / Haber Sucursal
+ *  - Cargo al banco  (direction OUT): Haber Banco / Debe Sucursal
+ *  - Ajuste: el lado se elige para que cuadre Debe = Haber.
  */
 export async function GET(req: Request) {
   const session = await getSession();
@@ -69,15 +73,12 @@ export async function GET(req: Request) {
     take: 2000,
   });
 
-  // Pre-cargar todas las etiquetas de rubro que se referencian, en un solo query.
+  // Pre-cargar todas las etiquetas de rubro en un solo query.
   const rubroCodes = new Set<number>();
   for (const c of consolidados) {
-    if (c.tesoreriaMovement.rubroBanco !== null) {
-      rubroCodes.add(c.tesoreriaMovement.rubroBanco);
-    }
-    if (c.tesoreriaMovement.rubroSucursal !== null) {
-      rubroCodes.add(c.tesoreriaMovement.rubroSucursal);
-    }
+    if (c.tesoreriaMovement.rubroBanco !== null) rubroCodes.add(c.tesoreriaMovement.rubroBanco);
+    if (c.tesoreriaMovement.rubroSucursal !== null) rubroCodes.add(c.tesoreriaMovement.rubroSucursal);
+    if (c.adjustmentRubro !== null) rubroCodes.add(c.adjustmentRubro);
   }
   const rubroLabels =
     rubroCodes.size > 0
@@ -88,45 +89,52 @@ export async function GET(req: Request) {
       : [];
   const labelByRubro = new Map(rubroLabels.map((r) => [r.rubro, r.name]));
 
-  // Armar las filas del asiento.
   const rows: OKRow[] = [];
   let totalDebe = 0n;
   let totalHaber = 0n;
 
   for (const c of consolidados) {
     const tm = c.tesoreriaMovement;
-    for (let i = 0; i < c.links.length; i++) {
-      const link = c.links[i];
+    if (c.links.length === 0) continue; // por seguridad — AUTO/MANUAL deberían tener ≥1
+
+    // Asumimos que todos los links del consolidado son del mismo direction
+    // (un consolidado no mezcla abonos y cargos). Tomamos el primero.
+    const direction = c.links[0].bankMovement.direction;
+    const isAbono = direction === "IN";
+    const cliente = buildCliente(
+      c.links[0].bankMovement.counterpartyName,
+      tm.clienteName
+    );
+    const glosa =
+      c.links[0].bankMovement.description?.trim() || tm.glosa?.trim() || "";
+    const groupId = c.id;
+
+    const rubroBanco = tm.rubroBanco;
+    const rubroSuc = tm.rubroSucursal;
+    const detalleSucursal =
+      labelByRubro.get(rubroSuc ?? -1) ??
+      tm.sucursalName ??
+      (tm.sucursalId ? `Sucursal ${tm.sucursalId}` : "—");
+
+    // 1 fila por cada BankMovement (lado banco)
+    let bankSum = 0n;
+    for (const link of c.links) {
       const bm = link.bankMovement;
-      const isAbono = bm.direction === "IN";
       const abs = bm.amount < 0n ? -bm.amount : bm.amount;
-
-      const cliente = buildCliente(bm.counterpartyName, tm.clienteName);
-      const glosa = bm.description?.trim() || tm.glosa?.trim() || "";
-      const pairId = `${c.id}__${link.id}`;
-
-      const rubroBanco = tm.rubroBanco;
-      const rubroSuc = tm.rubroSucursal;
+      bankSum += abs;
 
       const detalleBanco =
-        labelByRubro.get(rubroBanco ?? -1) ??
-        bm.account.bankName ??
-        "—";
-      const detalleSucursal =
-        labelByRubro.get(rubroSuc ?? -1) ??
-        tm.sucursalName ??
-        (tm.sucursalId ? `Sucursal ${tm.sucursalId}` : "—");
+        labelByRubro.get(rubroBanco ?? -1) ?? bm.account.bankName ?? "—";
 
-      // Lado banco
       rows.push({
-        pairId,
+        groupId,
         side: "BANCO",
         fecha: bm.postDate.toISOString(),
         rubro: rubroBanco,
         rubroLabel: labelByRubro.get(rubroBanco ?? -1) ?? null,
         detalle: detalleBanco,
         cliente,
-        glosa,
+        glosa: bm.description?.trim() || glosa,
         debe: isAbono ? abs.toString() : null,
         haber: isAbono ? null : abs.toString(),
         consolidadoId: c.id,
@@ -134,36 +142,66 @@ export async function GET(req: Request) {
         bankMovementId: bm.id,
       });
 
-      // Lado sucursal (contracuenta)
+      if (isAbono) totalDebe += abs;
+      else totalHaber += abs;
+    }
+
+    // 1 fila SUCURSAL con el monto del TesoreriaMovement
+    const tesoreriaAmount = tm.monto;
+    rows.push({
+      groupId,
+      side: "SUCURSAL",
+      fecha: tm.fecha.toISOString(),
+      rubro: rubroSuc,
+      rubroLabel: labelByRubro.get(rubroSuc ?? -1) ?? null,
+      detalle: detalleSucursal,
+      cliente,
+      glosa,
+      debe: isAbono ? null : tesoreriaAmount.toString(),
+      haber: isAbono ? tesoreriaAmount.toString() : null,
+      consolidadoId: c.id,
+      tesoreriaId: tm.id,
+      bankMovementId: null,
+    });
+    if (isAbono) totalHaber += tesoreriaAmount;
+    else totalDebe += tesoreriaAmount;
+
+    // 1 fila AJUSTE si existe
+    if (c.adjustmentAmount !== null && c.adjustmentAmount !== 0n) {
+      const absDiff = c.adjustmentAmount;
+      const diff = bankSum - tesoreriaAmount; // con signo
+      // Lado del ajuste: el que falta para que cuadre Debe = Haber.
+      // Si diff > 0 e IN  → Debe excede en absDiff → Haber del ajuste.
+      // Si diff < 0 e IN  → Haber excede en absDiff → Debe del ajuste.
+      // Si diff > 0 e OUT → Haber excede → Debe del ajuste.
+      // Si diff < 0 e OUT → Debe excede → Haber del ajuste.
+      const ajusteAlHaber = (diff > 0n && isAbono) || (diff < 0n && !isAbono);
+      const rubroAj = c.adjustmentRubro;
+      const detalleAj =
+        (rubroAj !== null ? labelByRubro.get(rubroAj) : null) ?? "Ajuste";
+
       rows.push({
-        pairId,
-        side: "SUCURSAL",
-        fecha: bm.postDate.toISOString(),
-        rubro: rubroSuc,
-        rubroLabel: labelByRubro.get(rubroSuc ?? -1) ?? null,
-        detalle: detalleSucursal,
+        groupId,
+        side: "AJUSTE",
+        fecha: tm.fecha.toISOString(),
+        rubro: rubroAj,
+        rubroLabel: rubroAj !== null ? labelByRubro.get(rubroAj) ?? null : null,
+        detalle: detalleAj,
         cliente,
-        glosa,
-        debe: isAbono ? null : abs.toString(),
-        haber: isAbono ? abs.toString() : null,
+        glosa: c.adjustmentNote?.trim() || "Ajuste por diferencia",
+        debe: ajusteAlHaber ? null : absDiff.toString(),
+        haber: ajusteAlHaber ? absDiff.toString() : null,
         consolidadoId: c.id,
         tesoreriaId: tm.id,
-        bankMovementId: bm.id,
+        bankMovementId: null,
       });
-
-      if (isAbono) {
-        totalDebe += abs;
-        totalHaber += abs;
-      } else {
-        totalHaber += abs;
-        totalDebe += abs;
-      }
+      if (ajusteAlHaber) totalHaber += absDiff;
+      else totalDebe += absDiff;
     }
   }
 
-  // Facets: cuentas y rubros de sucursal vistos en el rango (no filtrados),
-  // para poblar los selects del front sin recargas extra.
-  const allConsolidadosInRange = await prisma.consolidado.findMany({
+  // Facets: cuentas y rubros de sucursal vistos en el rango (no filtrados).
+  const allInRange = await prisma.consolidado.findMany({
     where: {
       status: { in: ["AUTO_MATCHED", "MANUAL"] },
       tesoreriaMovement: { fecha: { gte: from, lt: to } },
@@ -175,11 +213,10 @@ export async function GET(req: Request) {
   });
   const accountIds = new Set<string>();
   const rubroSucSet = new Set<number>();
-  for (const r of allConsolidadosInRange) {
+  for (const r of allInRange) {
     if (r.resolvedAccountId) accountIds.add(r.resolvedAccountId);
-    if (r.tesoreriaMovement.rubroSucursal !== null) {
+    if (r.tesoreriaMovement.rubroSucursal !== null)
       rubroSucSet.add(r.tesoreriaMovement.rubroSucursal);
-    }
   }
   const accountList =
     accountIds.size > 0
@@ -227,8 +264,9 @@ export async function GET(req: Request) {
 }
 
 interface OKRow {
-  pairId: string;
-  side: "BANCO" | "SUCURSAL";
+  /** Identificador del grupo (consolidadoId). Filas con mismo groupId pertenecen al mismo asiento. */
+  groupId: string;
+  side: "BANCO" | "SUCURSAL" | "AJUSTE";
   fecha: string;
   rubro: number | null;
   rubroLabel: string | null;
@@ -239,7 +277,7 @@ interface OKRow {
   haber: string | null;
   consolidadoId: string;
   tesoreriaId: string;
-  bankMovementId: string;
+  bankMovementId: string | null;
 }
 
 function buildCliente(
@@ -264,11 +302,10 @@ function parseRange(
     const to = parseDateOnly(toRaw);
     if (from && to) {
       const toEnd = new Date(to);
-      toEnd.setDate(toEnd.getDate() + 1); // upper bound exclusivo
+      toEnd.setDate(toEnd.getDate() + 1);
       return { from, to: toEnd };
     }
   }
-  // Default: mes calendario en curso (día 1 → mañana 00:00)
   const now = new Date();
   const from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
   const to = new Date(now);

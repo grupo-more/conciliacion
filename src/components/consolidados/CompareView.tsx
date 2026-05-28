@@ -88,6 +88,30 @@ export function CompareView() {
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
 
+  // Ajuste para match con diferencia
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustRubro, setAdjustRubro] = useState<number | null>(null);
+  const [adjustNote, setAdjustNote] = useState("");
+  const [diffRubros, setDiffRubros] = useState<
+    Array<{ rubro: number; name: string }>
+  >([]);
+
+  // Cargar rubros marcados como "diferencia" una vez (catálogo chico).
+  useEffect(() => {
+    fetch("/api/rubros")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = (d.rubros ?? [])
+          .filter((r: { isDifference?: boolean }) => r.isDifference)
+          .map((r: { rubro: number; name: string }) => ({
+            rubro: r.rubro,
+            name: r.name,
+          }));
+        setDiffRubros(list);
+      })
+      .catch(() => setDiffRubros([]));
+  }, []);
+
   async function load() {
     setLoading(true);
     try {
@@ -154,17 +178,29 @@ export function CompareView() {
     return data.tesoreriaMovements.find((t) => t.id === selectedTesoreriaId) ?? null;
   }, [data, selectedTesoreriaId]);
 
+  // Diferencia entre lo seleccionado (banco vs tesorería). Si !== 0n hay desajuste.
+  const diff = useMemo(() => {
+    if (!selectedTesoreria) return 0n;
+    return selectedBankSum - BigInt(selectedTesoreria.monto);
+  }, [selectedBankSum, selectedTesoreria]);
+  const hasDiff = diff !== 0n;
+  const absDiff = diff < 0n ? -diff : diff;
+
   const canLink =
     selectedTesoreria !== null &&
     selectedBankIds.size > 0 &&
-    selectedBankSum === BigInt(selectedTesoreria.monto);
+    (!hasDiff || (adjustOpen && adjustRubro !== null));
 
   const linkButtonText = (() => {
     if (selectedBankIds.size === 0 || !selectedTesoreria)
       return "Seleccioná items en ambos lados";
-    if (selectedBankSum !== BigInt(selectedTesoreria.monto)) {
-      const diff = BigInt(selectedTesoreria.monto) - selectedBankSum;
-      return `Diferencia: ${formatMoney(diff)} (no calza)`;
+    if (hasDiff && !adjustOpen) {
+      return `Matchear con ajuste (${formatMoney(absDiff)} de diferencia)`;
+    }
+    if (hasDiff && adjustOpen) {
+      return adjustRubro !== null
+        ? `Vincular con ajuste de ${formatMoney(absDiff)}`
+        : "Elegí un rubro de ajuste";
     }
     return `Vincular ${selectedBankIds.size} cartola${selectedBankIds.size > 1 ? "s" : ""} con esta Tesorería`;
   })();
@@ -179,17 +215,31 @@ export function CompareView() {
   }
 
   async function linkSelected() {
-    if (!canLink || !selectedTesoreria) return;
+    if (!canLink || !selectedTesoreria) {
+      // Si hay diferencia pero el panel de ajuste no está abierto, abrirlo en
+      // lugar de fallar silenciosamente.
+      if (selectedTesoreria && selectedBankIds.size > 0 && hasDiff && !adjustOpen) {
+        setAdjustOpen(true);
+      }
+      return;
+    }
     setLinking(true);
     setLinkError(null);
     try {
+      const body: Record<string, unknown> = {
+        tesoreriaId: selectedTesoreria.id,
+        bankMovementIds: Array.from(selectedBankIds),
+      };
+      if (hasDiff && adjustOpen && adjustRubro !== null) {
+        body.adjustment = {
+          rubro: adjustRubro,
+          note: adjustNote.trim() || null,
+        };
+      }
       const res = await fetch("/api/consolidados/manual-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tesoreriaId: selectedTesoreria.id,
-          bankMovementIds: Array.from(selectedBankIds),
-        }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
@@ -198,11 +248,23 @@ export function CompareView() {
       }
       setSelectedBankIds(new Set());
       setSelectedTesoreriaId(null);
+      setAdjustOpen(false);
+      setAdjustRubro(null);
+      setAdjustNote("");
       await load();
     } finally {
       setLinking(false);
     }
   }
+
+  // Resetear ajuste cuando cambie la selección
+  useEffect(() => {
+    if (!hasDiff) {
+      setAdjustOpen(false);
+      setAdjustRubro(null);
+      setAdjustNote("");
+    }
+  }, [hasDiff]);
 
   return (
     <div className="space-y-4">
@@ -319,14 +381,28 @@ export function CompareView() {
                 setSelectedBankIds(new Set());
                 setSelectedTesoreriaId(null);
                 setLinkError(null);
+                setAdjustOpen(false);
               }}
               className="btn-ghost text-xs"
             >
               Limpiar selección
             </button>
+            {/* Si hay diferencia y el panel no está abierto, el botón abre el
+                panel de ajuste en lugar de intentar vincular. */}
             <button
-              onClick={linkSelected}
-              disabled={!canLink || linking}
+              onClick={() => {
+                if (hasDiff && !adjustOpen) {
+                  setAdjustOpen(true);
+                  return;
+                }
+                void linkSelected();
+              }}
+              disabled={
+                (!canLink && !(hasDiff && !adjustOpen)) ||
+                linking ||
+                !selectedTesoreria ||
+                selectedBankIds.size === 0
+              }
               className="btn-primary text-sm disabled:opacity-50"
             >
               {linking ? "Vinculando..." : linkButtonText}
@@ -334,6 +410,71 @@ export function CompareView() {
           </div>
           {linkError && (
             <div className="w-full text-sm text-rose-700">{linkError}</div>
+          )}
+
+          {/* Panel de ajuste: aparece cuando hay diferencia y el operador
+              confirma que quiere matchear con desajuste. */}
+          {hasDiff && adjustOpen && (
+            <div className="w-full mt-2 rounded-md border border-amber-300 bg-amber-50/60 p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="text-sm">
+                  <strong>Diferencia detectada:</strong>{" "}
+                  <span className="font-mono">{formatMoney(absDiff)}</span>{" "}
+                  <span className="text-text-muted">
+                    ({diff > 0n ? "banco > tesorería" : "banco < tesorería"})
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAdjustOpen(false);
+                    setAdjustRubro(null);
+                    setAdjustNote("");
+                  }}
+                  className="btn-ghost text-xs"
+                >
+                  Cancelar ajuste
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 items-end">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="label">Rubro para la diferencia</label>
+                  <select
+                    className="input"
+                    value={adjustRubro ?? ""}
+                    onChange={(e) =>
+                      setAdjustRubro(
+                        e.target.value ? Number(e.target.value) : null
+                      )
+                    }
+                  >
+                    <option value="">— Elegí un rubro —</option>
+                    {diffRubros.map((r) => (
+                      <option key={r.rubro} value={r.rubro}>
+                        {r.rubro} · {r.name}
+                      </option>
+                    ))}
+                  </select>
+                  {diffRubros.length === 0 && (
+                    <p className="text-xs text-warn mt-1">
+                      No hay rubros marcados como "Usar para diferencias".
+                      Configuralos en Configuración → Rubros.
+                    </p>
+                  )}
+                </div>
+                <div className="flex-1 min-w-[240px]">
+                  <label className="label">Glosa (opcional)</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={adjustNote}
+                    onChange={(e) => setAdjustNote(e.target.value)}
+                    placeholder="ej: cliente transfirió monto redondeado"
+                    maxLength={500}
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </div>
       )}

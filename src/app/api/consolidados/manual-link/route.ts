@@ -7,17 +7,32 @@ import { prisma } from "@/lib/db";
  * POST /api/consolidados/manual-link
  *
  * Crea un vinculo manual entre un TesoreriaMovement y uno o varios
- * BankMovements. El monto total de los BMs debe coincidir con el de
- * Tesoreria (validacion server-side).
+ * BankMovements.
  *
- * Body: { tesoreriaId: string, bankMovementIds: string[] }
+ * Si NO se pasa `adjustment`, la suma de los BMs debe coincidir exacto con
+ * el monto de Tesorería (comportamiento histórico).
  *
- * Genera/actualiza Consolidado con status=MANUAL. Si el Tesoreria ya
- * tenia un Consolidado, se reemplaza limpiamente (borra links viejos).
+ * Si se pasa `adjustment`, la diferencia |sum(bms) - t.monto| debe coincidir
+ * EXACTAMENTE con adjustment.amount, y el rubro indicado debe existir y estar
+ * marcado como `isDifference=true`. El asiento OK desdobla la diferencia
+ * como 3ra fila.
+ *
+ * Body: {
+ *   tesoreriaId: string,
+ *   bankMovementIds: string[],
+ *   adjustment?: { rubro: number, note?: string }
+ * }
  */
 const bodySchema = z.object({
   tesoreriaId: z.string().uuid(),
   bankMovementIds: z.array(z.string().uuid()).min(1).max(10),
+  adjustment: z
+    .object({
+      rubro: z.number().int(),
+      note: z.string().max(500).optional().nullable(),
+    })
+    .optional()
+    .nullable(),
 });
 
 export async function POST(req: Request) {
@@ -35,9 +50,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const { tesoreriaId, bankMovementIds } = parsed.data;
+  const { tesoreriaId, bankMovementIds, adjustment } = parsed.data;
 
-  // Validar Tesoreria
   const t = await prisma.tesoreriaMovement.findUnique({
     where: { id: tesoreriaId },
     include: { consolidado: true },
@@ -49,7 +63,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // Validar BankMovements
   const bms = await prisma.bankMovement.findMany({
     where: { id: { in: bankMovementIds } },
     include: { consolidadoLinks: { select: { consolidadoId: true } } },
@@ -61,7 +74,6 @@ export async function POST(req: Request) {
     );
   }
 
-  // Validar que no esten ya en otro Consolidado distinto del que estamos editando
   const myConsolidadoId = t.consolidado?.id ?? null;
   for (const bm of bms) {
     for (const link of bm.consolidadoLinks) {
@@ -76,20 +88,56 @@ export async function POST(req: Request) {
     }
   }
 
-  // Validar suma de montos = monto Tesoreria
+  // Diferencia entre banco y tesorería (magnitud absoluta)
   const sum = bms.reduce((acc, bm) => acc + bm.amount, 0n);
-  if (sum !== t.monto) {
+  const diff = sum - t.monto;
+  const absDiff = diff < 0n ? -diff : diff;
+
+  // Validaciones según haya o no ajuste
+  let adjustmentAmount: bigint | null = null;
+  let adjustmentRubro: number | null = null;
+  let adjustmentNote: string | null = null;
+
+  if (adjustment) {
+    if (absDiff === 0n) {
+      return NextResponse.json(
+        {
+          error:
+            "Se especificó un ajuste pero los montos coinciden. Quitá el ajuste y volvé a intentar.",
+        },
+        { status: 400 }
+      );
+    }
+    const rubro = await prisma.rubroLabel.findUnique({
+      where: { rubro: adjustment.rubro },
+    });
+    if (!rubro) {
+      return NextResponse.json(
+        { error: `El rubro ${adjustment.rubro} no existe.` },
+        { status: 400 }
+      );
+    }
+    if (!rubro.isDifference) {
+      return NextResponse.json(
+        {
+          error: `El rubro ${adjustment.rubro} (${rubro.name}) no está marcado para usarse en diferencias. Activá la opción en Configuración → Rubros.`,
+        },
+        { status: 400 }
+      );
+    }
+    adjustmentAmount = absDiff;
+    adjustmentRubro = adjustment.rubro;
+    adjustmentNote = adjustment.note?.trim() || null;
+  } else if (sum !== t.monto) {
     return NextResponse.json(
       {
-        error: `La suma de los movimientos bancarios (${sum.toString()}) no coincide con el monto de Tesorería (${t.monto.toString()}).`,
+        error: `La suma de los movimientos bancarios (${sum.toString()}) no coincide con el monto de Tesorería (${t.monto.toString()}). Si la diferencia es esperada, agregá un ajuste.`,
       },
       { status: 400 }
     );
   }
 
-  // Aplicar en transaccion
   await prisma.$transaction(async (tx) => {
-    // Si ya existia un Consolidado, limpiar sus links
     if (t.consolidado) {
       await tx.consolidadoLink.deleteMany({
         where: { consolidadoId: t.consolidado.id },
@@ -107,6 +155,9 @@ export async function POST(req: Request) {
             status: "MANUAL",
             matchType,
             resolvedAccountId: accountId,
+            adjustmentAmount,
+            adjustmentRubro,
+            adjustmentNote,
             matchedAt: new Date(),
           },
         })
@@ -116,6 +167,9 @@ export async function POST(req: Request) {
             status: "MANUAL",
             matchType,
             resolvedAccountId: accountId,
+            adjustmentAmount,
+            adjustmentRubro,
+            adjustmentNote,
           },
         });
 

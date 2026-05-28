@@ -6,6 +6,7 @@ interface Rubro {
   rubro: number;
   name: string;
   description: string | null;
+  isDifference: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -66,20 +67,21 @@ export function RubrosTab() {
               <th className="px-4 py-2 text-left w-24">Código</th>
               <th className="px-4 py-2 text-left">Nombre</th>
               <th className="px-4 py-2 text-left">Descripción</th>
+              <th className="px-4 py-2 text-center w-32">Diferencias</th>
               <th className="px-4 py-2 text-right w-32">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-text-muted">
+                <td colSpan={5} className="px-4 py-6 text-center text-text-muted">
                   Cargando…
                 </td>
               </tr>
             )}
             {!loading && rubros.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-text-muted">
+                <td colSpan={5} className="px-4 py-6 text-center text-text-muted">
                   No hay rubros aún. Crea el primero con "+ Nuevo rubro".
                 </td>
               </tr>
@@ -91,6 +93,15 @@ export function RubrosTab() {
                   <td className="px-4 py-3">{r.name}</td>
                   <td className="px-4 py-3 text-text-muted">
                     {r.description || <span className="text-text-dim">—</span>}
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    {r.isDifference ? (
+                      <span className="inline-block rounded-full bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 font-bold">
+                        ✓ DIF
+                      </span>
+                    ) : (
+                      <span className="text-text-dim">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -165,6 +176,7 @@ function RubroFormModal({
   const [rubro, setRubro] = useState(initial?.rubro.toString() ?? "");
   const [name, setName] = useState(initial?.name ?? "");
   const [description, setDescription] = useState(initial?.description ?? "");
+  const [isDifference, setIsDifference] = useState(initial?.isDifference ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -188,8 +200,17 @@ function RubroFormModal({
       const method = mode === "create" ? "POST" : "PATCH";
       const body =
         mode === "create"
-          ? { rubro: code, name: name.trim(), description: description.trim() || null }
-          : { name: name.trim(), description: description.trim() || null };
+          ? {
+              rubro: code,
+              name: name.trim(),
+              description: description.trim() || null,
+              isDifference,
+            }
+          : {
+              name: name.trim(),
+              description: description.trim() || null,
+              isDifference,
+            };
 
       const res = await fetch(url, {
         method,
@@ -262,6 +283,21 @@ function RubroFormModal({
               placeholder="Notas internas sobre este rubro…"
             />
           </div>
+          <label className="flex items-start gap-2 text-sm cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isDifference}
+              onChange={(e) => setIsDifference(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium">Usar para diferencias</span>
+              <span className="block text-xs text-text-muted mt-0.5">
+                Habilita este rubro como destino de la diferencia en matches manuales
+                (ej. "Excedentes", "Faltantes"). Solo aparece en el form de ajuste.
+              </span>
+            </span>
+          </label>
 
           {error && (
             <div className="rounded-md border border-danger/40 bg-danger/10 text-danger p-2.5 text-sm">

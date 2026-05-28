@@ -282,6 +282,11 @@ model RubroLabel {
   rubro       Int      @id
   name        String
   description String?  @db.Text
+  // Marca si este rubro se puede usar como destino de la diferencia en un
+  // match manual con ajuste (ej. "Excedentes", "Faltantes"). Solo los rubros
+  // con isDifference=true aparecen en el select del form de ajuste, para
+  // evitar elegir por error un rubro de banco/sucursal.
+  isDifference Boolean @default(false) @map("is_difference")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 }
@@ -383,6 +388,18 @@ model Consolidado {
   // Cuenta bancaria resuelta desde TesoreriaMovement.banco. Snapshot del
   // matching para evitar re-resolver si cambia el catálogo de cuentas.
   resolvedAccountId String?     @map("resolved_account_id")
+
+  // Ajuste por diferencia entre el monto del banco y el de Tesorería.
+  // Se llena solo cuando el operador cierra un match MANUAL con diferencia:
+  // p.ej. Tesorería dice $949.806 y la transferencia bancaria fue $950.000
+  // → adjustmentAmount = 194, adjustmentRubro = código del rubro contable
+  // donde la diferencia debe ir (ej. "Excedentes"). En el asiento OK eso
+  // genera una 3ra fila que cuadra el debe/haber.
+  // adjustmentAmount es siempre POSITIVO (magnitud); el lado debe/haber lo
+  // calcula el endpoint OK a partir de la dirección y signo de la diferencia.
+  adjustmentAmount BigInt? @map("adjustment_amount")
+  adjustmentRubro  Int?    @map("adjustment_rubro")
+  adjustmentNote   String? @db.Text @map("adjustment_note")
 
   outOfScopeReason String? @db.Text @map("out_of_scope_reason")
   notes            String? @db.Text

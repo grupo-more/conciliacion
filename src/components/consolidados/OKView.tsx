@@ -178,13 +178,17 @@ export function OKView() {
                 </tr>
               </thead>
               <tbody>
-                {data!.rows.map((r, idx) => (
-                  <AsientoRow
-                    key={`${r.pairId}-${r.side}-${idx}`}
-                    row={r}
-                    isPairStart={r.side === "BANCO"}
-                  />
-                ))}
+                {data!.rows.map((r, idx) => {
+                  const prev = idx > 0 ? data!.rows[idx - 1] : null;
+                  const isGroupStart = !prev || prev.groupId !== r.groupId;
+                  return (
+                    <AsientoRow
+                      key={`${r.groupId}-${r.side}-${idx}`}
+                      row={r}
+                      isGroupStart={isGroupStart}
+                    />
+                  );
+                })}
               </tbody>
               <tfoot className="bg-bg-soft">
                 <tr className="border-t-2 border-border-soft">
@@ -209,32 +213,44 @@ export function OKView() {
 
 function AsientoRow({
   row,
-  isPairStart,
+  isGroupStart,
 }: {
   row: OKRow;
-  isPairStart: boolean;
+  isGroupStart: boolean;
 }) {
+  const isAjuste = row.side === "AJUSTE";
+  const bg = isGroupStart
+    ? "bg-white"
+    : isAjuste
+    ? "bg-amber-50/60"
+    : "bg-bg-soft/40";
   return (
     <tr
       className={
         "text-sm " +
-        (isPairStart
-          ? "border-t-2 border-border-soft/80 bg-white"
-          : "bg-bg-soft/40")
+        (isGroupStart ? "border-t-2 border-border-soft/80 " : "") +
+        bg
       }
     >
       <td className="px-3 py-1.5 whitespace-nowrap text-text-muted">
-        {isPairStart ? formatDate(row.fecha) : ""}
+        {isGroupStart ? formatDate(row.fecha) : ""}
       </td>
       <td className="px-3 py-1.5 whitespace-nowrap font-mono">
         {row.rubro ?? "—"}
       </td>
-      <td className="px-3 py-1.5 whitespace-nowrap">{row.detalle}</td>
+      <td className="px-3 py-1.5 whitespace-nowrap">
+        {row.detalle}
+        {isAjuste && (
+          <span className="ml-1.5 inline-block rounded-full bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.5 font-bold">
+            AJUSTE
+          </span>
+        )}
+      </td>
       <td className="px-3 py-1.5 max-w-[260px] truncate" title={row.cliente}>
-        {isPairStart ? row.cliente : ""}
+        {isGroupStart ? row.cliente : ""}
       </td>
       <td className="px-3 py-1.5 max-w-[320px] truncate" title={row.glosa}>
-        {isPairStart ? row.glosa : ""}
+        {row.glosa}
       </td>
       <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap">
         {row.debe ? formatMoney(BigInt(row.debe)) : ""}

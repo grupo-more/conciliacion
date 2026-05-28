@@ -7,6 +7,7 @@ const createSchema = z.object({
   rubro: z.number().int().positive(),
   name: z.string().trim().min(1).max(100),
   description: z.string().trim().max(500).optional().nullable(),
+  isDifference: z.boolean().optional(),
 });
 
 export async function GET() {
@@ -24,6 +25,7 @@ export async function GET() {
       rubro: r.rubro,
       name: r.name,
       description: r.description,
+      isDifference: r.isDifference,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     })),
@@ -45,7 +47,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { rubro, name, description } = parsed.data;
+  const { rubro, name, description, isDifference } = parsed.data;
 
   const existing = await prisma.rubroLabel.findUnique({ where: { rubro } });
   if (existing) {
@@ -60,6 +62,7 @@ export async function POST(req: Request) {
       rubro,
       name,
       description: description ?? null,
+      isDifference: isDifference ?? false,
     },
   });
 
@@ -68,6 +71,7 @@ export async function POST(req: Request) {
       rubro: created.rubro,
       name: created.name,
       description: created.description,
+      isDifference: created.isDifference,
       createdAt: created.createdAt.toISOString(),
       updatedAt: created.updatedAt.toISOString(),
     },

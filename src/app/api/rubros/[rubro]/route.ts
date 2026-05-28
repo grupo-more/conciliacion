@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
   description: z.string().trim().max(500).optional().nullable(),
+  isDifference: z.boolean().optional(),
 });
 
 function parseRubroParam(raw: string): number | null {
@@ -36,11 +37,17 @@ export async function PATCH(
     );
   }
 
-  // Construir solo los campos a actualizar (description si vino, name si vino)
-  const data: { name?: string; description?: string | null } = {};
+  const data: {
+    name?: string;
+    description?: string | null;
+    isDifference?: boolean;
+  } = {};
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.description !== undefined) {
     data.description = parsed.data.description;
+  }
+  if (parsed.data.isDifference !== undefined) {
+    data.isDifference = parsed.data.isDifference;
   }
   if (Object.keys(data).length === 0) {
     return NextResponse.json(
@@ -58,6 +65,7 @@ export async function PATCH(
       rubro: updated.rubro,
       name: updated.name,
       description: updated.description,
+      isDifference: updated.isDifference,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
     });
