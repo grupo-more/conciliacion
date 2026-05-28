@@ -62,6 +62,7 @@ export async function GET(req: Request) {
                   accountNumber: true,
                   displayNumber: true,
                   holderName: true,
+                  accountingRubro: true,
                 },
               },
             },
@@ -79,6 +80,12 @@ export async function GET(req: Request) {
     if (c.tesoreriaMovement.rubroBanco !== null) rubroCodes.add(c.tesoreriaMovement.rubroBanco);
     if (c.tesoreriaMovement.rubroSucursal !== null) rubroCodes.add(c.tesoreriaMovement.rubroSucursal);
     if (c.adjustmentRubro !== null) rubroCodes.add(c.adjustmentRubro);
+    if (c.overrideRubroBanco !== null) rubroCodes.add(c.overrideRubroBanco);
+    for (const link of c.links) {
+      if (link.bankMovement.account.accountingRubro !== null) {
+        rubroCodes.add(link.bankMovement.account.accountingRubro);
+      }
+    }
   }
   const rubroLabels =
     rubroCodes.size > 0
@@ -109,12 +116,18 @@ export async function GET(req: Request) {
       c.links[0].bankMovement.description?.trim() || tm.glosa?.trim() || "";
     const groupId = c.id;
 
-    const rubroBanco = tm.rubroBanco;
     const rubroSuc = tm.rubroSucursal;
     const detalleSucursal =
       labelByRubro.get(rubroSuc ?? -1) ??
       tm.sucursalName ??
       (tm.sucursalId ? `Sucursal ${tm.sucursalId}` : "—");
+
+    // Cascada para el rubro banco efectivo (por link, porque cada cartola
+    // puede tener su propio accountingRubro):
+    //   override (Consolidado.overrideRubroBanco)
+    //   → account.accountingRubro (si es MANUAL)
+    //   → tm.rubroBanco (la API)
+    const isManual = c.status === "MANUAL";
 
     // 1 fila por cada BankMovement (lado banco)
     let bankSum = 0n;
@@ -123,15 +136,18 @@ export async function GET(req: Request) {
       const abs = bm.amount < 0n ? -bm.amount : bm.amount;
       bankSum += abs;
 
+      const effectiveRubroBanco =
+        c.overrideRubroBanco ??
+        (isManual ? bm.account.accountingRubro ?? tm.rubroBanco : tm.rubroBanco);
       const detalleBanco =
-        labelByRubro.get(rubroBanco ?? -1) ?? bm.account.bankName ?? "—";
+        labelByRubro.get(effectiveRubroBanco ?? -1) ?? bm.account.bankName ?? "—";
 
       rows.push({
         groupId,
         side: "BANCO",
         fecha: bm.postDate.toISOString(),
-        rubro: rubroBanco,
-        rubroLabel: labelByRubro.get(rubroBanco ?? -1) ?? null,
+        rubro: effectiveRubroBanco,
+        rubroLabel: labelByRubro.get(effectiveRubroBanco ?? -1) ?? null,
         detalle: detalleBanco,
         cliente,
         glosa: bm.description?.trim() || glosa,

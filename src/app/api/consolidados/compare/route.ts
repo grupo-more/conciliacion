@@ -59,6 +59,7 @@ export async function GET(req: Request) {
           bankName: true,
           accountNumber: true,
           alias: true,
+          accountingRubro: true,
         },
       },
       consolidadoLinks: {

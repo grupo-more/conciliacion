@@ -29,6 +29,11 @@ model BankAccount {
   alias         String?
   purpose       String?
   active        Boolean  @default(true)
+  // Rubro contable "natural" de esta cuenta. Se usa en el asiento OK cuando
+  // se hace match MANUAL: como la persona eligió explícitamente esta cartola,
+  // su rubro predomina sobre el rubroBanco que vino en TesoreriaMovement
+  // (que puede estar mal si el operador tipeó otro banco al cargar).
+  accountingRubro Int?    @map("accounting_rubro")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
@@ -400,6 +405,12 @@ model Consolidado {
   adjustmentAmount BigInt? @map("adjustment_amount")
   adjustmentRubro  Int?    @map("adjustment_rubro")
   adjustmentNote   String? @db.Text @map("adjustment_note")
+
+  // Override del rubro banco para este Consolidado puntual. Solo se usa en
+  // matches MANUAL cuando el operador elige explícitamente un rubro distinto
+  // al accountingRubro de la cuenta. Si es null, el endpoint OK cae a la
+  // cascada normal (account.accountingRubro → tm.rubroBanco).
+  overrideRubroBanco Int? @map("override_rubro_banco")
 
   outOfScopeReason String? @db.Text @map("out_of_scope_reason")
   notes            String? @db.Text

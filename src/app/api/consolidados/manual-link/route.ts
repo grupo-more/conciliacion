@@ -33,6 +33,10 @@ const bodySchema = z.object({
     })
     .optional()
     .nullable(),
+  /** Override del rubro banco para este consolidado (opcional). Si se pasa,
+   *  predomina sobre BankAccount.accountingRubro y TesoreriaMovement.rubroBanco
+   *  en el asiento OK. */
+  overrideRubroBanco: z.number().int().optional().nullable(),
 });
 
 export async function POST(req: Request) {
@@ -50,7 +54,8 @@ export async function POST(req: Request) {
     );
   }
 
-  const { tesoreriaId, bankMovementIds, adjustment } = parsed.data;
+  const { tesoreriaId, bankMovementIds, adjustment, overrideRubroBanco } =
+    parsed.data;
 
   const t = await prisma.tesoreriaMovement.findUnique({
     where: { id: tesoreriaId },
@@ -137,6 +142,19 @@ export async function POST(req: Request) {
     );
   }
 
+  // Validar overrideRubroBanco si vino
+  if (overrideRubroBanco !== undefined && overrideRubroBanco !== null) {
+    const rubro = await prisma.rubroLabel.findUnique({
+      where: { rubro: overrideRubroBanco },
+    });
+    if (!rubro) {
+      return NextResponse.json(
+        { error: `El rubro ${overrideRubroBanco} no existe.` },
+        { status: 400 }
+      );
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     if (t.consolidado) {
       await tx.consolidadoLink.deleteMany({
@@ -158,6 +176,7 @@ export async function POST(req: Request) {
             adjustmentAmount,
             adjustmentRubro,
             adjustmentNote,
+            overrideRubroBanco: overrideRubroBanco ?? null,
             matchedAt: new Date(),
           },
         })
@@ -170,6 +189,7 @@ export async function POST(req: Request) {
             adjustmentAmount,
             adjustmentRubro,
             adjustmentNote,
+            overrideRubroBanco: overrideRubroBanco ?? null,
           },
         });
 

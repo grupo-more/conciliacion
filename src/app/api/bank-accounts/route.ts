@@ -37,6 +37,7 @@ export async function GET() {
       currency: a.currency,
       alias: a.alias,
       purpose: a.purpose,
+      accountingRubro: a.accountingRubro,
       isUnassigned: isUnassignedAccountNumber(a.accountNumber),
       movementCount: countByAccount.get(a.id) ?? 0,
     })),
