@@ -38,26 +38,24 @@ export const bciDetalladoParser: BankParser = {
   matches(wb) {
     const sheet = wb.Sheets[wb.SheetNames[0]];
     if (!sheet) return false;
-    const headers = headerRow(sheet, 1);
-    if (!headers) return false;
-    const joined = headers.join("|").toLowerCase();
-    return (
-      joined.includes("código transferencia") &&
-      joined.includes("glosa detalle") &&
-      joined.includes("ingreso")
-    );
+    const aoa = readAoa(sheet);
+    return findHeaderRow(aoa) !== null;
   },
 
   parse(wb): ParsedStatement {
     const sheetName = wb.SheetNames[0];
     const sheet = wb.Sheets[sheetName];
-    const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
-      header: 1,
-      defval: null,
-      raw: false,
-    });
+    const aoa = readAoa(sheet);
 
-    const headers = (aoa[0] || []).map((h) => asStr(h));
+    // BCI exporta el archivo a veces con !ref desde A2 y a veces con 1-2 filas
+    // de título antes ("ME BCI", etc.). Buscamos la fila real de headers.
+    const found = findHeaderRow(aoa);
+    if (!found) {
+      throw new Error("No se encontraron headers de cartola BCI Detallado.");
+    }
+    const headers = found.headers;
+    const dataStartIndex = found.rowIndex + 1;
+
     const movements: NormalizedMovement[] = [];
     const errors: ParsedStatement["errors"] = [];
 
@@ -69,7 +67,7 @@ export const bciDetalladoParser: BankParser = {
     // accountNumber vacío — quien suba el archivo seleccionará la cuenta destino.
     const accountNumber = "";
 
-    for (let i = 1; i < aoa.length; i++) {
+    for (let i = dataStartIndex; i < aoa.length; i++) {
       const row = aoa[i];
       if (isEmptyRow(row)) continue;
 
@@ -156,14 +154,40 @@ export const bciDetalladoParser: BankParser = {
   },
 };
 
-function headerRow(sheet: XLSX.WorkSheet, row1: number): string[] | null {
-  const aoa = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+function readAoa(sheet: XLSX.WorkSheet): unknown[][] {
+  return XLSX.utils.sheet_to_json<unknown[]>(sheet, {
     header: 1,
     defval: null,
     raw: false,
-    range: row1 - 1,
   });
-  const first = aoa[0];
-  if (!first || first.length === 0) return null;
-  return first.map((h) => asStr(h));
+}
+
+/**
+ * Busca la fila con headers de BCI Detallado dentro de las primeras filas.
+ * Se necesita escanear porque BCI exporta los archivos con offsets distintos:
+ *  - "cartola bci .xlsx" tiene !ref = A2:Z..., headers en fila 1 (aparente).
+ *  - "...Movimientos_Detallado..." tiene un título "ME BCI" en B1 y headers en fila 3.
+ */
+function findHeaderRow(
+  aoa: unknown[][]
+): { headers: string[]; rowIndex: number } | null {
+  const maxScan = Math.min(aoa.length, 5);
+  for (let i = 0; i < maxScan; i++) {
+    const row = aoa[i] || [];
+    const joined = row
+      .map((c) => (c === null || c === undefined ? "" : String(c)))
+      .join("|")
+      .toLowerCase();
+    if (
+      joined.includes("código transferencia") &&
+      joined.includes("glosa detalle") &&
+      joined.includes("ingreso")
+    ) {
+      return {
+        headers: row.map((c) => asStr(c)),
+        rowIndex: i,
+      };
+    }
+  }
+  return null;
 }
