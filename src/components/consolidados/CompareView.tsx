@@ -19,6 +19,9 @@ interface BankMovementDTO {
     displayNumber?: string | null;
     holderName?: string;
     alias?: string | null;
+    /** Rubro contable más usado en conciliados anteriores de esta cuenta.
+     *  Lo usamos como default del select "Rubro banco" en el match manual. */
+    suggestedRubro?: number | null;
   };
   isLinked: boolean;
 }
@@ -210,6 +213,32 @@ export function CompareView() {
     if (!data) return [] as BankMovementDTO[];
     return data.bankMovements.filter((bm) => selectedBankIds.has(bm.id));
   }, [data, selectedBankIds]);
+
+  // Rubro sugerido a partir de las cartolas seleccionadas: si todas comparten
+  // el mismo suggestedRubro (historial de la cuenta), devolvemos ese. Solo es
+  // una PISTA visual — el operador del match manual tiene que elegirlo
+  // conscientemente con un click (si fuera automático, ya sería un AUTO_MATCH).
+  const suggestedRubroFromBanks = useMemo<number | null>(() => {
+    if (selectedBanks.length === 0) return null;
+    const rubros = new Set(
+      selectedBanks
+        .map((b) => b.account.suggestedRubro ?? null)
+        .filter((r): r is number => r !== null)
+    );
+    if (rubros.size === 1) return Array.from(rubros)[0];
+    return null;
+  }, [selectedBanks]);
+
+  // Al cambiar la selección, resetear el override (NO se auto-elige el sugerido).
+  useEffect(() => {
+    setOverrideRubroBanco(null);
+  }, [selectedBankIds]);
+
+  const suggestedRubroLabel = useMemo<string | null>(() => {
+    if (suggestedRubroFromBanks === null) return null;
+    const r = bankRubros.find((x) => x.rubro === suggestedRubroFromBanks);
+    return r ? `${r.rubro} · ${r.name}` : String(suggestedRubroFromBanks);
+  }, [suggestedRubroFromBanks, bankRubros]);
 
   // Warning: ¿el bankName de las cartolas seleccionadas difiere del banco que
   // dijo Tesorería? Ej. Tesorería dice "Santander ME" y la cartola es "BCI".
@@ -497,6 +526,28 @@ export function CompareView() {
                     </option>
                   ))}
                 </select>
+                {/* Pista de rubro sugerido: NO se selecciona solo, el operador
+                    tiene que hacer click conscientemente. */}
+                {suggestedRubroLabel !== null &&
+                  overrideRubroBanco !== suggestedRubroFromBanks && (
+                    <div className="mt-1.5 text-xs text-text-muted flex items-center gap-2 flex-wrap">
+                      <span>
+                        💡 Según el historial de esta cuenta, el rubro suele ser{" "}
+                        <span className="font-mono font-semibold text-text">
+                          {suggestedRubroLabel}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setOverrideRubroBanco(suggestedRubroFromBanks)
+                        }
+                        className="text-xs text-brand hover:underline font-semibold"
+                      >
+                        Usar este
+                      </button>
+                    </div>
+                  )}
               </div>
               {bankMismatch && (
                 <div className="flex-1 min-w-[260px] text-xs rounded-md border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2">

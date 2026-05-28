@@ -123,6 +123,51 @@ export async function GET(req: Request) {
   });
   const bancos = bancosRows.map((b) => b.banco!).filter(Boolean).sort();
 
+  // Rubro sugerido por cuenta bancaria. Lo aprendemos del historial de
+  // Consolidados conciliados (AUTO_MATCHED + MANUAL): para cada cuenta,
+  // qué rubro_banco aparece más veces. Si el operador hizo overrides,
+  // esos ganan (porque son la corrección humana). Sirve como default
+  // del select "Rubro banco (asiento OK)" en el match manual.
+  const accountIdsInUse = Array.from(
+    new Set(bankMovements.map((bm) => bm.accountId))
+  );
+  const historico =
+    accountIdsInUse.length > 0
+      ? await prisma.consolidado.findMany({
+          where: {
+            status: { in: ["AUTO_MATCHED", "MANUAL"] },
+            resolvedAccountId: { in: accountIdsInUse },
+          },
+          select: {
+            resolvedAccountId: true,
+            overrideRubroBanco: true,
+            tesoreriaMovement: { select: { rubroBanco: true } },
+          },
+        })
+      : [];
+  const counts = new Map<string, Map<number, number>>();
+  for (const c of historico) {
+    const accId = c.resolvedAccountId;
+    if (!accId) continue;
+    const rubro = c.overrideRubroBanco ?? c.tesoreriaMovement.rubroBanco;
+    if (rubro === null) continue;
+    if (!counts.has(accId)) counts.set(accId, new Map());
+    const m = counts.get(accId)!;
+    m.set(rubro, (m.get(rubro) ?? 0) + 1);
+  }
+  const suggestedRubroByAccount = new Map<string, number>();
+  for (const [accId, rubroCounts] of counts) {
+    let best: number | null = null;
+    let bestCount = 0;
+    for (const [rubro, count] of rubroCounts) {
+      if (count > bestCount) {
+        bestCount = count;
+        best = rubro;
+      }
+    }
+    if (best !== null) suggestedRubroByAccount.set(accId, best);
+  }
+
   return NextResponse.json({
     bankMovements: bankMovements.map((bm) => ({
       id: bm.id,
@@ -131,7 +176,10 @@ export async function GET(req: Request) {
       description: bm.description,
       counterpartyName: bm.counterpartyName,
       counterpartyRut: bm.counterpartyRut,
-      account: bm.account,
+      account: {
+        ...bm.account,
+        suggestedRubro: suggestedRubroByAccount.get(bm.accountId) ?? null,
+      },
       isLinked: bm.consolidadoLinks.length > 0,
     })),
     tesoreriaMovements: tesoreriaMovements.map((t) => ({
