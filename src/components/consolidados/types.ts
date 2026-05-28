@@ -108,6 +108,39 @@ export interface DetailResponse {
   candidates: CandidateDTO[] | null;
 }
 
+/* ============================== Tab "OK" ============================== */
+
+export interface OKRow {
+  /** Identificador estable del par debe/haber (ej. "consolidadoId__linkId"). */
+  pairId: string;
+  side: "BANCO" | "SUCURSAL";
+  fecha: string;
+  rubro: number | null;
+  rubroLabel: string | null;
+  /** Nombre legible: rubroLabel si existe, sino fallback al banco/sucursal. */
+  detalle: string;
+  cliente: string;
+  glosa: string;
+  /** BigInt como string (positivo). null si no aplica a este lado. */
+  debe: string | null;
+  haber: string | null;
+  // Trazabilidad
+  consolidadoId: string;
+  tesoreriaId: string;
+  bankMovementId: string;
+}
+
+export interface OKResponse {
+  from: string;
+  to: string;
+  rows: OKRow[];
+  totals: { debe: string; haber: string };
+  facets: {
+    accounts: Array<{ id: string; label: string }>;
+    rubrosSucursales: Array<{ rubro: number; label: string | null }>;
+  };
+}
+
 export interface RunResult {
   ok: boolean;
   processed: number;

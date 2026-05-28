@@ -13,9 +13,10 @@ import {
 } from "./types";
 import { ConsolidadoDetail } from "./ConsolidadoDetail";
 import { CompareView } from "./CompareView";
+import { OKView } from "./OKView";
 
 type Period = "day" | "week" | "month";
-type Tab = "list" | "compare";
+type Tab = "list" | "compare" | "ok";
 
 export function ConsolidadosView() {
   const [tab, setTab] = useState<Tab>("list");
@@ -131,11 +132,15 @@ export function ConsolidadosView() {
           <TabButton active={tab === "compare"} onClick={() => setTab("compare")}>
             Comparar
           </TabButton>
+          <TabButton active={tab === "ok"} onClick={() => setTab("ok")}>
+            OK
+          </TabButton>
         </nav>
       </div>
 
       {/* Contenido por tab */}
       {tab === "compare" && <CompareView />}
+      {tab === "ok" && <OKView />}
 
       {tab === "list" && (
         <>
