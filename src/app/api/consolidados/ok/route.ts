@@ -147,6 +147,8 @@ export async function GET(req: Request) {
         consolidadoId: c.id,
         tesoreriaId: tm.id,
         bankMovementId: bm.id,
+        status: c.status as "AUTO_MATCHED" | "MANUAL",
+        totalMonto: tm.monto.toString(),
       });
 
       if (isAbono) totalDebe += abs;
@@ -169,6 +171,8 @@ export async function GET(req: Request) {
       consolidadoId: c.id,
       tesoreriaId: tm.id,
       bankMovementId: null,
+      status: c.status as "AUTO_MATCHED" | "MANUAL",
+      totalMonto: tm.monto.toString(),
     });
     if (isAbono) totalHaber += tesoreriaAmount;
     else totalDebe += tesoreriaAmount;
@@ -201,6 +205,8 @@ export async function GET(req: Request) {
         consolidadoId: c.id,
         tesoreriaId: tm.id,
         bankMovementId: null,
+        status: c.status as "AUTO_MATCHED" | "MANUAL",
+        totalMonto: tm.monto.toString(),
       });
       if (ajusteAlHaber) totalHaber += absDiff;
       else totalDebe += absDiff;
@@ -282,6 +288,8 @@ interface OKRow {
   glosa: string;
   debe: string | null;
   haber: string | null;
+  status: "AUTO_MATCHED" | "MANUAL";
+  totalMonto: string;
   consolidadoId: string;
   tesoreriaId: string;
   bankMovementId: string | null;

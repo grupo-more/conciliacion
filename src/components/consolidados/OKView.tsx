@@ -20,6 +20,32 @@ export function OKView() {
 
   const [data, setData] = useState<OKResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [undoTarget, setUndoTarget] = useState<OKRow | null>(null);
+  const [undoing, setUndoing] = useState(false);
+
+  async function confirmUndo() {
+    if (!undoTarget) return;
+    setUndoing(true);
+    try {
+      const res = await fetch(
+        `/api/consolidados/${undoTarget.tesoreriaId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reject" }),
+        }
+      );
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        alert(e.error || "Error al deshacer");
+        return;
+      }
+      setUndoTarget(null);
+      await load();
+    } finally {
+      setUndoing(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -175,6 +201,7 @@ export function OKView() {
                   <th className="px-3 py-2 text-left">Glosa</th>
                   <th className="px-3 py-2 text-right">Debe</th>
                   <th className="px-3 py-2 text-right">Haber</th>
+                  <th className="px-3 py-2 text-center w-20"></th>
                 </tr>
               </thead>
               <tbody>
@@ -186,6 +213,7 @@ export function OKView() {
                       key={`${r.groupId}-${r.side}-${idx}`}
                       row={r}
                       isGroupStart={isGroupStart}
+                      onUndo={isGroupStart ? () => setUndoTarget(r) : undefined}
                     />
                   );
                 })}
@@ -201,12 +229,22 @@ export function OKView() {
                   <td className="px-3 py-2 text-right font-mono font-bold">
                     {formatMoney(totals.haber)}
                   </td>
+                  <td></td>
                 </tr>
               </tfoot>
             </table>
           </div>
         )}
       </div>
+
+      {undoTarget && (
+        <OKUndoConfirmModal
+          row={undoTarget}
+          loading={undoing}
+          onCancel={() => setUndoTarget(null)}
+          onConfirm={confirmUndo}
+        />
+      )}
     </div>
   );
 }
@@ -214,9 +252,11 @@ export function OKView() {
 function AsientoRow({
   row,
   isGroupStart,
+  onUndo,
 }: {
   row: OKRow;
   isGroupStart: boolean;
+  onUndo?: () => void;
 }) {
   const isAjuste = row.side === "AJUSTE";
   const bg = isGroupStart
@@ -258,7 +298,106 @@ function AsientoRow({
       <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap">
         {row.haber ? formatMoney(BigInt(row.haber)) : ""}
       </td>
+      <td className="px-3 py-1.5 text-center">
+        {onUndo && (
+          <button
+            onClick={onUndo}
+            className="text-[11px] text-rose-700 hover:underline whitespace-nowrap"
+            title="Deshacer match (pide confirmación)"
+          >
+            Deshacer
+          </button>
+        )}
+      </td>
     </tr>
+  );
+}
+
+function OKUndoConfirmModal({
+  row,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  row: OKRow;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const isAuto = row.status === "AUTO_MATCHED";
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div
+        className="modal-panel max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold tracking-tight mb-2">
+          Deshacer este match?
+        </h2>
+        <p className="text-sm text-text-muted mb-4">
+          La conciliación volverá a estado <strong>NO_MATCH</strong> y el
+          asiento desaparecerá de OK. Confirmá los datos antes:
+        </p>
+
+        <div className="rounded-md border border-border-soft bg-bg-soft p-3 text-sm space-y-1 mb-3">
+          <div>
+            <span className="text-text-muted">Fecha:</span>{" "}
+            <strong>{formatDate(row.fecha)}</strong>
+          </div>
+          <div>
+            <span className="text-text-muted">Cliente:</span> {row.cliente}
+          </div>
+          <div>
+            <span className="text-text-muted">Monto:</span>{" "}
+            <strong className="font-mono">
+              {formatMoney(BigInt(row.totalMonto))}
+            </strong>
+          </div>
+          <div>
+            <span className="text-text-muted">Glosa:</span> {row.glosa || "—"}
+          </div>
+          <div>
+            <span className="text-text-muted">Tipo:</span>{" "}
+            <span
+              className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                isAuto
+                  ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+              }`}
+            >
+              {isAuto ? "Conciliado auto" : "Conciliado manual"}
+            </span>
+          </div>
+        </div>
+
+        {isAuto && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 text-amber-800 p-2.5 text-xs mb-3">
+            <strong>⚠ Atención:</strong> este es un match automático. Si después
+            corrés "Re-evaluar todo" el motor puede volver a matchearlo igual.
+            Para que el rechazo persista, vinculalo manualmente a otra cartola o
+            dejá una nota en el detalle.
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="btn-ghost"
+            autoFocus
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="btn-primary bg-rose-600 hover:bg-rose-700"
+          >
+            {loading ? "Deshaciendo…" : "Sí, deshacer"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 

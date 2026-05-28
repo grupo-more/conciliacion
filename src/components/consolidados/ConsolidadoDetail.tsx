@@ -237,17 +237,21 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                           {l.counterpartyRut && ` (${l.counterpartyRut})`}
                         </div>
                       )}
-                      {status !== "AUTO_MATCHED" && (
-                        <div className="mt-2">
-                          <button
-                            onClick={() => action({ action: "reject" })}
-                            disabled={acting}
-                            className="text-xs text-rose-700 hover:underline disabled:opacity-50"
-                          >
-                            Desvincular
-                          </button>
-                        </div>
-                      )}
+                      <div className="mt-2">
+                        <button
+                          onClick={() => {
+                            const msg =
+                              status === "AUTO_MATCHED"
+                                ? "Desvincular este match automático? El motor puede volver a matchearlo en la próxima corrida de \"Re-evaluar todo\"."
+                                : "Desvincular este match? Volverá a estado NO_MATCH.";
+                            if (confirm(msg)) action({ action: "reject" });
+                          }}
+                          disabled={acting}
+                          className="text-xs text-rose-700 hover:underline disabled:opacity-50"
+                        >
+                          Desvincular
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -30,6 +30,29 @@ export function ConsolidadosView() {
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [undoTarget, setUndoTarget] = useState<ConsolidadoRow | null>(null);
+  const [undoing, setUndoing] = useState(false);
+
+  async function confirmUndo() {
+    if (!undoTarget) return;
+    setUndoing(true);
+    try {
+      const res = await fetch(`/api/consolidados/${undoTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reject" }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        alert(e.error || "Error al deshacer");
+        return;
+      }
+      setUndoTarget(null);
+      await load();
+    } finally {
+      setUndoing(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -231,6 +254,7 @@ export function ConsolidadosView() {
                       <th className="px-3 py-2 text-left">Glosa</th>
                       <th className="px-3 py-2 text-left">Estado</th>
                       <th className="px-3 py-2 text-right">Score</th>
+                      <th className="px-3 py-2 text-center w-20">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -239,6 +263,7 @@ export function ConsolidadosView() {
                         key={row.id}
                         row={row}
                         onClick={() => setSelectedId(row.id)}
+                        onUndo={() => setUndoTarget(row)}
                       />
                     ))}
                   </tbody>
@@ -254,6 +279,15 @@ export function ConsolidadosView() {
           tesoreriaId={selectedId}
           onClose={() => setSelectedId(null)}
           onChanged={() => load()}
+        />
+      )}
+
+      {undoTarget && (
+        <UndoConfirmModal
+          row={undoTarget}
+          loading={undoing}
+          onCancel={() => setUndoTarget(null)}
+          onConfirm={confirmUndo}
         />
       )}
     </div>
@@ -290,10 +324,23 @@ function TabButton({
   );
 }
 
-function Row({ row, onClick }: { row: ConsolidadoRow; onClick: () => void }) {
+function Row({
+  row,
+  onClick,
+  onUndo,
+}: {
+  row: ConsolidadoRow;
+  onClick: () => void;
+  onUndo: () => void;
+}) {
   const status: ConsolidadoStatus = row.consolidado
     ? (row.consolidado.status as ConsolidadoStatus)
     : "UNPROCESSED";
+  const canUndo =
+    status === "AUTO_MATCHED" ||
+    status === "MANUAL" ||
+    status === "SUGGESTED" ||
+    status === "REVIEW";
   return (
     <tr
       onClick={onClick}
@@ -330,6 +377,118 @@ function Row({ row, onClick }: { row: ConsolidadoRow; onClick: () => void }) {
       <td className="px-3 py-2 text-right font-mono text-xs">
         {row.consolidado?.score ?? "—"}
       </td>
+      <td className="px-3 py-2 text-center">
+        {canUndo ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onUndo();
+            }}
+            className="text-[11px] text-rose-700 hover:underline whitespace-nowrap"
+            title="Deshacer match (pide confirmación)"
+          >
+            Deshacer
+          </button>
+        ) : (
+          <span className="text-text-dim">—</span>
+        )}
+      </td>
     </tr>
+  );
+}
+
+/* ============================ Undo confirm modal ============================ */
+
+function UndoConfirmModal({
+  row,
+  loading,
+  onCancel,
+  onConfirm,
+}: {
+  row: ConsolidadoRow;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const status = (row.consolidado?.status ?? "UNPROCESSED") as ConsolidadoStatus;
+  const isAuto = status === "AUTO_MATCHED";
+  const linkCount = row.consolidado?.links.length ?? 0;
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div
+        className="modal-panel max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="text-lg font-semibold tracking-tight mb-2">
+          Deshacer este match?
+        </h2>
+        <p className="text-sm text-text-muted mb-4">
+          La conciliación volverá a estado <strong>NO_MATCH</strong> y se
+          perderán los {linkCount} vínculo{linkCount === 1 ? "" : "s"} con las
+          cartolas. Esta acción se puede rehacer matcheando de nuevo, pero
+          confirmá los datos antes:
+        </p>
+
+        <div className="rounded-md border border-border-soft bg-bg-soft p-3 text-sm space-y-1 mb-3">
+          <div>
+            <span className="text-text-muted">Fecha:</span>{" "}
+            <strong>{formatDate(row.fecha)}</strong>
+          </div>
+          <div>
+            <span className="text-text-muted">Sucursal:</span>{" "}
+            {row.sucursalName ?? `#${row.sucursalId}`}
+          </div>
+          <div>
+            <span className="text-text-muted">Banco:</span> {row.banco ?? "—"}
+          </div>
+          <div>
+            <span className="text-text-muted">Monto:</span>{" "}
+            <strong className="font-mono">
+              {formatMoney(BigInt(row.monto))}
+            </strong>
+          </div>
+          <div>
+            <span className="text-text-muted">Cliente:</span>{" "}
+            {row.clienteName ?? "—"}
+          </div>
+          <div>
+            <span className="text-text-muted">Estado actual:</span>{" "}
+            <span
+              className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_COLORS[status]}`}
+            >
+              {STATUS_LABELS[status]}
+            </span>
+          </div>
+        </div>
+
+        {isAuto && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 text-amber-800 p-2.5 text-xs mb-3">
+            <strong>⚠ Atención:</strong> este es un match automático. Si después
+            corrés "Re-evaluar todo" el motor puede volver a matchearlo igual.
+            Para que el rechazo persista, vinculalo manualmente a otra cartola o
+            dejá una nota en el detalle.
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="btn-ghost"
+            autoFocus
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="btn-primary bg-rose-600 hover:bg-rose-700"
+          >
+            {loading ? "Deshaciendo…" : "Sí, deshacer"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

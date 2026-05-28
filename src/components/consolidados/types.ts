@@ -125,6 +125,12 @@ export interface OKRow {
   /** BigInt como string (positivo). null si no aplica a este lado. */
   debe: string | null;
   haber: string | null;
+  /** Status del consolidado (AUTO_MATCHED | MANUAL). Para mostrar warning
+   *  al deshacer un auto-match. */
+  status: "AUTO_MATCHED" | "MANUAL";
+  /** Monto total del consolidado (Tesoreria) — para mostrar en el modal de
+   *  confirmación. BigInt como string. */
+  totalMonto: string;
   // Trazabilidad
   consolidadoId: string;
   tesoreriaId: string;
