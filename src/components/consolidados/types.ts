@@ -74,7 +74,13 @@ export interface CandidateDTO {
   description: string;
   counterpartyName: string | null;
   counterpartyRut: string | null;
-  account: { id: string; bankName: string; accountNumber: string };
+  account: {
+    id: string;
+    bankName: string;
+    accountNumber: string;
+    displayNumber: string | null;
+    holderName: string;
+  };
   /** True si la BD tiene otros BankMovements idénticos (mismo monto+día+ref+cuenta).
    *  El listado solo muestra un representante, pero los otros están en BD esperando
    *  ser limpiados con "Detectar duplicados". */

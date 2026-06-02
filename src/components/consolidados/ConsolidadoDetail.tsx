@@ -218,9 +218,13 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                     >
                       <div className="flex justify-between items-start gap-2">
                         <div className="min-w-0">
-                          <div className="font-semibold">{l.account.bankName}</div>
-                          <div className="text-xs text-text-muted">
-                            {l.account.accountNumber} · {formatDate(l.postDate)}
+                          <div className="font-semibold">
+                            {l.account.bankName}
+                            {l.account.holderName ? ` ${l.account.holderName}` : ""}
+                          </div>
+                          <div className="text-xs text-text-muted font-mono">
+                            {l.account.displayNumber || l.account.accountNumber} ·{" "}
+                            {formatDate(l.postDate)}
                           </div>
                         </div>
                         <div className="text-right font-mono font-bold whitespace-nowrap">
@@ -282,7 +286,7 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                           <div className="flex-1 min-w-0">
                             <div className="font-semibold flex items-center gap-2 flex-wrap">
                               <span>
-                                {c.account.bankName}{" "}
+                                {c.account.bankName} {c.account.holderName}{" "}
                                 <span className="text-xs text-text-muted font-normal">
                                   · {formatDate(c.postDate)}
                                 </span>
@@ -295,6 +299,9 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                                   ⚠ duplicado x{c.duplicateCount} — limpiar
                                 </span>
                               )}
+                            </div>
+                            <div className="text-[11px] text-text-muted font-mono mt-0.5">
+                              {c.account.displayNumber || c.account.accountNumber}
                             </div>
                             <div className="text-xs text-text-muted mt-0.5 break-words">
                               {c.description}

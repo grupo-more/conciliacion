@@ -57,7 +57,13 @@ export async function GET(
         description: string;
         counterpartyName: string | null;
         counterpartyRut: string | null;
-        account: { id: string; bankName: string; accountNumber: string };
+        account: {
+          id: string;
+          bankName: string;
+          accountNumber: string;
+          displayNumber: string | null;
+          holderName: string;
+        };
       }>
     | null = null;
 
@@ -126,6 +132,8 @@ export async function GET(
               id: rep.account.id,
               bankName: rep.account.bankName,
               accountNumber: rep.account.accountNumber,
+              displayNumber: rep.account.displayNumber,
+              holderName: rep.account.holderName,
             },
             duplicateInCartola: isDuplicate,
             duplicateCount: group.length,
@@ -177,6 +185,8 @@ export async function GET(
               id: l.bankMovement.account.id,
               bankName: l.bankMovement.account.bankName,
               accountNumber: l.bankMovement.account.accountNumber,
+              displayNumber: l.bankMovement.account.displayNumber,
+              holderName: l.bankMovement.account.holderName,
             },
           })),
         }
