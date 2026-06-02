@@ -38,8 +38,12 @@ export interface MovementDTO {
   branchLabel: string | null;
   txType: string | null;
   /** Si el BankMovement esta vinculado a un Consolidado, se incluye su id+status.
-   *  null = no esta vinculado (sin matchear o egreso). */
+   *  null = no esta vinculado (sin matchear, abono Transbank, o egreso). */
   consolidado: { id: string; status: string } | null;
+  /** True si la glosa matchea el patrón de abono Transbank ("ABN CRD ... TRANSBA").
+   *  Estos movimientos no se concilian con Tesorería — tienen su propio asiento
+   *  en el tab "Abono Transbank" de Consolidados. */
+  transbank: boolean;
 }
 
 export interface CartolaSummary {
@@ -50,6 +54,10 @@ export interface CartolaSummary {
   inSum: string;
   inConciliatedSum: string;
   inPendingSum: string;
+  /** Cantidad de abonos Transbank (IN con glosa "ABN CRD ... TRANSBA"). */
+  inTransbank: number;
+  /** Suma de abonos Transbank en CLP (BigInt como string). */
+  inTransbankSum: string;
   outTotal: number;
   outSum: string;
 }

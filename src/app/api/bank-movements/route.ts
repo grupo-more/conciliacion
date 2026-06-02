@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
+import { isTransbank } from "@/lib/transbank/detect";
 
 /**
  * GET /api/bank-movements
@@ -71,9 +72,18 @@ export async function GET(req: Request) {
   }
 
   if (onlyUnmatched) {
-    // Solo IN sin link a ningun Consolidado
+    // Solo IN sin link a ningun Consolidado y que NO sean abonos Transbank
+    // (esos tienen su propio asiento en el tab Abono Transbank de Consolidados).
     where.direction = "IN";
     where.consolidadoLinks = { none: {} };
+    where.NOT = [
+      {
+        AND: [
+          { description: { contains: "abn crd", mode: "insensitive" } },
+          { description: { contains: "transba", mode: "insensitive" } },
+        ],
+      },
+    ];
   }
 
   const [rows, total] = await Promise.all([
@@ -114,6 +124,8 @@ export async function GET(req: Request) {
         inSum: string;
         inConciliatedSum: string;
         inPendingSum: string;
+        inTransbank: number;
+        inTransbankSum: string;
         outTotal: number;
         outSum: string;
       }
@@ -129,6 +141,8 @@ export async function GET(req: Request) {
             in_sum: bigint | null;
             in_rec_n: bigint;
             in_rec_sum: bigint | null;
+            in_tbk_n: bigint;
+            in_tbk_sum: bigint | null;
             out_n: bigint;
             out_sum: bigint | null;
           }>
@@ -159,6 +173,23 @@ export async function GET(req: Request) {
                 ELSE 0
               END
             ), 0)::bigint AS in_rec_sum,
+            COUNT(
+              CASE
+                WHEN direction='IN'
+                  AND description ILIKE '%abn crd%'
+                  AND description ILIKE '%transba%'
+                THEN 1
+              END
+            )::bigint AS in_tbk_n,
+            COALESCE(SUM(
+              CASE
+                WHEN direction='IN'
+                  AND description ILIKE '%abn crd%'
+                  AND description ILIKE '%transba%'
+                THEN amount
+                ELSE 0
+              END
+            ), 0)::bigint AS in_tbk_sum,
             COUNT(CASE WHEN direction='OUT' THEN 1 END)::bigint AS out_n,
             COALESCE(SUM(CASE WHEN direction='OUT' THEN ABS(amount) ELSE 0 END), 0)::bigint AS out_sum
           FROM "BankMovement" bm
@@ -170,6 +201,8 @@ export async function GET(req: Request) {
             in_sum: bigint | null;
             in_rec_n: bigint;
             in_rec_sum: bigint | null;
+            in_tbk_n: bigint;
+            in_tbk_sum: bigint | null;
             out_n: bigint;
             out_sum: bigint | null;
           }>
@@ -200,6 +233,23 @@ export async function GET(req: Request) {
                 ELSE 0
               END
             ), 0)::bigint AS in_rec_sum,
+            COUNT(
+              CASE
+                WHEN direction='IN'
+                  AND description ILIKE '%abn crd%'
+                  AND description ILIKE '%transba%'
+                THEN 1
+              END
+            )::bigint AS in_tbk_n,
+            COALESCE(SUM(
+              CASE
+                WHEN direction='IN'
+                  AND description ILIKE '%abn crd%'
+                  AND description ILIKE '%transba%'
+                THEN amount
+                ELSE 0
+              END
+            ), 0)::bigint AS in_tbk_sum,
             COUNT(CASE WHEN direction='OUT' THEN 1 END)::bigint AS out_n,
             COALESCE(SUM(CASE WHEN direction='OUT' THEN ABS(amount) ELSE 0 END), 0)::bigint AS out_sum
           FROM "BankMovement" bm
@@ -209,16 +259,24 @@ export async function GET(req: Request) {
     const a = accountAggs[0];
     const inTotal = Number(a?.in_n ?? 0);
     const inRecCount = Number(a?.in_rec_n ?? 0);
+    const inTbkCount = Number(a?.in_tbk_n ?? 0);
     const inSum = a?.in_sum ?? 0n;
     const inRecSum = a?.in_rec_sum ?? 0n;
+    const inTbkSum = a?.in_tbk_sum ?? 0n;
+    // Pendientes "Sin matchear" = IN sin conciliar y que NO son abonos Transbank.
+    // (Los Transbank tienen su propio asiento en el tab Abono Transbank.)
+    const inPendingCount = inTotal - inRecCount - inTbkCount;
+    const inPendingSum = inSum - inRecSum - inTbkSum;
     summary = {
       total: inTotal + Number(a?.out_n ?? 0),
       inTotal,
       inConciliated: inRecCount,
-      inPending: inTotal - inRecCount,
+      inPending: inPendingCount,
       inSum: inSum.toString(),
       inConciliatedSum: inRecSum.toString(),
-      inPendingSum: (inSum - inRecSum).toString(),
+      inPendingSum: inPendingSum.toString(),
+      inTransbank: inTbkCount,
+      inTransbankSum: inTbkSum.toString(),
       outTotal: Number(a?.out_n ?? 0),
       outSum: (a?.out_sum ?? 0n).toString(),
     };
@@ -251,6 +309,7 @@ export async function GET(req: Request) {
         branchLabel: m.branchLabel,
         txType: m.txType,
         consolidado,
+        transbank: isTransbank(m),
       };
     }),
     summary,
