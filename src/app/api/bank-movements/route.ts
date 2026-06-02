@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import { isTransbank } from "@/lib/transbank/detect";
+import { getDifMenorSettings, isDifMenor } from "@/lib/dif-menor/detect";
 
 /**
  * GET /api/bank-movements
@@ -41,6 +42,11 @@ export async function GET(req: Request) {
   const includeSummary = url.searchParams.get("includeSummary") === "true";
   const limit = clampInt(url.searchParams.get("limit"), 1, 500, 200);
   const offset = clampInt(url.searchParams.get("offset"), 0, 100000, 0);
+
+  // El threshold de "dif menor" se usa para marcar movimientos en el DTO
+  // y para excluirlos del conteo "Sin matchear" en el summary del pie.
+  const difSettings = await getDifMenorSettings();
+  const difThreshold = difSettings.threshold;
 
   const where: Prisma.BankMovementWhereInput = {};
   if (accountId) where.accountId = accountId;
@@ -126,6 +132,8 @@ export async function GET(req: Request) {
         inPendingSum: string;
         inTransbank: number;
         inTransbankSum: string;
+        inDifMenor: number;
+        inDifMenorSum: string;
         outTotal: number;
         outSum: string;
       }
@@ -134,6 +142,8 @@ export async function GET(req: Request) {
     // Computar agregados. Cuando hay accountId, sobre esa cuenta; sino global
     // (todas las cuentas excepto _UNASSIGNED_*).
     // No aplicamos filtros de búsqueda/fecha para que el pie sea estable.
+    // El predicado "dif menor" es: IN, amount > 0, amount <= threshold y
+    // NO matchea Transbank (mutuamente excluyentes en el conteo).
     const accountAggs = accountId
       ? await prisma.$queryRaw<
           Array<{
@@ -143,6 +153,8 @@ export async function GET(req: Request) {
             in_rec_sum: bigint | null;
             in_tbk_n: bigint;
             in_tbk_sum: bigint | null;
+            in_dif_n: bigint;
+            in_dif_sum: bigint | null;
             out_n: bigint;
             out_sum: bigint | null;
           }>
@@ -190,6 +202,29 @@ export async function GET(req: Request) {
                 ELSE 0
               END
             ), 0)::bigint AS in_tbk_sum,
+            COUNT(
+              CASE
+                WHEN direction='IN'
+                  AND amount > 0
+                  AND amount <= ${BigInt(difThreshold)}
+                  AND NOT (
+                    description ILIKE '%abn crd%' AND description ILIKE '%transba%'
+                  )
+                THEN 1
+              END
+            )::bigint AS in_dif_n,
+            COALESCE(SUM(
+              CASE
+                WHEN direction='IN'
+                  AND amount > 0
+                  AND amount <= ${BigInt(difThreshold)}
+                  AND NOT (
+                    description ILIKE '%abn crd%' AND description ILIKE '%transba%'
+                  )
+                THEN amount
+                ELSE 0
+              END
+            ), 0)::bigint AS in_dif_sum,
             COUNT(CASE WHEN direction='OUT' THEN 1 END)::bigint AS out_n,
             COALESCE(SUM(CASE WHEN direction='OUT' THEN ABS(amount) ELSE 0 END), 0)::bigint AS out_sum
           FROM "BankMovement" bm
@@ -203,6 +238,8 @@ export async function GET(req: Request) {
             in_rec_sum: bigint | null;
             in_tbk_n: bigint;
             in_tbk_sum: bigint | null;
+            in_dif_n: bigint;
+            in_dif_sum: bigint | null;
             out_n: bigint;
             out_sum: bigint | null;
           }>
@@ -250,6 +287,29 @@ export async function GET(req: Request) {
                 ELSE 0
               END
             ), 0)::bigint AS in_tbk_sum,
+            COUNT(
+              CASE
+                WHEN direction='IN'
+                  AND amount > 0
+                  AND amount <= ${BigInt(difThreshold)}
+                  AND NOT (
+                    description ILIKE '%abn crd%' AND description ILIKE '%transba%'
+                  )
+                THEN 1
+              END
+            )::bigint AS in_dif_n,
+            COALESCE(SUM(
+              CASE
+                WHEN direction='IN'
+                  AND amount > 0
+                  AND amount <= ${BigInt(difThreshold)}
+                  AND NOT (
+                    description ILIKE '%abn crd%' AND description ILIKE '%transba%'
+                  )
+                THEN amount
+                ELSE 0
+              END
+            ), 0)::bigint AS in_dif_sum,
             COUNT(CASE WHEN direction='OUT' THEN 1 END)::bigint AS out_n,
             COALESCE(SUM(CASE WHEN direction='OUT' THEN ABS(amount) ELSE 0 END), 0)::bigint AS out_sum
           FROM "BankMovement" bm
@@ -260,13 +320,15 @@ export async function GET(req: Request) {
     const inTotal = Number(a?.in_n ?? 0);
     const inRecCount = Number(a?.in_rec_n ?? 0);
     const inTbkCount = Number(a?.in_tbk_n ?? 0);
+    const inDifCount = Number(a?.in_dif_n ?? 0);
     const inSum = a?.in_sum ?? 0n;
     const inRecSum = a?.in_rec_sum ?? 0n;
     const inTbkSum = a?.in_tbk_sum ?? 0n;
-    // Pendientes "Sin matchear" = IN sin conciliar y que NO son abonos Transbank.
-    // (Los Transbank tienen su propio asiento en el tab Abono Transbank.)
-    const inPendingCount = inTotal - inRecCount - inTbkCount;
-    const inPendingSum = inSum - inRecSum - inTbkSum;
+    const inDifSum = a?.in_dif_sum ?? 0n;
+    // Pendientes "Sin matchear" = IN sin conciliar y que NO son Transbank ni
+    // dif menor. (Esos tienen su propio asiento contable en Consolidados.)
+    const inPendingCount = inTotal - inRecCount - inTbkCount - inDifCount;
+    const inPendingSum = inSum - inRecSum - inTbkSum - inDifSum;
     summary = {
       total: inTotal + Number(a?.out_n ?? 0),
       inTotal,
@@ -277,6 +339,8 @@ export async function GET(req: Request) {
       inPendingSum: inPendingSum.toString(),
       inTransbank: inTbkCount,
       inTransbankSum: inTbkSum.toString(),
+      inDifMenor: inDifCount,
+      inDifMenorSum: inDifSum.toString(),
       outTotal: Number(a?.out_n ?? 0),
       outSum: (a?.out_sum ?? 0n).toString(),
     };
@@ -310,6 +374,7 @@ export async function GET(req: Request) {
         txType: m.txType,
         consolidado,
         transbank: isTransbank(m),
+        difMenor: !isTransbank(m) && isDifMenor(m, difThreshold),
       };
     }),
     summary,

@@ -349,6 +349,9 @@ export function CartolasView() {
                   <span className="inline-block w-1 h-3 bg-sky-500 rounded-sm" /> Abono Transbank
                 </span>
                 <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-1 h-3 bg-violet-500 rounded-sm" /> Dif menor
+                </span>
+                <span className="inline-flex items-center gap-1">
                   <span className="inline-block w-1 h-3 bg-text-muted/30 rounded-sm" /> Egreso (no aplica)
                 </span>
               </div>
@@ -595,7 +598,7 @@ function computeRowStatus(m: MovementDTO): RowStatus {
     };
   }
 
-  // IN sin link → puede ser abono Transbank (asiento propio) o pendiente
+  // IN sin link → puede ser abono Transbank, dif menor (asientos propios) o pendiente
   if (!m.consolidado) {
     if (m.transbank) {
       return {
@@ -605,6 +608,16 @@ function computeRowStatus(m: MovementDTO): RowStatus {
         borderCls: "w-[3px] bg-sky-500",
         badgeCls: "border-sky-400/40 bg-sky-50 text-sky-700",
         rowBg: "bg-sky-50/30",
+      };
+    }
+    if (m.difMenor) {
+      return {
+        label: "Dif menor",
+        title:
+          "Transferencia chica (bajo el umbral configurado). Tiene asiento propio en Consolidados → tab Dif menor a 100.",
+        borderCls: "w-[3px] bg-violet-500",
+        badgeCls: "border-violet-400/40 bg-violet-50 text-violet-700",
+        rowBg: "bg-violet-50/30",
       };
     }
     return {
@@ -695,7 +708,7 @@ function CartolaSummaryStrip({
         )}
       </div>
 
-      <div className="mt-3 grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+      <div className="mt-3 grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
         <SummaryItem
           label="Abonos totales"
           value={`${summary.inTotal}`}
@@ -719,6 +732,12 @@ function CartolaSummaryStrip({
           value={`${summary.inTransbank}`}
           sub={formatMoney(Number(BigInt(summary.inTransbankSum)))}
           tone={summary.inTransbank > 0 ? "info" : "muted"}
+        />
+        <SummaryItem
+          label="Dif menor"
+          value={`${summary.inDifMenor}`}
+          sub={formatMoney(Number(BigInt(summary.inDifMenorSum)))}
+          tone={summary.inDifMenor > 0 ? "accent" : "muted"}
         />
         <SummaryItem
           label="Cargos (egresos)"
@@ -757,7 +776,7 @@ function SummaryItem({
   label: string;
   value: string;
   sub: string;
-  tone: "brand" | "good" | "warn" | "info" | "muted";
+  tone: "brand" | "good" | "warn" | "info" | "accent" | "muted";
 }) {
   const toneCls =
     tone === "brand"
@@ -768,6 +787,8 @@ function SummaryItem({
       ? "text-warn"
       : tone === "info"
       ? "text-sky-600"
+      : tone === "accent"
+      ? "text-violet-600"
       : "text-text-muted";
   return (
     <div>

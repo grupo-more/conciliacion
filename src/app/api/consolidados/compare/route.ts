@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
+import { getDifMenorSettings } from "@/lib/dif-menor/detect";
 
 /**
  * GET /api/consolidados/compare
@@ -44,9 +45,10 @@ export async function GET(req: Request) {
     : new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
   // Bank movements
-  // Los abonos Transbank se excluyen de Comparar — viven en el tab "Abono
-  // Transbank" de Consolidados con asiento contable propio y no se concilian
+  // Excluimos de Comparar tanto Transbank como las "diferencias menores":
+  // ambos tienen asiento contable propio en Consolidados y no se concilian
   // contra Tesorería, así que no tienen nada que comparar acá.
+  const difSettings = await getDifMenorSettings();
   const bankWhere: Prisma.BankMovementWhereInput = {
     direction: "IN",
     postDate: { gte: since, lte: until },
@@ -58,6 +60,9 @@ export async function GET(req: Request) {
           { description: { contains: "abn crd", mode: "insensitive" } },
           { description: { contains: "transba", mode: "insensitive" } },
         ],
+      },
+      {
+        amount: { gt: 0n, lte: BigInt(difSettings.threshold) },
       },
     ],
   };

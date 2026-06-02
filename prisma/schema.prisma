@@ -438,3 +438,14 @@ model ConsolidadoLink {
   @@unique([bankMovementId])  // un bank movement no puede estar en 2 consolidados
   @@index([consolidadoId])
 }
+
+// Setting global del módulo "Dif menor a 100": detecta abonos IN bajo un
+// umbral (transferencias chicas de "prueba" antes de la real) y los manda
+// contra un rubro de diferencia, para no ensuciar la conciliación.
+// Tabla con un único row (id = "default") editable desde Configuración.
+model DifMenorSettings {
+  id              String   @id @default("default")
+  threshold       Int      @default(100)  // CLP, inclusivo (<= threshold)
+  rubroDiferencia Int      @default(2050) @map("rubro_diferencia")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+}

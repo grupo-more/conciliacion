@@ -44,6 +44,10 @@ export interface MovementDTO {
    *  Estos movimientos no se concilian con Tesorería — tienen su propio asiento
    *  en el tab "Abono Transbank" de Consolidados. */
   transbank: boolean;
+  /** True si el movimiento es una "diferencia menor" (IN ≤ threshold configurable,
+   *  excluyendo Transbank). Tiene su propio asiento en el tab "Dif menor a 100"
+   *  de Consolidados. Mutuamente excluyente con transbank. */
+  difMenor: boolean;
 }
 
 export interface CartolaSummary {
@@ -58,6 +62,10 @@ export interface CartolaSummary {
   inTransbank: number;
   /** Suma de abonos Transbank en CLP (BigInt como string). */
   inTransbankSum: string;
+  /** Cantidad de diferencias menores (IN ≤ threshold, sin contar Transbank). */
+  inDifMenor: number;
+  /** Suma de diferencias menores en CLP (BigInt como string). */
+  inDifMenorSum: string;
   outTotal: number;
   outSum: string;
 }

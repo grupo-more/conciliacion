@@ -4,8 +4,9 @@ import { useState } from "react";
 import { PerfilTab } from "./PerfilTab";
 import { RubrosTab } from "./RubrosTab";
 import { BankAliasesTab } from "./BankAliasesTab";
+import { DifMenorTab } from "./DifMenorTab";
 
-type Tab = "perfil" | "rubros" | "aliases";
+type Tab = "perfil" | "rubros" | "aliases" | "dif-menor";
 
 interface Props {
   user: { email: string; name: string | null };
@@ -34,6 +35,9 @@ export function ConfiguracionView({ user }: Props) {
           <TabButton active={tab === "aliases"} onClick={() => setTab("aliases")}>
             Mapeo de cuentas
           </TabButton>
+          <TabButton active={tab === "dif-menor"} onClick={() => setTab("dif-menor")}>
+            Dif menor a 100
+          </TabButton>
         </nav>
       </div>
 
@@ -41,6 +45,7 @@ export function ConfiguracionView({ user }: Props) {
         {tab === "perfil" && <PerfilTab user={user} />}
         {tab === "rubros" && <RubrosTab />}
         {tab === "aliases" && <BankAliasesTab />}
+        {tab === "dif-menor" && <DifMenorTab />}
       </div>
     </div>
   );
