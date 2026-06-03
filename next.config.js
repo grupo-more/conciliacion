@@ -1,4 +1,23 @@
 /** @type {import('next').NextConfig} */
+
+// CSP en modo Report-Only: el navegador NO bloquea recursos que violen la
+// política, solo los reporta en la consola. Es la fase 1 segura — permite ver
+// qué romperíamos antes de promover a CSP estricta (Content-Security-Policy).
+// 'unsafe-inline' y 'unsafe-eval' están permitidos porque Next 14 los necesita
+// para hidratación y dev; cuando se endurezca conviene migrar a nonces.
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob:",
+  "font-src 'self' data:",
+  "connect-src 'self'",
+  "frame-ancestors 'none'",
+  "form-action 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+].join("; ");
+
 const securityHeaders = [
   // Anti-clickjacking: nadie puede embeber la app en un <iframe>.
   { key: "X-Frame-Options", value: "DENY" },
@@ -17,6 +36,8 @@ const securityHeaders = [
     key: "Strict-Transport-Security",
     value: "max-age=31536000; includeSubDomains",
   },
+  // CSP en modo Report-Only para descubrir qué romperíamos antes de bloquear.
+  { key: "Content-Security-Policy-Report-Only", value: csp },
 ];
 
 const nextConfig = {

@@ -3,6 +3,8 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { audit } from "@/lib/audit-log";
+import { getClientIp } from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   currentPassword: z.string().min(1),
@@ -50,6 +52,12 @@ export async function PATCH(req: Request) {
   await prisma.user.update({
     where: { id: user.id },
     data: { passwordHash: newHash },
+  });
+
+  audit("auth.password.changed", {
+    ip: getClientIp(req),
+    email: user.email,
+    userId: user.id,
   });
 
   return NextResponse.json({ ok: true });
