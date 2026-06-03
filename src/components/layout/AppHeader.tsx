@@ -56,7 +56,7 @@ export function AppHeader({ user, onMenuClick }: Props) {
         />
         <div className="min-w-0">
           <div className="hidden md:block text-[10px] uppercase tracking-[0.2em] text-text-muted font-semibold">
-            MoreGiros
+            MORE
           </div>
           <div className="text-sm md:text-base font-bold text-brand transition-colors duration-300 truncate">
             {sectionLabel}

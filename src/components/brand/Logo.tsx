@@ -1,13 +1,13 @@
 /**
- * Logo MoreGiros — variante "M" estilizada en disco corporativo.
+ * Logo MORE — variante "M" estilizada en disco corporativo.
  *
  * Diseñada con tipografía Montserrat ExtraBold (la tipográfica principal
  * del manual de marca 2024). La M se inscribe en un disco azul corporativo
  * (#243a85) sobre blanco, o blanco sobre el disco según el tono.
  *
  * Variantes:
- *   - "horizontal": M + "MOREGIROS by MORE EXCHANGE"
- *   - "vertical":   M arriba + "MORE / GIROS" abajo
+ *   - "horizontal": M + "MORE"
+ *   - "vertical":   M arriba + "MORE" abajo
  *   - "mark":       solo la M en el disco
  *
  * Tonos:
@@ -26,7 +26,7 @@ export function Logo({
   variant = "horizontal",
   tone = "brand",
   className,
-  title = "MoreGiros",
+  title = "MORE",
 }: LogoProps) {
   const colors = getColors(tone);
 
@@ -49,7 +49,7 @@ export function Logo({
     return (
       <svg
         className={className}
-        viewBox="0 0 200 250"
+        viewBox="0 0 200 200"
         role="img"
         aria-label={title}
         xmlns="http://www.w3.org/2000/svg"
@@ -71,30 +71,6 @@ export function Logo({
           >
             MORE
           </text>
-          <text
-            x="100"
-            y="86"
-            textAnchor="middle"
-            fontFamily="var(--font-montserrat), sans-serif"
-            fontWeight="400"
-            fontSize="44"
-            letterSpacing="0.04em"
-            fill={colors.text}
-          >
-            GIROS
-          </text>
-          <text
-            x="100"
-            y="108"
-            textAnchor="middle"
-            fontFamily="var(--font-montserrat), sans-serif"
-            fontWeight="500"
-            fontSize="10"
-            letterSpacing="0.1em"
-            fill={colors.tagline}
-          >
-            Una empresa MORE EXCHANGE
-          </text>
         </g>
       </svg>
     );
@@ -104,7 +80,7 @@ export function Logo({
   return (
     <svg
       className={className}
-      viewBox="0 0 480 110"
+      viewBox="0 0 280 110"
       role="img"
       aria-label={title}
       xmlns="http://www.w3.org/2000/svg"
@@ -124,28 +100,6 @@ export function Logo({
           fill={colors.text}
         >
           MORE
-        </text>
-        <text
-          x="237"
-          y="62"
-          fontFamily="var(--font-montserrat), sans-serif"
-          fontWeight="400"
-          fontSize="44"
-          letterSpacing="0.04em"
-          fill={colors.text}
-        >
-          GIROS
-        </text>
-        <text
-          x="237"
-          y="84"
-          fontFamily="var(--font-montserrat), sans-serif"
-          fontWeight="600"
-          fontSize="11"
-          letterSpacing="0.2em"
-          fill={colors.tagline}
-        >
-          BY MORE EXCHANGE
         </text>
       </g>
     </svg>

@@ -68,11 +68,8 @@ function LoginForm() {
         </div>
         <div className="mt-5 text-center">
           <h1 className="text-2xl font-bold tracking-tight text-gradient-brand">
-            MOREGIROS
+            MORE
           </h1>
-          <p className="text-xs uppercase tracking-[0.2em] text-text-muted mt-1">
-            by More Exchange
-          </p>
         </div>
       </div>
 
@@ -167,7 +164,7 @@ function LoginForm() {
       </form>
 
       <p className="text-center text-[10px] uppercase tracking-[0.22em] text-text-dim mt-8">
-        © {new Date().getFullYear()} · MoreGiros
+        © {new Date().getFullYear()} · MORE
         <span className="text-accent mx-1.5">●</span>
         Plataforma interna
       </p>

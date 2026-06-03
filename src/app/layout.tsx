@@ -12,12 +12,11 @@ const montserrat = Montserrat({
 
 export const metadata: Metadata = {
   title: {
-    default: "MoreGiros · Conciliación",
-    template: "%s · MoreGiros",
+    default: "MORE · Conciliación",
+    template: "%s · MORE",
   },
-  description:
-    "Plataforma de conciliación bancaria — MoreGiros by More Exchange",
-  applicationName: "MoreGiros Conciliación",
+  description: "Plataforma de conciliación bancaria — MORE",
+  applicationName: "MORE Conciliación",
 };
 
 export const viewport: Viewport = {

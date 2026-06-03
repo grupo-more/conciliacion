@@ -45,7 +45,11 @@ export interface ParsedGlosa {
 }
 
 const DEP_PREFIX_RE = /^\s*DEP(?:OSITO)?S?\s+/i;
-const MULTIPART_RE = /^\(?(\d+)\)?\s+/;
+// Marcador multipart: EXIGE paréntesis para distinguir del folio. La sucursal
+// pone "(1)", "(2)", "(3)" cuando un depósito se cargó en N tesorerías. Sin
+// los paréntesis, "DEP 1166751 SANTANDER ME" (donde 1166751 es el folio) se
+// matcheaba como multipart por error.
+const MULTIPART_RE = /^\((\d{1,3})\)\s+/;
 
 /** Quita puntos del RUT y normaliza a "12345678-K" (mayúsculas, con guion). */
 function normalizeRutLoose(raw: string): string | null {

@@ -139,7 +139,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             href="/dashboard"
             onClick={onMobileClose}
             className="block group flex-1 min-w-0"
-            aria-label="MoreGiros"
+            aria-label="MORE"
           >
             <div className="flex items-center gap-3">
               <Logo
@@ -149,10 +149,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               />
               <div>
                 <div className="text-base font-bold tracking-tight text-brand leading-tight">
-                  MOREGIROS
-                </div>
-                <div className="text-[9px] uppercase tracking-[0.18em] text-text-muted leading-tight mt-0.5">
-                  By More Exchange
+                  MORE
                 </div>
               </div>
             </div>
