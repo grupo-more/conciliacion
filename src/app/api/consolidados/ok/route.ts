@@ -122,11 +122,18 @@ export async function GET(req: Request) {
     //   está mal porque ellos tipearon mal el banco al cargar)
     //   → tm.rubroBanco (la API, default)
 
-    // 1 fila por cada BankMovement (lado banco)
+    // 1 fila por cada BankMovement (lado banco).
+    //
+    // En split inverso (1 cartola repartida en N tesorerías), cada
+    // ConsolidadoLink trae amountAllocated con la porción que va a ESTE
+    // consolidado, no el bm.amount completo. Para el caso 1:1 / N:1
+    // histórico, amountAllocated es null y se usa bm.amount entero
+    // (semántica legacy intacta).
     let bankSum = 0n;
     for (const link of c.links) {
       const bm = link.bankMovement;
-      const abs = bm.amount < 0n ? -bm.amount : bm.amount;
+      const linkAmount = link.amountAllocated ?? bm.amount;
+      const abs = linkAmount < 0n ? -linkAmount : linkAmount;
       bankSum += abs;
 
       const effectiveRubroBanco = c.overrideRubroBanco ?? tm.rubroBanco;

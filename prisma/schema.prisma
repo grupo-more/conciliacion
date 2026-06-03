@@ -265,17 +265,26 @@ model Consolidado {
 }
 
 // Cada BankMovement asociado a un Consolidado.
+//
+// amountAllocated: porción del BankMovement.amount que este Consolidado
+// consume. Habilita el split inverso (1 cartola → N tesorerías): el mismo
+// BankMovement puede aparecer en N links, cada uno con su allocation. La
+// suma de allocations de un BM no puede exceder su amount (validado en
+// código en /api/consolidados/manual-link). null = "allocation completa"
+// para compatibilidad con links históricos (1:1 o M-bancos:1-tesorería),
+// donde el match consume todo el monto del BM.
 model ConsolidadoLink {
   id              String       @id @default(uuid())
   consolidadoId   String       @map("consolidado_id")
   consolidado     Consolidado  @relation(fields: [consolidadoId], references: [id], onDelete: Cascade)
   bankMovementId  String       @map("bank_movement_id")
   bankMovement    BankMovement @relation(fields: [bankMovementId], references: [id], onDelete: Cascade)
+  amountAllocated BigInt?      @map("amount_allocated")
   createdAt       DateTime     @default(now()) @map("created_at")
 
   @@unique([consolidadoId, bankMovementId])
-  @@unique([bankMovementId])  // un bank movement no puede estar en 2 consolidados
   @@index([consolidadoId])
+  @@index([bankMovementId])
 }
 
 // Setting global del módulo "Dif menor a 100": detecta abonos IN bajo un

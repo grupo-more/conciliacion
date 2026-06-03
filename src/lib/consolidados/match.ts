@@ -27,6 +27,7 @@
  */
 import { prisma } from "@/lib/db";
 import { normalizeRut } from "@/lib/cartolas/normalize";
+import { parseGlosa } from "@/lib/consolidados/glosa";
 import type {
   BankAccount,
   BankAccountAlias,
@@ -590,6 +591,10 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
   const allCandidates: CandidateBase[] = [];
   const outOfScopeTids = new Set<string>();
   const reviewExceptionTids = new Set<string>(); // esExcepcion=true
+  // Tesorerias con glosa "DEP (N) ..." → split inverso. NO se auto-scorea
+  // contra cartolas porque su monto es solo una porción del depósito real,
+  // y un EXACT/SPLIT contra un BM completo sería un falso positivo.
+  const multiPartTids = new Set<string>();
 
   const processable = allTesorerias.filter((t) => !manualTesoreriaIds.has(t.id));
   summary.processed = processable.length;
@@ -605,6 +610,13 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
     // esExcepcion=true => REVIEW automatico, sin candidatos
     if (t.esExcepcion) {
       reviewExceptionTids.add(t.id);
+      continue;
+    }
+
+    // Glosa multipart "DEP (N) ..." => REVIEW para link manual.
+    // No corre scoring porque el monto del TM es parcial.
+    if (parseGlosa(t.glosa).isMultiPart) {
+      multiPartTids.add(t.id);
       continue;
     }
 
@@ -661,6 +673,23 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
                   matchType: null,
                   resolvedAccountId: aliasAccount.id,
                   notes: "Marcado como excepción por la API (esExcepcion=true).",
+                },
+              });
+              summary.review++;
+              continue;
+            }
+
+            // Caso 2b: glosa multipart "DEP (N) ..." => REVIEW manual.
+            if (multiPartTids.has(t.id)) {
+              const aliasAccount = aliasMap.get(t.banco!)!;
+              await tx.consolidado.create({
+                data: {
+                  tesoreriaMovementId: t.id,
+                  status: "REVIEW",
+                  matchType: null,
+                  resolvedAccountId: aliasAccount.id,
+                  notes:
+                    "Parte de un depósito agrupado (glosa con marcador). Vincular manualmente con las otras partes.",
                 },
               });
               summary.review++;
@@ -743,6 +772,10 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
         continue;
       }
       if (reviewExceptionTids.has(t.id)) {
+        summary.review++;
+        continue;
+      }
+      if (multiPartTids.has(t.id)) {
         summary.review++;
         continue;
       }

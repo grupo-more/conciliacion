@@ -43,10 +43,35 @@ interface TesoreriaCompareDTO {
     score: number | null;
     matchType: string | null;
   } | null;
+  /** Glosa parseada por src/lib/consolidados/glosa.ts. isMultiPart=true
+   *  indica que es "DEP (N) ..." → parte de un depósito agrupado. */
+  glosaParsed?: {
+    isMultiPart: boolean;
+    partNumber: number | null;
+  };
+  /** Si esta tesorería forma parte de una sugerencia de split inverso
+   *  detectada por el backend (otras tesorerías del mismo cliente cuya
+   *  suma matchea un BankMovement sin matchear). */
+  suggestedSplit?: {
+    bankMovementId: string;
+    tesoreriaIds: string[];
+    totalAmount: string;
+  } | null;
+}
+
+interface BankMovementWithSuggestion extends BankMovementDTO {
+  /** Si esta cartola tiene un candidato a split inverso (varias tesorerías
+   *  cuyo monto suma esta cartola), el backend lo señala acá. */
+  suggestedSplit?: {
+    tesoreriaIds: string[];
+    totalAmount: string;
+    clienteRut: string;
+    banco: string;
+  } | null;
 }
 
 interface CompareResponse {
-  bankMovements: BankMovementDTO[];
+  bankMovements: BankMovementWithSuggestion[];
   tesoreriaMovements: TesoreriaCompareDTO[];
   accounts: Array<{
     id: string;
@@ -59,6 +84,17 @@ interface CompareResponse {
   }>;
   bancos: string[];
   range: { since: string; until: string };
+}
+
+interface SiblingHint {
+  message: string;
+  siblings: Array<{
+    id: string;
+    fecha: string;
+    monto: string;
+    glosa: string;
+    clienteName: string | null;
+  }>;
 }
 
 function defaultSince(): string {
@@ -89,11 +125,16 @@ export function CompareView() {
 
   // Selección
   const [selectedBankIds, setSelectedBankIds] = useState<Set<string>>(new Set());
-  const [selectedTesoreriaId, setSelectedTesoreriaId] = useState<string | null>(
-    null
+  // Soporta seleccionar 1 o N tesorerías. N>1 habilita el split inverso
+  // (1 cartola repartida entre varias tesorerías del mismo cliente).
+  const [selectedTesoreriaIds, setSelectedTesoreriaIds] = useState<Set<string>>(
+    new Set()
   );
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
+  // Cuando el backend detecta que la diferencia podría ser otra tesorería
+  // sin matchear (warning POSSIBLE_SIBLING), mostramos modal de confirmación.
+  const [siblingHint, setSiblingHint] = useState<SiblingHint | null>(null);
 
   // Ajuste para match con diferencia
   const [adjustOpen, setAdjustOpen] = useState(false);
@@ -203,14 +244,28 @@ export function CompareView() {
     return sum;
   }, [data, selectedBankIds]);
 
-  const selectedTesoreria = useMemo(() => {
-    if (!data || !selectedTesoreriaId) return null;
-    return data.tesoreriaMovements.find((t) => t.id === selectedTesoreriaId) ?? null;
-  }, [data, selectedTesoreriaId]);
+  const selectedTesorerias = useMemo(() => {
+    if (!data) return [] as TesoreriaCompareDTO[];
+    return data.tesoreriaMovements.filter((t) => selectedTesoreriaIds.has(t.id));
+  }, [data, selectedTesoreriaIds]);
+
+  const selectedTesoreriaSum = useMemo(() => {
+    let sum = 0n;
+    for (const t of selectedTesorerias) sum += BigInt(t.monto);
+    return sum;
+  }, [selectedTesorerias]);
+
+  // Single-tesorería compat: cuando hay exactamente una seleccionada, la
+  // exponemos como `selectedTesoreria` para el código existente (warning de
+  // banco distinto, sugerencia de rubro, etc.).
+  const selectedTesoreria = selectedTesorerias.length === 1
+    ? selectedTesorerias[0]
+    : null;
+  const isMultiTesoreria = selectedTesorerias.length > 1;
 
   // Cartolas actualmente seleccionadas (para warning de banco distinto)
   const selectedBanks = useMemo(() => {
-    if (!data) return [] as BankMovementDTO[];
+    if (!data) return [] as BankMovementWithSuggestion[];
     return data.bankMovements.filter((bm) => selectedBankIds.has(bm.id));
   }, [data, selectedBankIds]);
 
@@ -260,20 +315,27 @@ export function CompareView() {
 
   // Diferencia entre lo seleccionado (banco vs tesorería). Si !== 0n hay desajuste.
   const diff = useMemo(() => {
-    if (!selectedTesoreria) return 0n;
-    return selectedBankSum - BigInt(selectedTesoreria.monto);
-  }, [selectedBankSum, selectedTesoreria]);
+    if (selectedTesoreriaIds.size === 0) return 0n;
+    return selectedBankSum - selectedTesoreriaSum;
+  }, [selectedBankSum, selectedTesoreriaSum, selectedTesoreriaIds.size]);
   const hasDiff = diff !== 0n;
   const absDiff = diff < 0n ? -diff : diff;
 
+  // El ajuste por diferencia solo se permite con N=1 tesorería. Con N>1, la
+  // suma DEBE coincidir exacto (no hay forma única de distribuir el ajuste).
+  const adjustmentAllowed = !isMultiTesoreria;
+
   const canLink =
-    selectedTesoreria !== null &&
+    selectedTesoreriaIds.size > 0 &&
     selectedBankIds.size > 0 &&
-    (!hasDiff || (adjustOpen && adjustRubro !== null));
+    (!hasDiff || (adjustmentAllowed && adjustOpen && adjustRubro !== null));
 
   const linkButtonText = (() => {
-    if (selectedBankIds.size === 0 || !selectedTesoreria)
+    if (selectedBankIds.size === 0 || selectedTesoreriaIds.size === 0)
       return "Seleccioná items en ambos lados";
+    if (hasDiff && !adjustmentAllowed) {
+      return `La suma no coincide (${formatMoney(absDiff)} de diferencia) — no se puede ajustar con varias tesorerías`;
+    }
     if (hasDiff && !adjustOpen) {
       return `Matchear con ajuste (${formatMoney(absDiff)} de diferencia)`;
     }
@@ -281,6 +343,9 @@ export function CompareView() {
       return adjustRubro !== null
         ? `Vincular con ajuste de ${formatMoney(absDiff)}`
         : "Elegí un rubro de ajuste";
+    }
+    if (isMultiTesoreria) {
+      return `Vincular ${selectedBankIds.size} cartola${selectedBankIds.size > 1 ? "s" : ""} con ${selectedTesoreriaIds.size} tesorerías (split inverso)`;
     }
     return `Vincular ${selectedBankIds.size} cartola${selectedBankIds.size > 1 ? "s" : ""} con esta Tesorería`;
   })();
@@ -294,11 +359,28 @@ export function CompareView() {
     });
   }
 
-  async function linkSelected() {
-    if (!canLink || !selectedTesoreria) {
-      // Si hay diferencia pero el panel de ajuste no está abierto, abrirlo en
-      // lugar de fallar silenciosamente.
-      if (selectedTesoreria && selectedBankIds.size > 0 && hasDiff && !adjustOpen) {
+  function toggleTesoreria(id: string) {
+    setSelectedTesoreriaIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  /** Vincula las selecciones actuales. Si `acknowledgeSiblingWarning` viene
+   *  en true, se mandó después de que el operador confirmó un warning
+   *  POSSIBLE_SIBLING (la diferencia coincidía con otra tesorería del mismo
+   *  cliente). */
+  async function linkSelected(acknowledgeSiblingWarning = false) {
+    if (!canLink) {
+      if (
+        selectedTesoreriaIds.size > 0 &&
+        selectedBankIds.size > 0 &&
+        hasDiff &&
+        adjustmentAllowed &&
+        !adjustOpen
+      ) {
         setAdjustOpen(true);
       }
       return;
@@ -307,10 +389,10 @@ export function CompareView() {
     setLinkError(null);
     try {
       const body: Record<string, unknown> = {
-        tesoreriaId: selectedTesoreria.id,
+        tesoreriaIds: Array.from(selectedTesoreriaIds),
         bankMovementIds: Array.from(selectedBankIds),
       };
-      if (hasDiff && adjustOpen && adjustRubro !== null) {
+      if (hasDiff && adjustmentAllowed && adjustOpen && adjustRubro !== null) {
         body.adjustment = {
           rubro: adjustRubro,
           note: adjustNote.trim() || null,
@@ -319,6 +401,9 @@ export function CompareView() {
       if (overrideRubroBanco !== null) {
         body.overrideRubroBanco = overrideRubroBanco;
       }
+      if (acknowledgeSiblingWarning) {
+        body.acknowledgeSiblingWarning = true;
+      }
       const res = await fetch("/api/consolidados/manual-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -326,29 +411,53 @@ export function CompareView() {
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
+        // Warning soft: backend detectó posible sibling. Mostramos modal y
+        // dejamos al operador confirmar o cancelar.
+        if (res.status === 409 && e.warning === "POSSIBLE_SIBLING") {
+          setSiblingHint({ message: e.message, siblings: e.siblings ?? [] });
+          return;
+        }
         setLinkError(e.error || "Error al vincular");
         return;
       }
       setSelectedBankIds(new Set());
-      setSelectedTesoreriaId(null);
+      setSelectedTesoreriaIds(new Set());
       setAdjustOpen(false);
       setAdjustRubro(null);
       setAdjustNote("");
       setOverrideRubroBanco(null);
+      setSiblingHint(null);
       await load();
     } finally {
       setLinking(false);
     }
   }
 
-  // Resetear ajuste cuando cambie la selección
+  /** Cuando hay un sibling sugerido, este atajo lo incluye en la selección
+   *  para que el operador cierre el match directamente como split inverso
+   *  (sin ajuste). */
+  function includeSiblingsInSelection() {
+    if (!siblingHint) return;
+    setSelectedTesoreriaIds((prev) => {
+      const next = new Set(prev);
+      for (const s of siblingHint.siblings) next.add(s.id);
+      return next;
+    });
+    setSiblingHint(null);
+    setAdjustOpen(false);
+    setAdjustRubro(null);
+    setAdjustNote("");
+  }
+
+  // Resetear ajuste cuando cambie la selección o se vuelva multi-tesorería
+  // (donde el ajuste no está soportado).
   useEffect(() => {
-    if (!hasDiff) {
+    if (!hasDiff || !adjustmentAllowed) {
       setAdjustOpen(false);
       setAdjustRubro(null);
       setAdjustNote("");
     }
-  }, [hasDiff]);
+  }, [hasDiff, adjustmentAllowed]);
 
   return (
     <div className="space-y-4">
@@ -442,17 +551,19 @@ export function CompareView() {
       </div>
 
       {/* Barra de acción flotante */}
-      {(selectedBankIds.size > 0 || selectedTesoreriaId) && (
+      {(selectedBankIds.size > 0 || selectedTesoreriaIds.size > 0) && (
         <div className="sticky top-16 z-20 rounded-md border border-brand/40 bg-brand/5 backdrop-blur p-3 shadow-soft flex items-center justify-between gap-4 flex-wrap">
           <div className="text-sm">
-            {selectedTesoreria ? (
+            {selectedTesoreriaIds.size > 0 ? (
               <span>
                 <span className="text-text-muted">Tesorería:</span>{" "}
-                <strong>{formatMoney(BigInt(selectedTesoreria.monto))}</strong>{" "}
-                · {selectedTesoreria.clienteName ?? "—"}
+                <strong>{formatMoney(selectedTesoreriaSum)}</strong>{" "}
+                {selectedTesoreriaIds.size === 1
+                  ? `· ${selectedTesorerias[0].clienteName ?? "—"}`
+                  : `· ${selectedTesoreriaIds.size} movimientos`}
               </span>
             ) : (
-              <span className="text-text-muted">Seleccioná un movimiento de Tesorería →</span>
+              <span className="text-text-muted">Seleccioná movimientos de Tesorería →</span>
             )}
             <span className="mx-3 text-text-dim">|</span>
             {selectedBankIds.size > 0 ? (
@@ -469,9 +580,10 @@ export function CompareView() {
             <button
               onClick={() => {
                 setSelectedBankIds(new Set());
-                setSelectedTesoreriaId(null);
+                setSelectedTesoreriaIds(new Set());
                 setLinkError(null);
                 setAdjustOpen(false);
+                setSiblingHint(null);
               }}
               className="btn-ghost text-xs"
             >
@@ -481,16 +593,16 @@ export function CompareView() {
                 panel de ajuste en lugar de intentar vincular. */}
             <button
               onClick={() => {
-                if (hasDiff && !adjustOpen) {
+                if (hasDiff && adjustmentAllowed && !adjustOpen) {
                   setAdjustOpen(true);
                   return;
                 }
                 void linkSelected();
               }}
               disabled={
-                (!canLink && !(hasDiff && !adjustOpen)) ||
+                (!canLink && !(hasDiff && adjustmentAllowed && !adjustOpen)) ||
                 linking ||
-                !selectedTesoreria ||
+                selectedTesoreriaIds.size === 0 ||
                 selectedBankIds.size === 0
               }
               className="btn-primary text-sm disabled:opacity-50"
@@ -500,6 +612,13 @@ export function CompareView() {
           </div>
           {linkError && (
             <div className="w-full text-sm text-rose-700">{linkError}</div>
+          )}
+
+          {/* Aviso de split inverso (multi-tesorería) */}
+          {isMultiTesoreria && (
+            <div className="w-full text-xs rounded-md border border-brand/30 bg-brand/10 text-brand px-3 py-2">
+              <strong>Split inverso:</strong> vas a vincular {selectedTesoreriaIds.size} tesorerías con {selectedBankIds.size} cartola{selectedBankIds.size > 1 ? "s" : ""}. El monto de cada cartola se repartirá automáticamente entre las tesorerías por orden de fecha.
+            </div>
           )}
 
           {/* Override de rubro banco (solo si hay selección completa) */}
@@ -628,6 +747,69 @@ export function CompareView() {
         </div>
       )}
 
+      {/* Modal de sibling: el backend detectó que la diferencia podría ser
+          otra tesorería sin matchear del mismo cliente. Damos al operador
+          dos salidas: incluir esas tesorerías (split inverso) o confirmar
+          el ajuste igual. */}
+      {siblingHint && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSiblingHint(null)}
+        >
+          <div
+            className="bg-bg rounded-md border border-amber-300 shadow-soft max-w-xl w-full p-4 space-y-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-amber-600 text-lg">⚠</span>
+              <h3 className="font-bold text-text">Posible depósito agrupado</h3>
+            </div>
+            <p className="text-sm text-text">{siblingHint.message}</p>
+            <div className="rounded-md border border-border-soft bg-zinc-50 divide-y divide-border-soft text-sm">
+              {siblingHint.siblings.map((s) => (
+                <div key={s.id} className="p-2 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="font-mono text-xs text-text-muted">
+                      {formatDate(s.fecha)} · {s.clienteName ?? "—"}
+                    </div>
+                    <div className="text-xs text-text-muted truncate">{s.glosa}</div>
+                  </div>
+                  <div className="font-mono font-bold whitespace-nowrap">
+                    {formatMoney(BigInt(s.monto))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setSiblingHint(null)}
+                className="btn-ghost text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => void linkSelected(true)}
+                className="btn-ghost text-sm border border-amber-300 text-amber-800"
+              >
+                Es una diferencia real, confirmar
+              </button>
+              <button
+                type="button"
+                onClick={includeSiblingsInSelection}
+                className="btn-primary text-sm"
+              >
+                Incluir{" "}
+                {siblingHint.siblings.length === 1
+                  ? "esa tesorería"
+                  : "esas tesorerías"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dos columnas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* IZQUIERDA: Cartolas bancarias */}
@@ -686,13 +868,11 @@ export function CompareView() {
               <TesoreriaCard
                 key={t.id}
                 t={t}
-                selected={selectedTesoreriaId === t.id}
+                selected={selectedTesoreriaIds.has(t.id)}
                 highlightAmount={
                   selectedBankIds.size > 0 && selectedBankSum === BigInt(t.monto)
                 }
-                onClick={() =>
-                  setSelectedTesoreriaId((cur) => (cur === t.id ? null : t.id))
-                }
+                onClick={() => toggleTesoreria(t.id)}
               />
             ))}
           </div>
@@ -710,7 +890,7 @@ function BankCard({
   highlightAmount,
   onClick,
 }: {
-  bm: BankMovementDTO;
+  bm: BankMovementWithSuggestion;
   selected: boolean;
   highlightAmount: boolean;
   onClick: () => void;
@@ -767,6 +947,11 @@ function BankCard({
                 ⚠ sin matchear
               </span>
             )}
+            {bm.suggestedSplit && !bm.isLinked && (
+              <span className="badge border-violet-400/50 bg-violet-50 text-violet-700">
+                💡 split posible ({bm.suggestedSplit.tesoreriaIds.length} TM)
+              </span>
+            )}
           </div>
           <div className="text-xs text-text-muted mt-0.5">
             {formatDate(bm.postDate)}
@@ -791,6 +976,11 @@ function BankCard({
       <div className="mt-1 text-xs text-text-muted break-words line-clamp-2">
         {bm.description}
       </div>
+      {bm.suggestedSplit && !bm.isLinked && (
+        <div className="mt-2 text-[11px] rounded border border-violet-200 bg-violet-50/60 text-violet-800 px-2 py-1">
+          Posible depósito agrupado: {bm.suggestedSplit.tesoreriaIds.length} tesorerías del mismo cliente suman este monto. Seleccionalas a la derecha para cerrar el match.
+        </div>
+      )}
     </button>
   );
 }
@@ -847,6 +1037,16 @@ function TesoreriaCard({
                 EXC
               </span>
             )}
+            {t.glosaParsed?.isMultiPart && (
+              <span className="badge border-violet-400/50 bg-violet-50 text-violet-700">
+                Parte {t.glosaParsed.partNumber ?? "?"}
+              </span>
+            )}
+            {t.suggestedSplit && !t.glosaParsed?.isMultiPart && (
+              <span className="badge border-violet-400/50 bg-violet-50 text-violet-700">
+                💡 split posible
+              </span>
+            )}
           </div>
           <div className="text-xs text-text-muted mt-0.5">
             {formatDate(t.fecha)}
@@ -871,6 +1071,13 @@ function TesoreriaCard({
       <div className="mt-1 text-xs text-text-muted break-words line-clamp-2">
         {t.glosa}
       </div>
+      {(t.glosaParsed?.isMultiPart || t.suggestedSplit) && (
+        <div className="mt-2 text-[11px] rounded border border-violet-200 bg-violet-50/60 text-violet-800 px-2 py-1">
+          {t.glosaParsed?.isMultiPart
+            ? "Glosa marcada como parte de un depósito agrupado. Seleccionala junto a las otras partes y la cartola correspondiente."
+            : "Otras tesorerías del mismo cliente podrían formar un depósito agrupado contra una cartola sin matchear."}
+        </div>
+      )}
     </button>
   );
 }

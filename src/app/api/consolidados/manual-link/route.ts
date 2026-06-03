@@ -6,38 +6,56 @@ import { prisma } from "@/lib/db";
 /**
  * POST /api/consolidados/manual-link
  *
- * Crea un vinculo manual entre un TesoreriaMovement y uno o varios
- * BankMovements.
+ * Vincula manualmente N TesoreriaMovements con M BankMovements.
  *
- * Si NO se pasa `adjustment`, la suma de los BMs debe coincidir exacto con
- * el monto de Tesorería (comportamiento histórico).
+ * Casos soportados:
+ *   - N=1, M=1: match clásico 1:1.
+ *   - N=1, M>1: split clásico (N bancos suman lo de 1 tesorería).
+ *   - N>1, M=1: split inverso (1 banco se reparte en N tesorerías).
+ *   - N>1, M>1: caso híbrido (raro pero soportado).
  *
- * Si se pasa `adjustment`, la diferencia |sum(bms) - t.monto| debe coincidir
- * EXACTAMENTE con adjustment.amount, y el rubro indicado debe existir y estar
- * marcado como `isDifference=true`. El asiento OK desdobla la diferencia
- * como 3ra fila.
+ * Sin `adjustment`: sum(bms) debe coincidir exacto con sum(tms).
+ * Con `adjustment`: solo permitido en N=1 (un ajuste se contabiliza por
+ *   consolidado; con N>1 no hay forma única de distribuirlo).
  *
- * Body: {
- *   tesoreriaId: string,
- *   bankMovementIds: string[],
- *   adjustment?: { rubro: number, note?: string }
- * }
+ * Para N>1 se generan N Consolidados (uno por tesorería) y se reparten los
+ * montos de los bancos vía greedy en `ConsolidadoLink.amountAllocated`.
+ *
+ * Body:
+ *   {
+ *     // Forma nueva (preferida)
+ *     tesoreriaIds?: string[],
+ *     // Forma vieja (back-compat)
+ *     tesoreriaId?: string,
+ *
+ *     bankMovementIds: string[],
+ *     adjustment?: { rubro: number, note?: string } | null,
+ *     overrideRubroBanco?: number | null,
+ *     // Set true para confirmar el match aunque el backend haya detectado
+ *     // que la diferencia podría ser otra tesorería sin matchear (warning).
+ *     acknowledgeSiblingWarning?: boolean
+ *   }
  */
-const bodySchema = z.object({
-  tesoreriaId: z.string().uuid(),
-  bankMovementIds: z.array(z.string().uuid()).min(1).max(10),
-  adjustment: z
-    .object({
-      rubro: z.number().int(),
-      note: z.string().max(500).optional().nullable(),
-    })
-    .optional()
-    .nullable(),
-  /** Override del rubro banco para este consolidado (opcional). Si se pasa,
-   *  predomina sobre BankAccount.accountingRubro y TesoreriaMovement.rubroBanco
-   *  en el asiento OK. */
-  overrideRubroBanco: z.number().int().optional().nullable(),
-});
+const bodySchema = z
+  .object({
+    tesoreriaIds: z.array(z.string().uuid()).min(1).max(10).optional(),
+    tesoreriaId: z.string().uuid().optional(),
+    bankMovementIds: z.array(z.string().uuid()).min(1).max(10),
+    adjustment: z
+      .object({
+        rubro: z.number().int(),
+        note: z.string().max(500).optional().nullable(),
+      })
+      .optional()
+      .nullable(),
+    overrideRubroBanco: z.number().int().optional().nullable(),
+    acknowledgeSiblingWarning: z.boolean().optional(),
+  })
+  .refine((d) => !!d.tesoreriaIds || !!d.tesoreriaId, {
+    message: "Falta tesoreriaIds o tesoreriaId",
+  });
+
+const SIBLING_WINDOW_DAYS = 7;
 
 export async function POST(req: Request) {
   const session = await getSession();
@@ -54,35 +72,72 @@ export async function POST(req: Request) {
     );
   }
 
-  const { tesoreriaId, bankMovementIds, adjustment, overrideRubroBanco } =
-    parsed.data;
+  const {
+    bankMovementIds,
+    adjustment,
+    overrideRubroBanco,
+    acknowledgeSiblingWarning,
+  } = parsed.data;
+  // Normaliza tesoreriaIds (acepta forma vieja por compatibilidad)
+  const tesoreriaIds = parsed.data.tesoreriaIds ??
+    (parsed.data.tesoreriaId ? [parsed.data.tesoreriaId] : []);
+  // Dedupe defensivo
+  const uniqueTesoreriaIds = Array.from(new Set(tesoreriaIds));
+  const uniqueBankMovementIds = Array.from(new Set(bankMovementIds));
 
-  const t = await prisma.tesoreriaMovement.findUnique({
-    where: { id: tesoreriaId },
-    include: { consolidado: true },
-  });
-  if (!t) {
+  if (uniqueTesoreriaIds.length === 0) {
     return NextResponse.json(
-      { error: "Tesorería no encontrada" },
+      { error: "Falta al menos un movimiento de Tesorería" },
+      { status: 400 }
+    );
+  }
+
+  // Ajuste no soportado con multi-tesorería: no hay forma única de
+  // distribuirlo. El operador debe seleccionar las tesorerías exactas.
+  if (adjustment && uniqueTesoreriaIds.length > 1) {
+    return NextResponse.json(
+      {
+        error:
+          "El ajuste por diferencia no está soportado cuando seleccionás múltiples tesorerías. Asegurate de que la suma coincida exacto, o vinculá una a una.",
+      },
+      { status: 400 }
+    );
+  }
+
+  // === Fetch + validate entities ===
+  const tms = await prisma.tesoreriaMovement.findMany({
+    where: { id: { in: uniqueTesoreriaIds } },
+    include: { consolidado: { include: { links: true } } },
+  });
+  if (tms.length !== uniqueTesoreriaIds.length) {
+    return NextResponse.json(
+      { error: "Una o más Tesorerías no existen" },
       { status: 404 }
     );
   }
 
   const bms = await prisma.bankMovement.findMany({
-    where: { id: { in: bankMovementIds } },
-    include: { consolidadoLinks: { select: { consolidadoId: true } } },
+    where: { id: { in: uniqueBankMovementIds } },
+    include: {
+      consolidadoLinks: { select: { consolidadoId: true } },
+    },
   });
-  if (bms.length !== bankMovementIds.length) {
+  if (bms.length !== uniqueBankMovementIds.length) {
     return NextResponse.json(
       { error: "Uno o más BankMovements no existen" },
       { status: 404 }
     );
   }
 
-  const myConsolidadoId = t.consolidado?.id ?? null;
+  // Los BankMovements no pueden estar en OTROS consolidados (los que ya
+  // pertenecen a las tesorerías que estamos re-vinculando son válidos —
+  // los vamos a wipear y recrear).
+  const ownConsolidadoIds = new Set(
+    tms.map((t) => t.consolidado?.id).filter((x): x is string => !!x)
+  );
   for (const bm of bms) {
     for (const link of bm.consolidadoLinks) {
-      if (link.consolidadoId !== myConsolidadoId) {
+      if (!ownConsolidadoIds.has(link.consolidadoId)) {
         return NextResponse.json(
           {
             error: `El BankMovement ${bm.id.slice(0, 8)} ya está vinculado a otro consolidado. Desvinculá ese primero.`,
@@ -93,17 +148,31 @@ export async function POST(req: Request) {
     }
   }
 
-  // Diferencia entre banco y tesorería (magnitud absoluta)
-  const sum = bms.reduce((acc, bm) => acc + bm.amount, 0n);
-  const diff = sum - t.monto;
+  // Mismo direction en todos los BMs (no se puede mezclar IN y OUT en
+  // un mismo consolidado, el asiento OK lo asume).
+  const directions = new Set(bms.map((bm) => bm.direction));
+  if (directions.size > 1) {
+    return NextResponse.json(
+      {
+        error:
+          "Los movimientos bancarios seleccionados tienen direcciones distintas (IN/OUT). No se pueden conciliar juntos.",
+      },
+      { status: 400 }
+    );
+  }
+
+  // === Sumas y validación de balance ===
+  const sumBanks = bms.reduce((acc, bm) => acc + bm.amount, 0n);
+  const sumTms = tms.reduce((acc, t) => acc + t.monto, 0n);
+  const diff = sumBanks - sumTms;
   const absDiff = diff < 0n ? -diff : diff;
 
-  // Validaciones según haya o no ajuste
   let adjustmentAmount: bigint | null = null;
   let adjustmentRubro: number | null = null;
   let adjustmentNote: string | null = null;
 
   if (adjustment) {
+    // Solo N=1 acá (chequeado más arriba)
     if (absDiff === 0n) {
       return NextResponse.json(
         {
@@ -133,16 +202,74 @@ export async function POST(req: Request) {
     adjustmentAmount = absDiff;
     adjustmentRubro = adjustment.rubro;
     adjustmentNote = adjustment.note?.trim() || null;
-  } else if (sum !== t.monto) {
+  } else if (sumBanks !== sumTms) {
     return NextResponse.json(
       {
-        error: `La suma de los movimientos bancarios (${sum.toString()}) no coincide con el monto de Tesorería (${t.monto.toString()}). Si la diferencia es esperada, agregá un ajuste.`,
+        error: `La suma de los movimientos bancarios (${sumBanks.toString()}) no coincide con la suma de Tesorería (${sumTms.toString()}). Si la diferencia es esperada, agregá un ajuste (solo soportado con 1 tesorería).`,
       },
       { status: 400 }
     );
   }
 
-  // Validar overrideRubroBanco si vino
+  // === Validación A: sibling detection ===
+  // Cuando el operador intenta cerrar un match con ajuste y N=1, chequear
+  // si la "diferencia" coincide con otra Tesorería sin matchear del mismo
+  // cliente. Si sí, devolver warning para que confirme conscientemente.
+  if (
+    adjustment &&
+    uniqueTesoreriaIds.length === 1 &&
+    !acknowledgeSiblingWarning
+  ) {
+    const t = tms[0];
+    const dayMs = 24 * 60 * 60 * 1000;
+    const lower = new Date(t.fecha.getTime() - SIBLING_WINDOW_DAYS * dayMs);
+    const upper = new Date(t.fecha.getTime() + SIBLING_WINDOW_DAYS * dayMs);
+    if (t.clienteRut && t.clienteRut !== "55555555-5") {
+      const siblings = await prisma.tesoreriaMovement.findMany({
+        where: {
+          id: { not: t.id },
+          clienteRut: t.clienteRut,
+          banco: t.banco,
+          monto: absDiff,
+          fecha: { gte: lower, lte: upper },
+          OR: [
+            { consolidado: null },
+            {
+              consolidado: {
+                status: { in: ["NO_MATCH", "REVIEW", "OUT_OF_SCOPE"] },
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          fecha: true,
+          monto: true,
+          glosa: true,
+          clienteName: true,
+        },
+        take: 3,
+      });
+      if (siblings.length > 0) {
+        return NextResponse.json(
+          {
+            warning: "POSSIBLE_SIBLING",
+            message: `Hay ${siblings.length === 1 ? "otra tesorería" : `${siblings.length} tesorerías`} sin matchear del mismo cliente cuyo monto coincide con la diferencia. ¿Podría ser parte del mismo depósito?`,
+            siblings: siblings.map((s) => ({
+              id: s.id,
+              fecha: s.fecha.toISOString(),
+              monto: s.monto.toString(),
+              glosa: s.glosa,
+              clienteName: s.clienteName,
+            })),
+          },
+          { status: 409 }
+        );
+      }
+    }
+  }
+
+  // === Validación overrideRubroBanco ===
   if (overrideRubroBanco !== undefined && overrideRubroBanco !== null) {
     const rubro = await prisma.rubroLabel.findUnique({
       where: { rubro: overrideRubroBanco },
@@ -155,50 +282,141 @@ export async function POST(req: Request) {
     }
   }
 
+  // === Algoritmo de allocations ===
+  // N=1: cada link guarda amountAllocated=null (semantics legacy "todo el BM
+  //      va a este consolidado"). El consolidado consume sumBanks completo.
+  // N>1: greedy. Recorremos tesorerías en orden, y para cada una vamos
+  //      consumiendo bms hasta cubrir t.monto.
+  const isMultiTm = uniqueTesoreriaIds.length > 1;
+  const isSplit = uniqueBankMovementIds.length > 1;
+
+  // matchType:
+  //   N=1, M=1                → MANUAL
+  //   N=1, M>1                → SPLIT_SAME_DAY (compat)
+  //   N>1 (M cualquiera)      → SPLIT_INVERSE_MANUAL
+  const matchType: string = isMultiTm
+    ? "SPLIT_INVERSE_MANUAL"
+    : isSplit
+    ? "SPLIT_SAME_DAY"
+    : "MANUAL";
+
+  // Orden estable de tesorerías (por fecha asc, id asc) para que el greedy
+  // sea determinístico.
+  const tmsSorted = tms.slice().sort((a, b) => {
+    const da = a.fecha.getTime();
+    const db = b.fecha.getTime();
+    if (da !== db) return da - db;
+    return a.id.localeCompare(b.id);
+  });
+  // Bancos también ordenados (por postDate asc, id asc)
+  const bmsSorted = bms.slice().sort((a, b) => {
+    const da = a.postDate.getTime();
+    const db = b.postDate.getTime();
+    if (da !== db) return da - db;
+    return a.id.localeCompare(b.id);
+  });
+
+  // links: array de { tmId, bmId, allocated } a crear en la transacción.
+  type LinkSpec = { tmId: string; bmId: string; allocated: bigint | null };
+  const linksToCreate: LinkSpec[] = [];
+
+  if (!isMultiTm) {
+    // Single-tesorería: cada bm seleccionado va completo (amountAllocated
+    // null, semantics legacy). Acepta ajuste — la diferencia se contabiliza
+    // en el Consolidado, no en los links.
+    for (const bm of bmsSorted) {
+      linksToCreate.push({
+        tmId: tmsSorted[0].id,
+        bmId: bm.id,
+        allocated: null,
+      });
+    }
+  } else {
+    // Multi-tesorería: greedy con allocations explícitas.
+    const remaining = new Map<string, bigint>(
+      bmsSorted.map((bm) => [bm.id, bm.amount])
+    );
+    for (const t of tmsSorted) {
+      let need = t.monto;
+      for (const bm of bmsSorted) {
+        if (need === 0n) break;
+        const rem = remaining.get(bm.id) ?? 0n;
+        if (rem === 0n) continue;
+        const take = rem < need ? rem : need;
+        linksToCreate.push({
+          tmId: t.id,
+          bmId: bm.id,
+          allocated: take,
+        });
+        remaining.set(bm.id, rem - take);
+        need -= take;
+      }
+      if (need !== 0n) {
+        // Sanity check: las sumas ya coincidían a nivel global, así que esto
+        // no debería pasar — pero si ocurre, error claro antes de tocar BD.
+        return NextResponse.json(
+          {
+            error: `Error interno repartiendo allocations (tesorería ${t.id.slice(0, 8)} quedó con ${need.toString()} sin cubrir). Reportá esto.`,
+          },
+          { status: 500 }
+        );
+      }
+    }
+  }
+
+  // === Persistencia ===
+  // Para cada tesorería: crear o actualizar su Consolidado y resetear links.
+  // Si es N>1 y alguna ya tenía Consolidado, lo wipeamos primero.
   await prisma.$transaction(async (tx) => {
-    if (t.consolidado) {
+    // Wipe previo: borrar links de los consolidados involucrados.
+    if (ownConsolidadoIds.size > 0) {
       await tx.consolidadoLink.deleteMany({
-        where: { consolidadoId: t.consolidado.id },
+        where: { consolidadoId: { in: Array.from(ownConsolidadoIds) } },
       });
     }
 
     const accountId = bms[0].accountId;
-    const matchType: string =
-      bankMovementIds.length === 1 ? "MANUAL" : "SPLIT_SAME_DAY";
 
-    const consolidado = t.consolidado
-      ? await tx.consolidado.update({
-          where: { id: t.consolidado.id },
-          data: {
-            status: "MANUAL",
-            matchType,
-            resolvedAccountId: accountId,
-            adjustmentAmount,
-            adjustmentRubro,
-            adjustmentNote,
-            overrideRubroBanco: overrideRubroBanco ?? null,
-            matchedAt: new Date(),
-          },
-        })
-      : await tx.consolidado.create({
-          data: {
-            tesoreriaMovementId: tesoreriaId,
-            status: "MANUAL",
-            matchType,
-            resolvedAccountId: accountId,
-            adjustmentAmount,
-            adjustmentRubro,
-            adjustmentNote,
-            overrideRubroBanco: overrideRubroBanco ?? null,
-          },
-        });
+    // Crear/actualizar un Consolidado por tesorería
+    const consolidadoByTmId = new Map<string, string>();
+    for (const t of tmsSorted) {
+      // En multi-tesorería, el ajuste no se aplica (validado arriba).
+      const ajForThis = isMultiTm
+        ? { adjustmentAmount: null, adjustmentRubro: null, adjustmentNote: null }
+        : { adjustmentAmount, adjustmentRubro, adjustmentNote };
 
+      const c = t.consolidado
+        ? await tx.consolidado.update({
+            where: { id: t.consolidado.id },
+            data: {
+              status: "MANUAL",
+              matchType,
+              resolvedAccountId: accountId,
+              overrideRubroBanco: overrideRubroBanco ?? null,
+              matchedAt: new Date(),
+              ...ajForThis,
+            },
+          })
+        : await tx.consolidado.create({
+            data: {
+              tesoreriaMovementId: t.id,
+              status: "MANUAL",
+              matchType,
+              resolvedAccountId: accountId,
+              overrideRubroBanco: overrideRubroBanco ?? null,
+              ...ajForThis,
+            },
+          });
+      consolidadoByTmId.set(t.id, c.id);
+    }
+
+    // Crear todos los links con su allocation
     await tx.consolidadoLink.createMany({
-      data: bankMovementIds.map((bmId) => ({
-        consolidadoId: consolidado.id,
-        bankMovementId: bmId,
+      data: linksToCreate.map((l) => ({
+        consolidadoId: consolidadoByTmId.get(l.tmId)!,
+        bankMovementId: l.bmId,
+        amountAllocated: l.allocated,
       })),
-      skipDuplicates: true,
     });
   });
 
