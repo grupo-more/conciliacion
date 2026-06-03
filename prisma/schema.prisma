@@ -34,7 +34,6 @@ model BankAccount {
 
   imports     StatementImport[]
   movements   BankMovement[]
-  branchHints BranchAccountHint[]
   aliases     BankAccountAlias[]
 
   @@unique([bankCode, accountNumber])
@@ -112,97 +111,11 @@ model BankMovement {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  reconciliationLinks ReconciliationLink[]
   consolidadoLinks    ConsolidadoLink[]
 
   @@unique([accountId, dedupKey])
   @@index([accountId, postDate])
   @@index([externalId])
-}
-
-model DynatechMovement {
-  id                 String   @id @default(uuid())
-  // ID externo de Dynatech (contexto.id en la API). Es la clave para dedup
-  // entre syncs. El nombre de columna 'm_cj_id' es histórico (cuando se llamaba
-  // mCjId); el contenido es el mismo identificador único.
-  mCjId              BigInt   @unique @map("m_cj_id")
-
-  branchExternalId   Int      @map("branch_external_id")
-  branchExternalName String?  @map("branch_external_name")
-
-  cashierUsername    String   @map("cashier_username")
-  cashierName        String?  @map("cashier_name")
-
-  documentCode       Int      @map("document_code")
-  documentType       String?  @map("document_type")
-  documentFolio      BigInt   @default(0) @map("document_folio")
-
-  // Cliente identificado por el cajero. NULL cuando es CLIENTE GENERICO
-  // (RUT 55555555-5 en la API Dynatech) o cuando el campo no viene en la respuesta.
-  customerName       String?  @map("customer_name")
-  customerRut        String?  @map("customer_rut")
-
-  observation        String   @db.Text
-  occurredAt         DateTime @map("occurred_at")
-  loadedAt           DateTime? @map("loaded_at")
-
-  totalAmount        BigInt   @map("total_amount")
-  currency           String   @default("CLP") @db.Char(3)
-
-  // Rubro contable de la sucursal (campo rubroSucursal de la API). El nombre
-  // de columna 'rubro' es histórico; el contenido siempre fue el rubro de
-  // sucursal.
-  rubro              Int?
-
-  // Rubro contable del banco asociado (rubroBanco en la API).
-  rubroBank          Int?     @map("rubro_bank")
-
-  // Banco asignado al movimiento (campo "banco" en la API, ej "Santander ME").
-  bankName           String?  @map("bank_name")
-
-  // Banco que la sucursal/cajero tenía configurado para este movimiento.
-  branchBank         String?  @map("branch_bank")
-
-  // Banco detectado heurísticamente por la API. Puede diferir de bankName
-  // cuando hay excepciones (ej: el movimiento se hizo en una cuenta distinta
-  // a la que debería corresponder a la sucursal).
-  detectedBank       String?  @map("detected_bank")
-
-  // Flag de excepción: el movimiento no cumple alguna regla y requiere revisión.
-  isException        Boolean  @default(false) @map("is_exception")
-
-  items              Json
-  rawJson            Json     @map("raw_json")
-
-  syncedAt           DateTime @default(now()) @map("synced_at")
-
-  reconciliation Reconciliation?
-
-  @@index([branchExternalId])
-  @@index([cashierUsername])
-  @@index([occurredAt])
-  @@index([documentCode])
-  @@index([documentFolio])
-  @@index([customerRut])
-  @@index([rubro])
-  @@index([rubroBank])
-  @@index([isException])
-}
-
-model DynatechSyncRun {
-  id                String   @id @default(uuid())
-  startedAt         DateTime @default(now()) @map("started_at")
-  finishedAt        DateTime? @map("finished_at")
-  status            String                              // RUNNING | OK | ERROR
-  fetchedRows       Int      @default(0) @map("fetched_rows")
-  insertedRows      Int      @default(0) @map("inserted_rows")
-  skippedDuplicates Int      @default(0) @map("skipped_duplicates")
-  skippedInvalid    Int      @default(0) @map("skipped_invalid")
-  errorMessage      String?  @db.Text @map("error_message")
-  fetchMs           Int?     @map("fetch_ms")
-
-  @@index([startedAt])
-  @@index([status, startedAt])
 }
 
 // Movimiento de Tesoreria - viene del endpoint /api/banco/conciliacion.
@@ -291,78 +204,9 @@ model RubroLabel {
   updatedAt   DateTime @updatedAt @map("updated_at")
 }
 
-// Hint opcional: sucursal Dynatech → cuenta bancaria preferida.
-// Se usa como pista cuando el mCjObs no menciona banco/empresa explícitamente.
-// El mCjObs explícito SIEMPRE gana sobre el hint manual.
-// Si no hay hint, el matching infiere por historial (≥70% confianza) o queda en REVIEW.
-model BranchAccountHint {
-  id                String      @id @default(uuid())
-  branchExternalId  Int         @unique @map("branch_external_id")
-  branchName        String?     @map("branch_name")
-  accountId         String      @map("account_id")
-  account           BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  notes             String?     @db.Text
-  createdAt         DateTime    @default(now()) @map("created_at")
-  updatedAt         DateTime    @updatedAt @map("updated_at")
-
-  @@index([branchExternalId])
-  @@index([accountId])
-}
-
-// Conciliación: relaciona un movimiento de Dynatech con su contraparte bancaria.
-// Una fila por DynatechMovement procesado. Los bank movements asociados van en
-// ReconciliationLink (puede ser 0, 1 o N — soporta pagos divididos 1:N).
-model Reconciliation {
-  id                 String           @id @default(uuid())
-  dynatechMovementId String           @unique @map("dynatech_movement_id")
-  dynatechMovement   DynatechMovement @relation(fields: [dynatechMovementId], references: [id], onDelete: Cascade)
-
-  // AUTO_MATCHED  → match automático con alta certeza (1:1 mismo día o 1:N con RUT común)
-  // SUGGESTED     → match propuesto, requiere aprobación humana
-  // REVIEW        → varios candidatos / múltiples combinaciones posibles, usuario elige
-  // MANUAL        → match elegido manualmente por el usuario
-  // NO_MATCH      → sin candidatos en la ventana; se reintenta al subir cartolas nuevas
-  // OUT_OF_SCOPE  → mCjObs menciona banco no registrado (BICE, ITAU, CHILE, etc.)
-  status String
-
-  // EXACT_SAME_DAY | EXACT_PM2 | EXACT_PM7 | SPLIT_SAME_RUT | SPLIT | MANUAL | null
-  matchType String? @map("match_type")
-
-  // Por qué fue OUT_OF_SCOPE / NO_MATCH (texto libre o "Banco no registrado: BICE")
-  outOfScopeReason String? @db.Text @map("out_of_scope_reason")
-
-  notes String? @db.Text
-
-  matchedAt DateTime @default(now()) @map("matched_at")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  links ReconciliationLink[]
-
-  @@index([status])
-}
-
-// Cada bank movement asociado a una conciliación. Soporta:
-//   · 1:1 — un solo link
-//   · 1:N — varios links (pago dividido en múltiples transferencias)
-//   · 1:0 — sin links (NO_MATCH / OUT_OF_SCOPE)
-model ReconciliationLink {
-  id                String         @id @default(uuid())
-  reconciliationId  String         @map("reconciliation_id")
-  reconciliation    Reconciliation @relation(fields: [reconciliationId], references: [id], onDelete: Cascade)
-  bankMovementId    String         @map("bank_movement_id")
-  bankMovement      BankMovement   @relation(fields: [bankMovementId], references: [id], onDelete: Cascade)
-  createdAt         DateTime       @default(now()) @map("created_at")
-
-  @@unique([reconciliationId, bankMovementId])
-  @@unique([bankMovementId])  // un bank movement no puede estar en 2 conciliaciones
-  @@index([reconciliationId])
-}
-
 // Consolidado: relaciona un movimiento de Tesoreria con su contraparte bancaria.
-// Es el módulo sucesor de Reconciliation (que opera sobre Dynatech). Tesoreria
-// trae el campo `banco` resuelto desde la API, así que el matching es directo
-// (no requiere heurísticas de detección de banco como sí necesita Dynatech).
+// Tesoreria trae el campo `banco` resuelto desde la API, así que el matching
+// es directo (no requiere heurísticas de detección de banco).
 //
 // Una fila por TesoreriaMovement procesado. Los BankMovement asociados van
 // en ConsolidadoLink (0, 1 o N — soporta pagos divididos 1:N).
@@ -420,12 +264,7 @@ model Consolidado {
   @@index([resolvedAccountId])
 }
 
-// Cada BankMovement asociado a un Consolidado. Mismo patrón que
-// ReconciliationLink, pero independiente para que un BankMovement pueda
-// estar conciliado en ambos sistemas si el histórico de Dynatech lo requiere.
-//
-// Nota: a futuro, si Dynatech se descontinúa definitivamente, conviene migrar
-// los datos viejos de Reconciliation a Consolidado o borrarlos.
+// Cada BankMovement asociado a un Consolidado.
 model ConsolidadoLink {
   id              String       @id @default(uuid())
   consolidadoId   String       @map("consolidado_id")

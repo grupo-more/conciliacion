@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     template: "%s · MoreGiros",
   },
   description:
-    "Plataforma de conciliación bancaria y movimientos Dynatech — MoreGiros by More Exchange",
+    "Plataforma de conciliación bancaria — MoreGiros by More Exchange",
   applicationName: "MoreGiros Conciliación",
 };
 

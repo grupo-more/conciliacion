@@ -28,13 +28,13 @@ export function PipelineCard({ pipeline }: Props) {
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-medium">Pipeline de conciliación</h3>
         <span className="text-xs text-text-muted">
-          {total} venta{total === 1 ? "" : "s"} Dynatech
+          {total} venta{total === 1 ? "" : "s"} Tesorería
         </span>
       </div>
 
       {total === 0 ? (
         <div className="text-text-muted text-sm py-4 text-center">
-          Sin ventas Dynatech en este período.
+          Sin ventas Tesorería en este período.
         </div>
       ) : (
         <>

@@ -97,7 +97,7 @@ export function BalancesTable({ balances, periodLabel }: Props) {
       {totalIn > 0 && (
         <div className="px-4 py-3 border-t border-border-soft bg-bg-soft/50">
           <div className="text-xs text-text-muted mb-2">
-            Ingresos {periodLabel.toLowerCase()}: respaldo Dynatech vs otros
+            Ingresos {periodLabel.toLowerCase()}: respaldo Tesorería vs otros
           </div>
           <div className="flex h-3 rounded-full overflow-hidden bg-bg-elevated ring-1 ring-border-soft">
             {reconciledPct > 0 && (

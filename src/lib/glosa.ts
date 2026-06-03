@@ -1,6 +1,8 @@
 /**
- * Parser robusto de mCjObs (Dynatech) y descripciones bancarias.
- * Extrae todas las pistas posibles para mejorar el matching.
+ * Parser robusto de glosas (descripciones bancarias y observaciones de
+ * movimientos). Extrae banco, holder, RUT, número de giro y un hint del
+ * cliente para asistir al matching de Consolidados y al scoring de calidad
+ * en el dashboard.
  */
 
 import { normalizeRut } from "@/lib/cartolas/normalize";
@@ -92,8 +94,6 @@ export function parseGlosa(text: string): GlosaParsed {
       break;
     }
   }
-  // Si "INTERNACIONAL" matcheó como registrado, no lo marques como unregistered
-  // (aunque CHILE no debería matchearlo, defensivo)
 
   let holder: GlosaParsed["holder"] = null;
   for (const h of HOLDER_PATTERNS) {
@@ -125,7 +125,7 @@ export function parseGlosa(text: string): GlosaParsed {
 
   return {
     bank,
-    unregisteredBank: bank ? null : unregisteredBank, // banco registrado tiene prioridad
+    unregisteredBank: bank ? null : unregisteredBank,
     holder,
     rut,
     giroNumber,
@@ -134,12 +134,7 @@ export function parseGlosa(text: string): GlosaParsed {
   };
 }
 
-/**
- * Intenta extraer un hint del nombre del cliente quitando palabras técnicas
- * (DEP, BANCO, BCI, etc.). No es perfecto pero ayuda como pista secundaria.
- */
 function extractClientHint(text: string): string | null {
-  // Quitar prefijos comunes
   let s = text.toUpperCase();
   s = s.replace(/^DEP(?:OSITO)?\.?\s*/i, "");
   s = s.replace(/^GIRO\s+APP\s+\d+,?\s*/i, "");
@@ -154,23 +149,16 @@ function extractClientHint(text: string): string | null {
   s = s.replace(/\b(BCI|SANTANDER|SANTNADER|SANTADNER|INTERNACIONAL|BICE|ITAU|FALABELLA|CHILE|ESTADO|SECURITY|SCOTIABANK|RIPLEY|CONSORCIO|BTG|HSBC)\b/gi, "");
   s = s.replace(/\b(ME|MG|BACO|MORECAPITAL)\s+SPA\b/gi, "");
   s = s.replace(/\b(ME|MG|BACO|MORECAPITAL)\b/gi, "");
-  // RUT
   s = s.replace(/\d{1,2}[.,]?\d{3}[.,]?\d{3}-?[\dKk]/g, "");
-  // Puntuación
   s = s.replace(/[.,;:!?\-_]/g, " ");
-  // Espacios redundantes
   s = s.replace(/\s+/g, " ").trim();
 
   if (s.length < 4) return null;
-  // Si solo quedan palabras muy cortas o números, descartar
   const words = s.split(" ").filter((w) => w.length >= 2 && /[A-ZÁÉÍÓÚÑ]/.test(w));
   if (words.length === 0) return null;
   return words.slice(0, 5).join(" ");
 }
 
-/**
- * Devuelve los RUTs únicos presentes en una descripción (puede haber varios).
- */
 export function extractRuts(text: string): string[] {
   const matches = text.match(new RegExp(RUT_PATTERN.source, "g"));
   if (!matches) return [];

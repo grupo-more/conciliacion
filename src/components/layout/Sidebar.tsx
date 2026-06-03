@@ -19,9 +19,8 @@ interface SidebarProps {
   onMobileClose?: () => void;
 }
 
-// Los módulos Conciliación y Dynatech quedaron deshabilitados en el sidebar
-// (sus páginas y APIs siguen funcionando si se accede por URL directa).
-// Para re-habilitarlos, agregar los items al arreglo NAV_ITEMS.
+// Sidebar de navegación. Los módulos activos son: Dashboard, Consolidados,
+// Cartolas, Movimientos 200 (Tesorería) y Configuración.
 const NAV_ITEMS: NavItem[] = [
   {
     href: "/dashboard",

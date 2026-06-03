@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { runImport } from "@/lib/cartolas/import";
-import { runMatching } from "@/lib/reconciliation/match";
+import { runConsolidados } from "@/lib/consolidados/match";
 
 /**
  * POST /api/cartolas/import?dryRun=1
@@ -52,13 +52,14 @@ export async function POST(req: Request) {
       forceAccountId,
     });
 
-    // Después de un import real, intentamos reconciliar Dynatechs en estados abiertos
-    // (NO_MATCH y REVIEW pueden tener nuevos candidatos con la cartola recién insertada)
+    // Después de un import real, re-ejecutar el motor de Consolidados para
+    // que movimientos en estados abiertos (NO_MATCH, REVIEW) puedan matchear
+    // con los nuevos BankMovements recién insertados. Preserva los MANUAL.
     if (!dryRun && result.inserted && result.inserted.rowsInserted > 0) {
       try {
-        await runMatching({ reEvaluateOpenStates: true });
+        await runConsolidados({ dryRun: false, preserveManual: true });
       } catch (e) {
-        console.error("[cartolas/import] error en runMatching:", e);
+        console.error("[cartolas/import] error en runConsolidados:", e);
       }
     }
 

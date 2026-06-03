@@ -12,9 +12,7 @@ interface Props {
 const SECTION_LABELS: Record<string, string> = {
   "/dashboard": "Dashboard general",
   "/dashboard/consolidados": "Consolidados",
-  "/dashboard/conciliacion": "Conciliación bancaria",
   "/dashboard/cartolas": "Cartolas bancarias",
-  "/dashboard/dynatech": "Movimientos Dynatech",
   "/dashboard/tesoreria": "Movimientos 200",
   "/dashboard/configuracion": "Configuración",
 };

@@ -36,10 +36,10 @@ export function Alerts({ alerts }: { alerts: AlertItem[] }) {
               <span>{a.severity === "danger" ? "⛔" : "⚠"} {a.message}</span>
               {(a.kind === "BACKLOG" || a.kind === "REVIEW_PENDING") && (
                 <Link
-                  href="/dashboard/conciliacion"
+                  href="/dashboard/consolidados"
                   className="text-xs underline whitespace-nowrap"
                 >
-                  Ir a Conciliación →
+                  Ir a Consolidados →
                 </Link>
               )}
               {a.kind === "STALE_CARTOLA" && (
@@ -52,10 +52,10 @@ export function Alerts({ alerts }: { alerts: AlertItem[] }) {
               )}
               {a.kind === "SUCURSAL_INACTIVE" && (
                 <Link
-                  href="/dashboard/dynatech"
+                  href="/dashboard/tesoreria"
                   className="text-xs underline whitespace-nowrap"
                 >
-                  Ir a Dynatech →
+                  Ir a Movimientos 200 →
                 </Link>
               )}
             </div>

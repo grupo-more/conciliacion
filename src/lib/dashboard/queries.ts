@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { parseGlosa } from "@/lib/reconciliation/glosa";
+import { parseGlosa } from "@/lib/glosa";
 
 export type Period = "day" | "week" | "month";
 
