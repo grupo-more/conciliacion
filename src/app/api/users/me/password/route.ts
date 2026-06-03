@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 
 const bodySchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8, "Minimo 8 caracteres").max(200),
+  newPassword: z.string().min(12, "Minimo 12 caracteres").max(200),
 });
 
 export async function PATCH(req: Request) {

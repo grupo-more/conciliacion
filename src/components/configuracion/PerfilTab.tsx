@@ -17,8 +17,8 @@ export function PerfilTab({ user }: Props) {
     e.preventDefault();
     setBanner(null);
 
-    if (newPassword.length < 8) {
-      setBanner({ kind: "err", msg: "La nueva contraseña debe tener al menos 8 caracteres." });
+    if (newPassword.length < 12) {
+      setBanner({ kind: "err", msg: "La nueva contraseña debe tener al menos 12 caracteres." });
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -86,10 +86,10 @@ export function PerfilTab({ user }: Props) {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
-              minLength={8}
+              minLength={12}
               autoComplete="new-password"
             />
-            <p className="text-xs text-text-muted mt-1">Mínimo 8 caracteres.</p>
+            <p className="text-xs text-text-muted mt-1">Mínimo 12 caracteres.</p>
           </div>
           <div>
             <label className="label">Confirmar nueva contraseña</label>
@@ -99,7 +99,7 @@ export function PerfilTab({ user }: Props) {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
-              minLength={8}
+              minLength={12}
               autoComplete="new-password"
             />
           </div>

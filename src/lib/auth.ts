@@ -12,8 +12,8 @@ export interface SessionPayload {
 
 function getSecret(): Uint8Array {
   const secret = process.env.JWT_SECRET;
-  if (!secret || secret.length < 16) {
-    throw new Error("JWT_SECRET debe estar definido y tener al menos 16 caracteres.");
+  if (!secret || secret.length < 32) {
+    throw new Error("JWT_SECRET debe estar definido y tener al menos 32 caracteres.");
   }
   return new TextEncoder().encode(secret);
 }
