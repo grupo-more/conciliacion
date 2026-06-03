@@ -3,6 +3,12 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { createSession, setSessionCookie } from "@/lib/auth";
+import {
+  checkLoginRate,
+  getClientIp,
+  recordLoginFailure,
+  resetLoginRate,
+} from "@/lib/rate-limit";
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -17,15 +23,35 @@ export async function POST(req: Request) {
   }
 
   const { email, password } = parsed.data;
+  const ip = getClientIp(req);
+
+  const rate = checkLoginRate(ip, email);
+  if (!rate.ok) {
+    return NextResponse.json(
+      {
+        error: "Demasiados intentos. Vuelve a intentar en unos minutos.",
+        retryAfterSec: rate.retryAfterSec,
+      },
+      {
+        status: 429,
+        headers: { "Retry-After": String(rate.retryAfterSec) },
+      }
+    );
+  }
+
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !user.active) {
+    recordLoginFailure(ip, email);
     return NextResponse.json({ error: "Credenciales inválidas" }, { status: 401 });
   }
 
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) {
+    recordLoginFailure(ip, email);
     return NextResponse.json({ error: "Credenciales inválidas" }, { status: 401 });
   }
+
+  resetLoginRate(ip, email);
 
   const token = await createSession({
     sub: user.id,

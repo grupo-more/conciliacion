@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Logo } from "@/components/brand/Logo";
 
@@ -13,9 +13,22 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (lockedUntil === null) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [lockedUntil]);
+
+  const lockSecondsLeft =
+    lockedUntil !== null ? Math.max(0, Math.ceil((lockedUntil - now) / 1000)) : 0;
+  const locked = lockSecondsLeft > 0;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    if (locked) return;
     setError(null);
     setLoading(true);
     try {
@@ -24,11 +37,22 @@ function LoginForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
       });
+      if (res.status === 429) {
+        const data = await res.json().catch(() => ({}));
+        const retry =
+          Number(data?.retryAfterSec) ||
+          Number(res.headers.get("Retry-After")) ||
+          60;
+        setLockedUntil(Date.now() + retry * 1000);
+        setError(data?.error || "Demasiados intentos. Espera unos minutos.");
+        return;
+      }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         setError(data.error || "Error al iniciar sesión");
         return;
       }
+      setLockedUntil(null);
       router.replace(next);
       router.refresh();
     } finally {
@@ -103,19 +127,26 @@ function LoginForm() {
         {error && (
           <div className="rounded-md border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger animate-fade-in-down">
             {error}
+            {locked && (
+              <div className="mt-1 text-xs text-danger/80">
+                Vuelve a intentar en {formatLockTime(lockSecondsLeft)}.
+              </div>
+            )}
           </div>
         )}
 
         <button
           type="submit"
           className="btn-primary w-full py-2.5"
-          disabled={loading}
+          disabled={loading || locked}
         >
           {loading ? (
             <>
               <span className="inline-block h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
               Ingresando…
             </>
+          ) : locked ? (
+            <>Bloqueado · {formatLockTime(lockSecondsLeft)}</>
           ) : (
             <>
               Ingresar
@@ -142,6 +173,14 @@ function LoginForm() {
       </p>
     </div>
   );
+}
+
+function formatLockTime(seconds: number): string {
+  if (seconds <= 0) return "0s";
+  if (seconds < 60) return `${seconds}s`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return s === 0 ? `${m}m` : `${m}m ${s}s`;
 }
 
 export default function LoginPage() {
