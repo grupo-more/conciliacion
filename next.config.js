@@ -43,6 +43,14 @@ const securityHeaders = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // pdf-parse v2 envuelve a pdfjs-dist, que carga su "worker" desde el
+  // filesystem. Si Next lo bundlea, el path queda apuntando a
+  // .next/server/chunks/pdf.worker.mjs (que no existe). Marcarlos como
+  // externos hace que se carguen desde node_modules en runtime, donde el
+  // worker file si vive al lado de la libreria.
+  experimental: {
+    serverComponentsExternalPackages: ["pdf-parse", "pdfjs-dist"],
+  },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
