@@ -104,6 +104,7 @@ export async function GET(req: Request) {
       fecha: bm.postDate.toISOString(),
       accountId: bm.account.id,
       bankName: bm.account.bankName,
+      holderName: bm.account.holderName,
       accountNumber: cuentaNumero,
       monto: abs.toString(),
       counterpartyRut: bm.counterpartyRut,
@@ -159,6 +160,7 @@ interface EgresoTerceroRow {
   fecha: string;
   accountId: string;
   bankName: string;
+  holderName: string;
   accountNumber: string;
   monto: string;
   counterpartyRut: string | null;

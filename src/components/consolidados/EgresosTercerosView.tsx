@@ -11,6 +11,7 @@ interface EgresoTerceroRow {
   fecha: string;
   accountId: string;
   bankName: string;
+  holderName: string;
   accountNumber: string;
   monto: string;
   counterpartyRut: string | null;
@@ -112,7 +113,7 @@ export function EgresosTercerosView() {
     for (const r of data.rows) {
       aoa.push([
         formatDate(r.fecha),
-        r.bankName,
+        r.holderName ? `${r.bankName} ${r.holderName}` : r.bankName,
         r.accountNumber,
         -Number(r.monto),
         r.counterpartyRut ?? "",
@@ -265,7 +266,10 @@ export function EgresosTercerosView() {
                       {formatDate(r.fecha)}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <div className="text-text">{r.bankName}</div>
+                      <div className="text-text">
+                        {r.bankName}
+                        {r.holderName ? ` ${r.holderName}` : ""}
+                      </div>
                       <div className="text-xs text-text-muted font-mono">
                         {r.accountNumber}
                       </div>

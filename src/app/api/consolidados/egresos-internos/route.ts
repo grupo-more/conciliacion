@@ -92,6 +92,7 @@ export async function GET(req: Request) {
       accountId: bm.account.id,
       cuentaLabel,
       bankName: bm.account.bankName,
+      holderName: bm.account.holderName,
       accountNumber: cuentaNumero,
       monto: abs.toString(),
       counterpartyRut: bm.counterpartyRut,
@@ -164,6 +165,7 @@ interface EgresoInternoRow {
   accountId: string;
   cuentaLabel: string;
   bankName: string;
+  holderName: string;
   accountNumber: string;
   monto: string;
   counterpartyRut: string | null;
