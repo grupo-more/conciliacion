@@ -481,19 +481,43 @@ async function resolveAccount(opts: ResolveOpts): Promise<ResolvedAccount> {
     }
   }
 
-  // 4) Fallback: cuenta "Sin asignar" del banco
-  const unassigned = await prisma.bankAccount.findFirst({
-    where: {
-      bankCode,
-      accountNumber: `${UNASSIGNED_PREFIX}${bankCode}`,
-    },
+  // 4) Fallback: cuenta "Sin asignar" del banco. Si no existe (caso tipico
+  // al introducir un banco nuevo), la creamos automaticamente — el seed
+  // historico solo tenia las 4 originales (BCI/Santander/Internacional/Chile).
+  const unassignedKey = `${UNASSIGNED_PREFIX}${bankCode}`;
+  let unassigned = await prisma.bankAccount.findFirst({
+    where: { bankCode, accountNumber: unassignedKey },
   });
   if (!unassigned) {
-    throw new Error(
-      `No se encontró la cuenta "Sin asignar" para banco ${bankCode}. Corre el seed.`
-    );
+    const bankName = inferBankName(bankCode);
+    unassigned = await prisma.bankAccount.create({
+      data: {
+        bankCode,
+        bankName,
+        accountNumber: unassignedKey,
+        holderName: "Sin asignar",
+        alias: `Sin asignar - ${bankName}`,
+        currency: "CLP",
+      },
+    });
   }
   return toResolved(unassigned, "FALLBACK_UNASSIGNED");
+}
+
+/**
+ * bankName por defecto para los bancos conocidos. Se usa solo al lazy-crear
+ * la cuenta "Sin asignar" de un banco nuevo — el usuario puede renombrar
+ * despues desde Configuracion si quiere.
+ */
+function inferBankName(bankCode: string): string {
+  switch (bankCode) {
+    case "BCI": return "BCI";
+    case "SANTANDER": return "Santander";
+    case "INTERNACIONAL": return "Banco Internacional";
+    case "CHILE": return "Banco de Chile";
+    case "MERCADOPAGO": return "Mercado Pago";
+    default: return bankCode;
+  }
 }
 
 function toResolved(

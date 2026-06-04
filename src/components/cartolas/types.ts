@@ -140,6 +140,24 @@ export interface ImportPreviewResponse {
       statementImportId: string;
       accountLabel: string;
     };
+    /** Sugerencia de EntidadInterna asociada al holderName del archivo. Solo
+     *  viene cuando resolvedAccount.resolutionMethod === "FALLBACK_UNASSIGNED"
+     *  y el archivo trajo holderName. El UI lo usa para pre-llenar el form
+     *  de "Crear cuenta nueva" con el holderRut correcto. */
+    entidadSuggestion?: {
+      reason: "exact" | "ambiguous" | "no-match" | "no-name";
+      match: {
+        id: string;
+        rutCanonico: string;
+        nombreCanonico: string;
+        rubro: number | null;
+      } | null;
+      candidates: Array<{
+        id: string;
+        rutCanonico: string;
+        nombreCanonico: string;
+      }>;
+    } | null;
   };
   inserted?: {
     statementImportId: string;

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { runImport } from "@/lib/cartolas/import";
 import { runConsolidados } from "@/lib/consolidados/match";
+import { prisma } from "@/lib/db";
+import { suggestEntidadByName } from "@/lib/internos/suggest";
 
 /**
  * POST /api/cartolas/import?dryRun=1
@@ -63,14 +65,72 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json(serializeResult(result));
+    // Cuando la resolucion cae en placeholder "Sin asignar" y tenemos
+    // holderName parseado, sugerimos una EntidadInterna para que el UI pueda
+    // pre-rellenar el holderRut al crear la cuenta nueva.
+    let entidadSuggestion = null;
+    if (
+      result.preview.resolvedAccount.resolutionMethod === "FALLBACK_UNASSIGNED" &&
+      result.preview.unresolvedAccountInfo?.holderName
+    ) {
+      const entidades = await prisma.entidadInterna.findMany({
+        where: { active: true },
+        select: {
+          id: true,
+          rutCanonico: true,
+          nombreCanonico: true,
+          aliases: true,
+          rubro: true,
+        },
+      });
+      const sug = suggestEntidadByName(
+        result.preview.unresolvedAccountInfo.holderName,
+        entidades,
+      );
+      entidadSuggestion = {
+        reason: sug.reason,
+        match: sug.match
+          ? {
+              id: sug.match.id,
+              rutCanonico: sug.match.rutCanonico,
+              nombreCanonico: sug.match.nombreCanonico,
+              rubro: sug.match.rubro,
+            }
+          : null,
+        candidates: sug.candidates.map((c) => ({
+          id: c.id,
+          rutCanonico: c.rutCanonico,
+          nombreCanonico: c.nombreCanonico,
+        })),
+      };
+    }
+
+    return NextResponse.json(serializeResult(result, entidadSuggestion));
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error al procesar el archivo";
     return NextResponse.json({ error: msg }, { status: 400 });
   }
 }
 
-function serializeResult(result: import("@/lib/cartolas/import").ImportResult) {
+type EntidadSuggestionDTO = {
+  reason: "exact" | "ambiguous" | "no-match" | "no-name";
+  match: {
+    id: string;
+    rutCanonico: string;
+    nombreCanonico: string;
+    rubro: number | null;
+  } | null;
+  candidates: Array<{
+    id: string;
+    rutCanonico: string;
+    nombreCanonico: string;
+  }>;
+} | null;
+
+function serializeResult(
+  result: import("@/lib/cartolas/import").ImportResult,
+  entidadSuggestion: EntidadSuggestionDTO,
+) {
   const p = result.preview;
   return {
     preview: {
@@ -93,6 +153,7 @@ function serializeResult(result: import("@/lib/cartolas/import").ImportResult) {
         movement: serializeMovement(it.movement),
       })),
       itemsTotal: p.items.length,
+      entidadSuggestion,
     },
     inserted: result.inserted,
   };
