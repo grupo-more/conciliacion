@@ -48,6 +48,7 @@ export async function GET(req: Request) {
           accountNumber: true,
           displayNumber: true,
           holderName: true,
+          alias: true,
         },
       },
     },
@@ -74,6 +75,15 @@ export async function GET(req: Request) {
     const cliente = bm.counterpartyName?.trim() || labelContra;
     const groupId = bm.id;
 
+    const cuentaNumero = bm.account.displayNumber || bm.account.accountNumber;
+    const detalleBanco = [
+      bm.account.bankName,
+      bm.account.holderName,
+      cuentaNumero,
+    ]
+      .filter((s) => s && s.trim().length > 0)
+      .join(" · ");
+
     // 1) Fila lado banco — Debe
     rows.push({
       groupId,
@@ -81,8 +91,8 @@ export async function GET(req: Request) {
       fecha: bm.postDate.toISOString(),
       rubro: TRANSBANK_RUBRO_BANCO,
       rubroLabel: labelBanco,
-      detalle: bm.account.bankName,
-      cuenta: bm.account.displayNumber || bm.account.accountNumber,
+      detalle: detalleBanco,
+      cuenta: cuentaNumero,
       cliente,
       glosa,
       debe: abs.toString(),
@@ -100,7 +110,7 @@ export async function GET(req: Request) {
       rubro: TRANSBANK_RUBRO_CONTRA,
       rubroLabel: labelContra,
       detalle: labelContra,
-      cuenta: bm.account.displayNumber || bm.account.accountNumber,
+      cuenta: cuentaNumero,
       cliente,
       glosa,
       debe: null,
