@@ -119,7 +119,7 @@ export function EgresosInternosView() {
         formatDate(r.fecha),
         r.bankName,
         r.accountNumber,
-        Number(r.monto),
+        -Number(r.monto),
         r.entidadNombre,
         r.entidadRut,
         r.entidadRubro ?? "",
@@ -133,7 +133,7 @@ export function EgresosInternosView() {
       "",
       "",
       "TOTAL",
-      Number(totalMonto),
+      -Number(totalMonto),
       "",
       "",
       "",
@@ -223,7 +223,9 @@ export function EgresosInternosView() {
         {hasRows && (
           <span className="text-xs text-text-muted">
             {data!.totals.count} egreso{data!.totals.count === 1 ? "" : "s"} ·{" "}
-            <span className="font-mono">{formatMoney(totalMonto)}</span>
+            <span className="font-mono text-rose-600">
+              -{formatMoney(totalMonto)}
+            </span>
           </span>
         )}
         <div className="flex-1" />
@@ -281,8 +283,8 @@ export function EgresosInternosView() {
                         {r.accountNumber}
                       </div>
                     </td>
-                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
-                      {formatMoney(BigInt(r.monto))}
+                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap text-rose-600">
+                      -{formatMoney(BigInt(r.monto))}
                     </td>
                     <td className="px-3 py-2">
                       <div className="font-medium">{r.entidadNombre}</div>
@@ -324,8 +326,8 @@ export function EgresosInternosView() {
                   <td className="px-3 py-2 font-semibold" colSpan={2}>
                     TOTAL
                   </td>
-                  <td className="px-3 py-2 text-right font-mono font-bold">
-                    {formatMoney(totalMonto)}
+                  <td className="px-3 py-2 text-right font-mono font-bold text-rose-600">
+                    -{formatMoney(totalMonto)}
                   </td>
                   <td colSpan={4} />
                 </tr>
