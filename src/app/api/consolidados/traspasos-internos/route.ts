@@ -230,6 +230,7 @@ export async function GET(req: Request) {
     counts: {
       pairsClean: result.pairs.filter((p) => p.matchQuality === "clean").length,
       pairsCircle: result.pairs.filter((p) => p.matchQuality === "circle").length,
+      pairsBlock: result.pairs.filter((p) => p.matchQuality === "block").length,
       pairsIntra: result.pairs.filter((p) => p.intraEntidad).length,
       outOrphans: result.outOrphans.length,
       inOrphans: result.inOrphans.length,
@@ -251,7 +252,7 @@ interface TraspasoRow {
   debe: string | null;
   haber: string | null;
   bankMovementId: string;
-  matchQuality: "clean" | "circle";
+  matchQuality: "clean" | "circle" | "block";
   intraEntidad: boolean;
 }
 

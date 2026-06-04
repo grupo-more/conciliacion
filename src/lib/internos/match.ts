@@ -57,8 +57,15 @@ export interface MirrorPair {
   in: BankMovementForMatch;
   /** Entidad detectada como contraparte del OUT (= titular de la cuenta destino). */
   destEntidad: EntidadInternaLite;
-  /** Calidad del match: clean=1 candidato, circle=desambiguado por cierre del circulo */
-  matchQuality: "clean" | "circle";
+  /**
+   * Calidad del match:
+   *   clean  = exactamente 1 candidato
+   *   circle = N candidatos y solo 1 cerro circulo (cpRut del IN == holderRut origen)
+   *   block  = pareo greedy de un bloque ambiguo (OUTs y INs indistinguibles entre si
+   *            por monto+fecha+entidad; el total del bloque cuadra aunque el match
+   *            individual sea por orden de fecha — para fines contables es equivalente)
+   */
+  matchQuality: "clean" | "circle" | "block";
   /** true si origen y destino tienen el mismo holderRut (traspaso intra-entidad). */
   intraEntidad: boolean;
 }
@@ -139,10 +146,16 @@ export function matchMirror(
     else if (m.direction === "IN") insInternal.push({ mov: m, entidad: det.entidad });
   }
 
-  // Para cada OUT, busco IN candidatos.
+  // PASE 1 (deterministico): 1:1 cleanos + desambiguados por cierre de circulo.
+  // Los OUTs que quedan ambiguos los guardamos para el pase 2 (block).
   const pairs: MirrorPair[] = [];
   const usedInIds = new Set<string>();
   const outOrphans: MirrorResult["outOrphans"] = [];
+  const pendingOuts: Array<{
+    out: BankMovementForMatch;
+    destEntidad: EntidadInternaLite;
+    candidates: BankMovementForMatch[];
+  }> = [];
 
   for (const { mov: out, entidad: destEntidad } of outsInternal) {
     const destAccountIds = new Set(
@@ -159,7 +172,6 @@ export function matchMirror(
       (m) =>
         m.direction === "IN" &&
         destAccountIds.has(m.account.id) &&
-        !usedInIds.has(m.id) &&
         absBig(m.amount) === outAbs &&
         dateDiffDays(m.postDate, out.postDate) <= windowDays,
     );
@@ -171,6 +183,11 @@ export function matchMirror(
 
     if (candidates.length === 1) {
       const winner = candidates[0];
+      if (usedInIds.has(winner.id)) {
+        // Otra OUT del mismo bloque ya consumio este IN — defiero a pase 2.
+        pendingOuts.push({ out, destEntidad, candidates });
+        continue;
+      }
       usedInIds.add(winner.id);
       pairs.push({
         out,
@@ -184,10 +201,11 @@ export function matchMirror(
       continue;
     }
 
-    // Multiples candidatos → intentar cierre del circulo.
+    // Multiples candidatos → intentar cierre del circulo (cpRut del IN matchea
+    // holderRut del origen del OUT). Si solo uno cierra → es ese.
     const outHolderRut = normalizeRut(out.account.holderRut);
-    const circleClosers = candidates.filter((c) =>
-      closesCircle(c, outHolderRut),
+    const circleClosers = candidates.filter(
+      (c) => !usedInIds.has(c.id) && closesCircle(c, outHolderRut),
     );
 
     if (circleClosers.length === 1) {
@@ -205,8 +223,49 @@ export function matchMirror(
       continue;
     }
 
-    // No se pudo desambiguar → ambiguo, queda huerfano con candidatos.
-    outOrphans.push({ out, reason: "ambiguous", candidates });
+    // Mas de uno cierra circulo (o ninguno) → defiero al pase 2 (block).
+    pendingOuts.push({ out, destEntidad, candidates });
+  }
+
+  // PASE 2 (block / greedy): para cada OUT pendiente, tomo el primer IN
+  // candidato no usado (preferentemente uno que cierre circulo). El orden
+  // de procesamiento es por (postDate, id) para que sea deterministico:
+  // si en el mismo bloque tengo 4 OUTs y 4 INs identicos, todos cuadran.
+  pendingOuts.sort((a, b) => {
+    const t = a.out.postDate.getTime() - b.out.postDate.getTime();
+    if (t !== 0) return t;
+    return a.out.id.localeCompare(b.out.id);
+  });
+
+  for (const { out, destEntidad, candidates } of pendingOuts) {
+    const fresh = candidates.filter((c) => !usedInIds.has(c.id));
+    if (fresh.length === 0) {
+      outOrphans.push({ out, reason: "ambiguous", candidates });
+      continue;
+    }
+
+    const outHolderRut = normalizeRut(out.account.holderRut);
+    const circleClosers = fresh.filter((c) =>
+      closesCircle(c, outHolderRut),
+    );
+    // Si hay closers, preferimos uno (el mas viejo); si no, tomamos el mas viejo del pool.
+    const pool = circleClosers.length > 0 ? circleClosers : fresh;
+    pool.sort((a, b) => {
+      const t = a.postDate.getTime() - b.postDate.getTime();
+      if (t !== 0) return t;
+      return a.id.localeCompare(b.id);
+    });
+    const winner = pool[0];
+    usedInIds.add(winner.id);
+    pairs.push({
+      out,
+      in: winner,
+      destEntidad,
+      matchQuality: "block",
+      intraEntidad:
+        normalizeRut(out.account.holderRut) ===
+        normalizeRut(winner.account.holderRut),
+    });
   }
 
   // INs internos no usados como espejo de ningun OUT = huerfanos.

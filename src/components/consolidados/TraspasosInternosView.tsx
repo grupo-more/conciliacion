@@ -6,7 +6,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 
 type Side = "DEBE" | "HABER";
 type IntraFilter = "include" | "exclude" | "only";
-type MatchQuality = "clean" | "circle";
+type MatchQuality = "clean" | "circle" | "block";
 
 interface TraspasoRow {
   groupId: string;
@@ -60,6 +60,7 @@ interface TraspasosResponse {
   counts: {
     pairsClean: number;
     pairsCircle: number;
+    pairsBlock: number;
     pairsIntra: number;
     outOrphans: number;
     inOrphans: number;
@@ -235,6 +236,14 @@ export function TraspasosInternosView() {
                 </span>
               </>
             )}
+            {data.counts.pairsBlock > 0 && (
+              <>
+                {" + "}
+                <span className="text-amber-700">
+                  {data.counts.pairsBlock} pareo por bloque
+                </span>
+              </>
+            )}
           </span>
         )}
         <div className="flex-1" />
@@ -376,10 +385,18 @@ function AsientoRow({
             )}
             {row.matchQuality === "circle" && (
               <span
-                className="inline-block rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[10px] px-1.5 py-0.5 font-bold"
-                title="Match desambiguado por cierre del circulo"
+                className="inline-block rounded-full bg-sky-100 text-sky-800 border border-sky-300 text-[10px] px-1.5 py-0.5 font-bold"
+                title="Match desambiguado por cierre del circulo (cpRut del IN coincide con holderRut del origen)"
               >
-                ◑
+                ◑ desambig
+              </span>
+            )}
+            {row.matchQuality === "block" && (
+              <span
+                className="inline-block rounded-full bg-amber-100 text-amber-800 border border-amber-300 text-[10px] px-1.5 py-0.5 font-bold"
+                title="Pareo por bloque: varios OUTs/INs indistinguibles entre si, paread os por orden de fecha. El total del bloque cuadra."
+              >
+                ▤ bloque
               </span>
             )}
           </span>
