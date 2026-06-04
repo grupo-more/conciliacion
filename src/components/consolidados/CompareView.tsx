@@ -121,6 +121,10 @@ export function CompareView() {
   const [accountId, setAccountId] = useState(presetAccountId);
   const [banco, setBanco] = useState("");
   const [onlyUnmatched, setOnlyUnmatched] = useState(true);
+  // Oculta IN cuya contraparte es una EntidadInterna (Traspasos internos).
+  // Default true: el flujo de match contra Tesorería es para ventas a
+  // cliente, no traspasos entre cuentas propias.
+  const [hideInternal, setHideInternal] = useState(true);
   const [search, setSearch] = useState("");
 
   // Selección
@@ -190,6 +194,7 @@ export function CompareView() {
       if (accountId) params.set("accountId", accountId);
       if (banco) params.set("banco", banco);
       params.set("onlyUnmatched", String(onlyUnmatched));
+      params.set("hideInternal", String(hideInternal));
       const res = await fetch(`/api/consolidados/compare?${params}`);
       if (res.ok) {
         setData(await res.json());
@@ -204,7 +209,7 @@ export function CompareView() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [since, until, accountId, banco, onlyUnmatched]);
+  }, [since, until, accountId, banco, onlyUnmatched, hideInternal]);
 
   // Filtros client-side por search
   const filteredBank = useMemo(() => {
@@ -537,6 +542,17 @@ export function CompareView() {
             onChange={(e) => setOnlyUnmatched(e.target.checked)}
           />
           Solo sin matchear
+        </label>
+        <label
+          className="flex items-center gap-2 text-sm whitespace-nowrap"
+          title="Oculta los IN cuya contraparte es una entidad interna (ya se ven en Traspasos internos)."
+        >
+          <input
+            type="checkbox"
+            checked={hideInternal}
+            onChange={(e) => setHideInternal(e.target.checked)}
+          />
+          Ocultar internos
         </label>
       </div>
 

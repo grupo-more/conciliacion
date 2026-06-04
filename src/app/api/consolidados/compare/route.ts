@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
 import { getDifMenorSettings } from "@/lib/dif-menor/detect";
 import { parseGlosa } from "@/lib/consolidados/glosa";
+import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
 
 /** Ventana de fechas para considerar dos tesorerías parte del mismo
  *  depósito agrupado. Match estricto: misma semana. */
@@ -30,6 +31,12 @@ const SPLIT_GROUP_MAX_SIZE = 8;
  *  ?accountId=<uuid>   filtra BankMovements a una cuenta especifica
  *  ?banco=<string>     filtra Tesoreria por banco
  *  ?onlyUnmatched=true (default) o false
+ *  ?hideInternal=true (default) o false
+ *    Cuando true, oculta los BankMovements IN cuya contraparte detectada por
+ *    el cascade de internos (counterpartyRut/Name → alias/RUT en glosa) cae
+ *    en una EntidadInterna registrada. Esos movimientos no son ventas a
+ *    cliente: son traspasos internos y tienen su asiento en la tab
+ *    "Traspasos internos" — no se concilian contra Tesoreria.
  */
 export async function GET(req: Request) {
   const session = await getSession();
@@ -43,6 +50,7 @@ export async function GET(req: Request) {
   const accountId = url.searchParams.get("accountId");
   const banco = (url.searchParams.get("banco") || "").trim();
   const onlyUnmatched = url.searchParams.get("onlyUnmatched") !== "false";
+  const hideInternal = url.searchParams.get("hideInternal") !== "false";
 
   // Default: ultimos 30 dias
   const now = new Date();
@@ -75,7 +83,7 @@ export async function GET(req: Request) {
       },
     ],
   };
-  const bankMovements = await prisma.bankMovement.findMany({
+  const bankMovementsRaw = await prisma.bankMovement.findMany({
     where: bankWhere,
     include: {
       account: {
@@ -97,6 +105,28 @@ export async function GET(req: Request) {
     orderBy: [{ postDate: "desc" }, { amount: "desc" }],
     take: 1000,
   });
+
+  // Filtro de internos: oculta los IN cuya contraparte matchea una entidad
+  // interna activa. Se hace en JS (no en where) porque el detector usa
+  // cascada con regex/parseo de glosa que no es expresable en Prisma.
+  // Defensivo: si no hay entidades cargadas o el filtro esta apagado,
+  // bankMovements queda igual a la query original — cero impacto.
+  let bankMovements = bankMovementsRaw;
+  if (hideInternal) {
+    try {
+      const entidades = await loadEntidadesInternas(prisma);
+      if (entidades.length > 0) {
+        bankMovements = bankMovementsRaw.filter(
+          (bm) => !detectInterno(bm, entidades),
+        );
+      }
+    } catch (e) {
+      // Si falla la carga de entidades por cualquier motivo, NO rompemos
+      // Comparar — solo logueamos y devolvemos todos los movs como si el
+      // filtro no estuviera tildado.
+      console.error("[compare] error filtrando internos:", e);
+    }
+  }
 
   // Tesoreria movements
   const tesoreriaWhere = {
