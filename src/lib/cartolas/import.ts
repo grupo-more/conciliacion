@@ -1,8 +1,9 @@
 import { createHash } from "crypto";
 import * as XLSX from "xlsx";
 import { prisma } from "@/lib/db";
-import { detectParser } from "./detect";
+import { detectParser, detectPdfParser, isPdfBuffer } from "./detect";
 import { computeDedupKeys } from "./dedup";
+import { extractPdfText } from "./pdf";
 import type {
   BankCode,
   NormalizedMovement,
@@ -116,15 +117,36 @@ interface RunImportOptions {
 export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
   const { fileName, fileBuffer, dryRun, forceAccountId } = opts;
 
-  // 1) Hash del archivo, detectar parser, parsear
+  // 1) Hash del archivo, detectar parser, parsear.
+  //    Soporta dos formatos de entrada: XLS/XLSX (universo histórico) y PDF
+  //    (Mercado Pago hoy, futuros bancos sin export Excel).
   const fileHash = createHash("sha256").update(fileBuffer).digest("hex");
 
-  const wb = XLSX.read(fileBuffer, { cellDates: true });
-  const parser = detectParser(wb);
-  if (!parser) {
-    throw new Error("No se pudo identificar el banco/formato del archivo.");
+  let parsed: ParsedStatement;
+  let pickedBankCode: BankCode;
+  let pickedBankName: string;
+  const isPdf =
+    isPdfBuffer(fileBuffer) || /\.pdf$/i.test(fileName);
+
+  if (isPdf) {
+    const text = await extractPdfText(fileBuffer);
+    const pdfParser = detectPdfParser(text);
+    if (!pdfParser) {
+      throw new Error("No se pudo identificar el banco/formato del PDF.");
+    }
+    parsed = pdfParser.parse(text);
+    pickedBankCode = pdfParser.bankCode;
+    pickedBankName = pdfParser.bankName;
+  } else {
+    const wb = XLSX.read(fileBuffer, { cellDates: true });
+    const parser = detectParser(wb);
+    if (!parser) {
+      throw new Error("No se pudo identificar el banco/formato del archivo.");
+    }
+    parsed = parser.parse(wb);
+    pickedBankCode = parser.bankCode;
+    pickedBankName = parser.bankName;
   }
-  const parsed = parser.parse(wb);
 
   // 2) Resolver cuenta destino
   const resolved = await resolveAccount({
@@ -283,8 +305,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
 
   const preview: ImportPreview = {
     parserCode: parsed.parserCode,
-    bankCode: parser.bankCode,
-    bankName: parser.bankName,
+    bankCode: pickedBankCode,
+    bankName: pickedBankName,
     fileName,
     fileHash,
     resolvedAccount: resolved,

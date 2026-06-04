@@ -1,4 +1,4 @@
-import type { BankParser } from "../types";
+import type { BankParser, PdfBankParser } from "../types";
 import { bciDetalladoParser } from "./bci-detallado";
 import { santanderMovimientoParser } from "./santander-movimiento";
 import { santanderHistoricaParser } from "./santander-historica";
@@ -8,6 +8,8 @@ import {
   internacionalHistoricaParser,
 } from "./internacional";
 import { chileMovimientosParser } from "./chile";
+import { chileCartolaParser } from "./chile-cartola";
+import { mercadoPagoParser } from "./mercado-pago";
 
 /**
  * Registro de parsers. Para agregar un nuevo banco/sub-formato:
@@ -27,4 +29,11 @@ export const PARSERS: BankParser[] = [
   internacionalHistoricaParser,
   internacionalProvisoriaParser,
   chileMovimientosParser,
+  chileCartolaParser,
 ];
+
+/**
+ * Registro de parsers PDF. Hoy solo Mercado Pago; cualquier banco que
+ * solo ofrezca cartola PDF cae aca.
+ */
+export const PDF_PARSERS: PdfBankParser[] = [mercadoPagoParser];

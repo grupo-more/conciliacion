@@ -9,9 +9,11 @@ export type ParserCode =
   | "SANTANDER_PROVISORIA"
   | "INTERNACIONAL_PROVISORIA"
   | "INTERNACIONAL_HISTORICA"
-  | "CHILE_MOVIMIENTOS";
+  | "CHILE_MOVIMIENTOS"
+  | "CHILE_CARTOLA"
+  | "MERCADO_PAGO";
 
-export type BankCode = "BCI" | "SANTANDER" | "INTERNACIONAL" | "CHILE";
+export type BankCode = "BCI" | "SANTANDER" | "INTERNACIONAL" | "CHILE" | "MERCADOPAGO";
 
 export interface ParsedAccountInfo {
   bankCode: BankCode;
@@ -72,4 +74,19 @@ export interface BankParser {
   matches(wb: WorkBook): boolean;
   /** Parsea el workbook y devuelve el resultado normalizado. */
   parse(wb: WorkBook): ParsedStatement;
+}
+
+/**
+ * Parser para cartolas en PDF. Recibe el texto ya extraido (no el buffer)
+ * para que sea facil de testear sin depender de la libreria de extraccion.
+ */
+export interface PdfBankParser {
+  code: ParserCode;
+  bankCode: BankCode;
+  bankName: string;
+  format: "pdf";
+  /** Decide si el texto extraido del PDF corresponde a este parser. */
+  matches(text: string): boolean;
+  /** Parsea el texto y devuelve el resultado normalizado. */
+  parse(text: string): ParsedStatement;
 }

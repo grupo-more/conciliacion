@@ -205,7 +205,7 @@ export function ImportModal({ accounts: _accounts, onClose, onImported }: Props)
               <input
                 ref={inputRef}
                 type="file"
-                accept=".xlsx,.xls"
+                accept=".xlsx,.xls,.pdf"
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -269,13 +269,13 @@ function SelectStage({
   return (
     <div className="space-y-4">
       <p className="text-sm text-text-muted">
-        Selecciona uno o varios archivos de cartola (.xlsx o .xls). El sistema
-        detectará el banco automáticamente para cada archivo.
+        Selecciona uno o varios archivos de cartola (.xlsx, .xls o .pdf). El
+        sistema detectará el banco automáticamente para cada archivo.
       </p>
       <input
         ref={inputRef}
         type="file"
-        accept=".xlsx,.xls"
+        accept=".xlsx,.xls,.pdf"
         multiple
         className="input"
         onChange={(e) => {

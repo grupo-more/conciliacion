@@ -4,12 +4,19 @@
 
 /**
  * Convierte un valor de monto que puede venir en formatos:
- *   "$213,600"  → 213600
- *   "-47,600"   → -47600
- *   "1.979.839" → 1979839 (formato chileno con punto como miles)
- *   "  916,000  " → 916000
- *   213600 (number) → 213600
- *   null/"" → null
+ *   "$213,600"        → 213600
+ *   "-47,600"         → -47600
+ *   "1.979.839"       → 1979839   (formato chileno con punto como miles)
+ *   "  916,000  "     → 916000
+ *   "2.300.000,00"    → 2300000   (formato chileno con coma decimal — MP, .csv exports)
+ *   "-2.300.200,00"   → -2300200
+ *   213600 (number)   → 213600
+ *   null/""           → null
+ *
+ * Heuristica de separador decimal: cuando hay tanto "." como ",", el ultimo
+ * en aparecer se interpreta como decimal (estandar Chile/EU); cuando hay
+ * solo uno y le siguen 1-2 digitos como ultima parte, tambien se trata como
+ * decimal. CLP no usa decimales, asi que se truncan despues.
  */
 export function parseAmount(raw: unknown): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
@@ -24,13 +31,39 @@ export function parseAmount(raw: unknown): number | null {
   const negative = s.startsWith("-") || s.startsWith("(");
   s = s.replace(/[()$\s]/g, "");
   if (s.startsWith("-")) s = s.slice(1);
-  // Algunos bancos (ej. Chile) prefijan saldos positivos con "+" → ignorar.
   if (s.startsWith("+")) s = s.slice(1);
 
-  // Decidir separador de miles: en Chile suelen usar punto o coma como miles.
-  // No hay decimales en CLP, así que removemos ambos.
-  s = s.replace(/[.,]/g, "");
+  // Decidir si hay separador decimal.
+  const hasDot = s.includes(".");
+  const hasComma = s.includes(",");
+  let decimalSep: string | null = null;
 
+  if (hasDot && hasComma) {
+    // Ambos presentes: el que aparece mas a la derecha es el decimal.
+    decimalSep = s.lastIndexOf(".") > s.lastIndexOf(",") ? "." : ",";
+  } else if (hasDot || hasComma) {
+    const sep = hasDot ? "." : ",";
+    // Si aparece una sola vez Y la cola es 1-2 digitos, lo tratamos como decimal.
+    // Si la cola es 3+ digitos (caso "1,234" / "1.000"), es separador de miles.
+    const parts = s.split(sep);
+    if (parts.length === 2 && /^\d{1,2}$/.test(parts[1])) {
+      decimalSep = sep;
+    }
+  }
+
+  if (decimalSep) {
+    const decIdx = s.lastIndexOf(decimalSep);
+    // Parte entera: descarta todos los separadores; la parte decimal se trunca
+    // porque trabajamos en CLP enteros.
+    const intPart = s.slice(0, decIdx).replace(/[.,]/g, "");
+    if (!/^\d+$/.test(intPart)) return null;
+    const n = Number(intPart);
+    if (!Number.isFinite(n)) return null;
+    return negative ? -n : n;
+  }
+
+  // Sin separador decimal: todos los "." y "," son de miles → strip.
+  s = s.replace(/[.,]/g, "");
   if (!/^\d+$/.test(s)) return null;
   const n = Number(s);
   if (!Number.isFinite(n)) return null;
