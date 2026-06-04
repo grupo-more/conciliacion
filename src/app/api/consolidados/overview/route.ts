@@ -96,13 +96,12 @@ export async function GET(req: Request) {
               { clienteName: { contains: search, mode: "insensitive" as const } },
               { clienteRut: { contains: search, mode: "insensitive" as const } },
               { sucursalName: { contains: search, mode: "insensitive" as const } },
-              // Si el termino es numerico (con o sin separadores de miles
-              // tipo "7.000.000" / "7000000" / "7,000,000"), tambien matcheamos
-              // por monto exacto. Cubre el caso de buscar "7000000" y encontrar
-              // los movimientos de ese monto sin tener que tipear la glosa.
-              ...(parseSearchAsAmount(search) !== null
-                ? [{ monto: parseSearchAsAmount(search)! }]
-                : []),
+              // Si el termino es numerico (con o sin separadores de miles),
+              // matcheamos por PREFIJO de monto. "700000" matchea cualquier
+              // monto cuya representacion decimal empieza con 700000 — esto
+              // incluye 700000, 7000000, 70000000, etc. Se arma con rangos
+              // [X·10^k, (X+1)·10^k) para que Prisma lo resuelva en SQL.
+              ...searchAmountRanges(search).map((r) => ({ monto: r })),
             ],
           }
         : {}),
@@ -212,16 +211,25 @@ function getPeriodRange(period: "day" | "week" | "month"): { start: Date; end: D
 }
 
 /**
- * Si el termino de busqueda es un numero (con o sin separadores de miles
- * chilenos/US), lo devuelve como BigInt para usarlo como monto exacto en
- * el filtro. Si tiene letras u otros chars no-numericos, retorna null.
+ * Convierte un termino de busqueda numerico en una lista de rangos para
+ * matchear por PREFIJO de monto. Para "700000" devuelve los rangos:
+ *   [700000, 700001), [7000000, 7100000), [70000000, 71000000), ...
+ * hasta cubrir hasta 10^13 (un billon de CLP, mas que suficiente).
+ *
+ * Si el termino tiene letras u otros chars no-numericos, retorna []
+ * (= "no aplica filtro por monto").
  */
-function parseSearchAsAmount(s: string): bigint | null {
+function searchAmountRanges(s: string): { gte: bigint; lt: bigint }[] {
   const cleaned = s.replace(/[.,\s$]/g, "");
-  if (!/^-?\d+$/.test(cleaned)) return null;
-  try {
-    return BigInt(cleaned);
-  } catch {
-    return null;
+  if (cleaned.length === 0 || !/^\d+$/.test(cleaned)) return [];
+
+  const base = BigInt(cleaned);
+  const next = base + 1n;
+  const ranges: { gte: bigint; lt: bigint }[] = [];
+  const MAX_DIGITS = 13;
+  for (let extra = 0; cleaned.length + extra <= MAX_DIGITS; extra++) {
+    const mul = 10n ** BigInt(extra);
+    ranges.push({ gte: base * mul, lt: next * mul });
   }
+  return ranges;
 }

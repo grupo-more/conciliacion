@@ -117,6 +117,16 @@ export function ConsolidadosView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter]);
 
+  // Debounce del search: se recarga 250ms despues del ultimo tipeo.
+  // Asi se siente "search-as-you-type" sin pegarle al API por cada tecla.
+  useEffect(() => {
+    const h = setTimeout(() => {
+      load();
+    }, 250);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
   function toggleStatus(s: ConsolidadoStatus) {
     setStatusFilter((prev) => {
       const next = new Set(prev);
@@ -265,18 +275,11 @@ export function ConsolidadosView() {
             </select>
             <input
               type="text"
-              placeholder="Buscar cliente / glosa / RUT..."
+              placeholder="Buscar cliente / glosa / RUT / monto..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && load()}
               className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white flex-1 min-w-[200px]"
             />
-            <button
-              onClick={load}
-              className="rounded-md border border-border-soft px-3 py-1.5 text-sm hover:bg-bg-soft"
-            >
-              Buscar
-            </button>
           </div>
 
           {/* Tabla */}
