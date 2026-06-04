@@ -96,6 +96,13 @@ export async function GET(req: Request) {
               { clienteName: { contains: search, mode: "insensitive" as const } },
               { clienteRut: { contains: search, mode: "insensitive" as const } },
               { sucursalName: { contains: search, mode: "insensitive" as const } },
+              // Si el termino es numerico (con o sin separadores de miles
+              // tipo "7.000.000" / "7000000" / "7,000,000"), tambien matcheamos
+              // por monto exacto. Cubre el caso de buscar "7000000" y encontrar
+              // los movimientos de ese monto sin tener que tipear la glosa.
+              ...(parseSearchAsAmount(search) !== null
+                ? [{ monto: parseSearchAsAmount(search)! }]
+                : []),
             ],
           }
         : {}),
@@ -202,4 +209,19 @@ function getPeriodRange(period: "day" | "week" | "month"): { start: Date; end: D
     start.setHours(0, 0, 0, 0);
   }
   return { start, end };
+}
+
+/**
+ * Si el termino de busqueda es un numero (con o sin separadores de miles
+ * chilenos/US), lo devuelve como BigInt para usarlo como monto exacto en
+ * el filtro. Si tiene letras u otros chars no-numericos, retorna null.
+ */
+function parseSearchAsAmount(s: string): bigint | null {
+  const cleaned = s.replace(/[.,\s$]/g, "");
+  if (!/^-?\d+$/.test(cleaned)) return null;
+  try {
+    return BigInt(cleaned);
+  } catch {
+    return null;
+  }
 }
