@@ -202,6 +202,34 @@ model RubroLabel {
   isDifference Boolean @default(false) @map("is_difference")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
+
+  entidadesInternas EntidadInterna[]
+}
+
+// Entidad considerada "interna" para la deteccion de egresos a cuentas propias
+// en cartolas bancarias. La idea: la cartola a veces trae counterpartyRut, a
+// veces solo counterpartyName, a veces ninguno. Esta tabla concentra:
+//   - RUT canonico (normalizado: solo digitos + K, sin puntos ni guion).
+//   - Nombre canonico.
+//   - aliases: las variantes de nombre que efectivamente aparecen en la cartola
+//     (ej. "Internet a 76.815.928-9", "MORE CAPITAL S", "More Capital Spa").
+//     El detector matchea por palabra entera contra cada alias cuando no hay RUT.
+//   - rubroId opcional: enlace al rubro contable propio de la entidad (cuando
+//     existe — ej. 198 para MG, 197 para ME). Puede quedar null para entidades
+//     internas que no tienen rubro asignado.
+model EntidadInterna {
+  id              String   @id @default(uuid())
+  rutCanonico     String   @unique @map("rut_canonico")
+  nombreCanonico  String   @map("nombre_canonico")
+  aliases         String[] @default([])
+  rubro           Int?
+  rubroLabel      RubroLabel? @relation(fields: [rubro], references: [rubro], onDelete: SetNull)
+  notas           String?  @db.Text
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@index([active])
 }
 
 // Consolidado: relaciona un movimiento de Tesoreria con su contraparte bancaria.

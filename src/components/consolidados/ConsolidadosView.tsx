@@ -16,9 +16,16 @@ import { CompareView } from "./CompareView";
 import { OKView } from "./OKView";
 import { AbonoTransbankView } from "./AbonoTransbankView";
 import { DifMenorView } from "./DifMenorView";
+import { EgresosInternosView } from "./EgresosInternosView";
 
 type Period = "day" | "week" | "month";
-type Tab = "list" | "compare" | "ok" | "abono-transbank" | "dif-menor";
+type Tab =
+  | "list"
+  | "compare"
+  | "ok"
+  | "abono-transbank"
+  | "egresos-internos"
+  | "dif-menor";
 
 export function ConsolidadosView() {
   const [tab, setTab] = useState<Tab>("list");
@@ -167,6 +174,12 @@ export function ConsolidadosView() {
             Abono Transbank
           </TabButton>
           <TabButton
+            active={tab === "egresos-internos"}
+            onClick={() => setTab("egresos-internos")}
+          >
+            Egresos internos
+          </TabButton>
+          <TabButton
             active={tab === "dif-menor"}
             onClick={() => setTab("dif-menor")}
           >
@@ -179,6 +192,7 @@ export function ConsolidadosView() {
       {tab === "compare" && <CompareView />}
       {tab === "ok" && <OKView />}
       {tab === "abono-transbank" && <AbonoTransbankView />}
+      {tab === "egresos-internos" && <EgresosInternosView />}
       {tab === "dif-menor" && <DifMenorView />}
 
       {tab === "list" && (

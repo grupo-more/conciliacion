@@ -5,8 +5,9 @@ import { PerfilTab } from "./PerfilTab";
 import { RubrosTab } from "./RubrosTab";
 import { BankAliasesTab } from "./BankAliasesTab";
 import { DifMenorTab } from "./DifMenorTab";
+import { EntidadesInternasTab } from "./EntidadesInternasTab";
 
-type Tab = "perfil" | "rubros" | "aliases" | "dif-menor";
+type Tab = "perfil" | "rubros" | "aliases" | "dif-menor" | "entidades-internas";
 
 interface Props {
   user: { email: string; name: string | null };
@@ -38,6 +39,12 @@ export function ConfiguracionView({ user }: Props) {
           <TabButton active={tab === "dif-menor"} onClick={() => setTab("dif-menor")}>
             Dif menor a 100
           </TabButton>
+          <TabButton
+            active={tab === "entidades-internas"}
+            onClick={() => setTab("entidades-internas")}
+          >
+            Entidades internas
+          </TabButton>
         </nav>
       </div>
 
@@ -46,6 +53,7 @@ export function ConfiguracionView({ user }: Props) {
         {tab === "rubros" && <RubrosTab />}
         {tab === "aliases" && <BankAliasesTab />}
         {tab === "dif-menor" && <DifMenorTab />}
+        {tab === "entidades-internas" && <EntidadesInternasTab />}
       </div>
     </div>
   );
