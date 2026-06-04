@@ -17,6 +17,7 @@ import { OKView } from "./OKView";
 import { AbonoTransbankView } from "./AbonoTransbankView";
 import { DifMenorView } from "./DifMenorView";
 import { EgresosInternosView } from "./EgresosInternosView";
+import { EgresosTercerosView } from "./EgresosTercerosView";
 
 type Period = "day" | "week" | "month";
 type Tab =
@@ -25,6 +26,7 @@ type Tab =
   | "ok"
   | "abono-transbank"
   | "egresos-internos"
+  | "egresos-terceros"
   | "dif-menor";
 
 export function ConsolidadosView() {
@@ -180,6 +182,12 @@ export function ConsolidadosView() {
             Egresos internos
           </TabButton>
           <TabButton
+            active={tab === "egresos-terceros"}
+            onClick={() => setTab("egresos-terceros")}
+          >
+            Egresos a terceros
+          </TabButton>
+          <TabButton
             active={tab === "dif-menor"}
             onClick={() => setTab("dif-menor")}
           >
@@ -193,6 +201,7 @@ export function ConsolidadosView() {
       {tab === "ok" && <OKView />}
       {tab === "abono-transbank" && <AbonoTransbankView />}
       {tab === "egresos-internos" && <EgresosInternosView />}
+      {tab === "egresos-terceros" && <EgresosTercerosView />}
       {tab === "dif-menor" && <DifMenorView />}
 
       {tab === "list" && (
