@@ -129,8 +129,12 @@ export async function GET(req: Request) {
   }
 
   // Tesoreria movements
+  // Comparar es el banco de trabajo de INGRESOS (Tesoreria IN <-> cartola IN).
+  // Los egresos se concilian contra cartola OUT por el motor y se revisan en
+  // las tabs de egresos internos/terceros, asi que no se mezclan aca.
   const tesoreriaWhere = {
     fecha: { gte: since, lte: until },
+    tipoOperacion: "INGRESO",
     ...(banco ? { banco } : {}),
     ...(onlyUnmatched
       ? {

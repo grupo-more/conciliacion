@@ -5,6 +5,12 @@
  * bipartita greedy ordenada por score. Un BM nunca va a dos Consolidados.
  * Cada Tesoreria se asocia con SU mejor opcion disponible globalmente.
  *
+ * Direccion: cada Tesoreria se concilia contra el lado correcto de la cartola
+ * segun tipoOperacion: INGRESO -> BankMovement IN, EGRESO -> BankMovement OUT.
+ * Los montos de egreso vienen negativos (igual que los OUT de cartola), asi
+ * que el match exacto por monto funciona en ambos signos; las comparaciones
+ * de orden (splits) se hacen en magnitud.
+ *
  * Tipos de candidato (todos compiten en el mismo ranking):
  *   1. 1:1 exacto en cuenta del alias
  *   2. Split 2 o 3 partes en cuenta del alias
@@ -124,6 +130,10 @@ export interface RunSummary {
 }
 
 /* ============================ Helpers ============================ */
+
+function absBig(n: bigint): bigint {
+  return n < 0n ? -n : n;
+}
 
 function stripDiacritics(s: string): string {
   return s
@@ -361,8 +371,13 @@ function generateCandidates(
   // === 2) Splits en cuenta del alias (2-3 partes, ventana mas estrecha) ===
   const splitLower = new Date(t.fecha.getTime() - SPLIT_WINDOW_DAYS * dayMs);
   const splitUpper = new Date(t.fecha.getTime() + SPLIT_WINDOW_DAYS * dayMs);
+  // Partes mas chicas que el total (en magnitud, para servir tanto ingresos
+  // con montos positivos como egresos con montos negativos).
   const splitPool = aliasBms.filter(
-    (bm) => bm.amount < t.monto && bm.postDate >= splitLower && bm.postDate <= splitUpper
+    (bm) =>
+      absBig(bm.amount) < absBig(t.monto) &&
+      bm.postDate >= splitLower &&
+      bm.postDate <= splitUpper
   );
 
   // Pares
@@ -402,7 +417,11 @@ function generateCandidates(
     for (let i = 0; i < splitPool.length; i++) {
       for (let j = i + 1; j < splitPool.length; j++) {
         const remaining = t.monto - splitPool[i].amount - splitPool[j].amount;
-        if (remaining <= 0n) continue;
+        // El tercer pedazo debe existir, ser != 0 y del mismo signo que el
+        // total. Para ingresos (positivos) esto equivale al viejo
+        // `remaining <= 0n`; generalizado para egresos (montos negativos).
+        if (remaining === 0n) continue;
+        if ((remaining < 0n) !== (t.monto < 0n)) continue;
         for (let k = j + 1; k < splitPool.length; k++) {
           if (splitPool[k].amount !== remaining) continue;
           const triple = [splitPool[i], splitPool[j], splitPool[k]];
@@ -546,7 +565,9 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
       prisma.bankAccountAlias.findMany({ include: { account: true } }),
       prisma.bankAccount.findMany({ where: { active: true } }),
       prisma.bankMovement.findMany({
-        where: { direction: "IN" },
+        // IN para conciliar ingresos, OUT para egresos. Se rutea por cuenta +
+        // direccion mas abajo segun tipoOperacion de cada Tesoreria.
+        where: { direction: { in: ["IN", "OUT"] } },
         include: { account: true },
         orderBy: { postDate: "asc" },
       }),
@@ -579,12 +600,17 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
     for (const l of c.links) manualBmIds.add(l.bankMovementId);
   }
 
-  const bmsByAccount = new Map<string, BMWithAccount[]>();
+  // Indexar por cuenta Y direccion. Ingresos se concilian contra IN, egresos
+  // contra OUT. Mantener mapas separados evita que un ingreso matchee una
+  // salida (o viceversa) cuando coinciden monto/fecha por casualidad.
+  const bmsByAccountIN = new Map<string, BMWithAccount[]>();
+  const bmsByAccountOUT = new Map<string, BMWithAccount[]>();
   for (const bm of allBms) {
     if (manualBmIds.has(bm.id)) continue;
-    const arr = bmsByAccount.get(bm.accountId) ?? [];
+    const target = bm.direction === "OUT" ? bmsByAccountOUT : bmsByAccountIN;
+    const arr = target.get(bm.accountId) ?? [];
     arr.push(bm);
-    bmsByAccount.set(bm.accountId, arr);
+    target.set(bm.accountId, arr);
   }
 
   // 2) Clasificar Tesorerias y generar candidatos
@@ -619,6 +645,11 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
       multiPartTids.add(t.id);
       continue;
     }
+
+    // Egreso -> conciliar contra salidas (OUT). Ingreso -> entradas (IN).
+    // Confiamos en tipoOperacion; el signo del monto es respaldo defensivo.
+    const isEgreso = t.tipoOperacion === "EGRESO" || t.monto < 0n;
+    const bmsByAccount = isEgreso ? bmsByAccountOUT : bmsByAccountIN;
 
     const sameBank = accountsByBankCode.get(aliasAccount.bankCode) ?? [];
     const cands = generateCandidates(t, aliasAccount, sameBank, bmsByAccount);

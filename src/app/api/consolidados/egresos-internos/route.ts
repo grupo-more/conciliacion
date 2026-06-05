@@ -64,6 +64,20 @@ export async function GET(req: Request) {
           alias: true,
         },
       },
+      // Si esta salida ya quedo conciliada contra un egreso de Dynatech, traer
+      // el estado del Consolidado para mostrarlo en la tab.
+      consolidadoLinks: {
+        select: {
+          consolidado: {
+            select: {
+              status: true,
+              matchType: true,
+              tesoreriaMovement: { select: { externalId: true } },
+            },
+          },
+        },
+        take: 1,
+      },
     },
     orderBy: [{ postDate: "desc" }, { createdAt: "desc" }],
     take: 5000,
@@ -86,6 +100,15 @@ export async function GET(req: Request) {
       .filter((s) => s && s.trim().length > 0)
       .join(" · ");
 
+    const cLink = bm.consolidadoLinks[0]?.consolidado ?? null;
+    const conciliacion = cLink
+      ? {
+          status: cLink.status,
+          matchType: cLink.matchType,
+          tesoreriaExternalId: cLink.tesoreriaMovement.externalId.toString(),
+        }
+      : null;
+
     rows.push({
       id: bm.id,
       fecha: bm.postDate.toISOString(),
@@ -104,6 +127,7 @@ export async function GET(req: Request) {
       entidadRubro: match.entidad.rubro,
       via: match.via,
       evidence: match.evidence,
+      conciliacion,
     });
   }
 
@@ -177,6 +201,11 @@ interface EgresoInternoRow {
   entidadRubro: number | null;
   via: MatchVia;
   evidence: string;
+  conciliacion: {
+    status: string;
+    matchType: string | null;
+    tesoreriaExternalId: string;
+  } | null;
 }
 
 function parseRange(

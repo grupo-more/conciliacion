@@ -176,6 +176,7 @@ function serialize(m: Awaited<ReturnType<typeof prisma.tesoreriaMovement.findFir
     rubroBanco: m.rubroBanco,
     rubroSucursal: m.rubroSucursal,
     monto: m.monto.toString(),
+    tipoOperacion: m.tipoOperacion,
     fecha: m.fecha.toISOString(),
     fechaCarga: m.fechaCarga?.toISOString() ?? null,
     esExcepcion: m.esExcepcion,

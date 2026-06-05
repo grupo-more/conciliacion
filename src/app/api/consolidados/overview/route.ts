@@ -140,6 +140,7 @@ export async function GET(req: Request) {
     externalId: t.externalId.toString(),
     fecha: t.fecha.toISOString(),
     monto: t.monto.toString(),
+    tipoOperacion: t.tipoOperacion,
     sucursalId: t.sucursalId,
     sucursalName: t.sucursalName,
     banco: t.banco,

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { formatDate, formatMoney } from "@/lib/format";
+import { ConciliacionBadge } from "./ConciliacionBadge";
 
 type Quality = "con_rut" | "solo_nombre" | "sin_info";
 
@@ -18,6 +19,11 @@ interface EgresoTerceroRow {
   counterpartyName: string | null;
   description: string | null;
   quality: Quality;
+  conciliacion: {
+    status: string;
+    matchType: string | null;
+    tesoreriaExternalId: string;
+  } | null;
 }
 
 interface EgresosTercerosResponse {
@@ -254,6 +260,7 @@ export function EgresosTercerosView() {
                   <th className="px-3 py-2 text-left">Nombre</th>
                   <th className="px-3 py-2 text-left">Calidad</th>
                   <th className="px-3 py-2 text-left">Glosa</th>
+                  <th className="px-3 py-2 text-left">Conciliación</th>
                 </tr>
               </thead>
               <tbody>
@@ -303,6 +310,9 @@ export function EgresosTercerosView() {
                     >
                       {r.description ?? ""}
                     </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <ConciliacionBadge conciliacion={r.conciliacion} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -314,7 +324,7 @@ export function EgresosTercerosView() {
                   <td className="px-3 py-2 text-right font-mono font-bold text-rose-600">
                     -{formatMoney(totalMonto)}
                   </td>
-                  <td colSpan={4} />
+                  <td colSpan={5} />
                 </tr>
               </tfoot>
             </table>

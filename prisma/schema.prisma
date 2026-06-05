@@ -148,6 +148,11 @@ model TesoreriaMovement {
   rubroSucursal      Int?     @map("rubro_sucursal")
 
   monto              BigInt
+  // INGRESO | EGRESO. Viene de la API (campo tipoOperacion). Para movimientos
+  // historicos / payloads sin el campo, se deriva del signo del monto en el
+  // sync. Discrimina contra que lado de la cartola se concilia: INGRESO -> IN,
+  // EGRESO -> OUT.
+  tipoOperacion      String   @default("INGRESO") @map("tipo_operacion")
   fecha              DateTime
   fechaCarga         DateTime? @map("fecha_carga")
 
@@ -167,6 +172,7 @@ model TesoreriaMovement {
   @@index([rubroBanco])
   @@index([rubroSucursal])
   @@index([esExcepcion])
+  @@index([tipoOperacion])
 }
 
 model TesoreriaSyncRun {

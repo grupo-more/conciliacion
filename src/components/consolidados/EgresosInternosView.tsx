@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { formatDate, formatMoney } from "@/lib/format";
+import { ConciliacionBadge } from "./ConciliacionBadge";
 
 type MatchVia = "rut" | "rut_in_name" | "rut_in_desc" | "alias";
 
@@ -24,6 +25,11 @@ interface EgresoInternoRow {
   entidadRubro: number | null;
   via: MatchVia;
   evidence: string;
+  conciliacion: {
+    status: string;
+    matchType: string | null;
+    tesoreriaExternalId: string;
+  } | null;
 }
 
 interface EgresosInternosResponse {
@@ -267,6 +273,7 @@ export function EgresosInternosView() {
                   <th className="px-3 py-2 text-left">Vía</th>
                   <th className="px-3 py-2 text-left">Contraparte cartola</th>
                   <th className="px-3 py-2 text-left">Glosa</th>
+                  <th className="px-3 py-2 text-left">Conciliación</th>
                 </tr>
               </thead>
               <tbody>
@@ -322,6 +329,9 @@ export function EgresosInternosView() {
                     >
                       {r.description ?? ""}
                     </td>
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <ConciliacionBadge conciliacion={r.conciliacion} />
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -333,7 +343,7 @@ export function EgresosInternosView() {
                   <td className="px-3 py-2 text-right font-mono font-bold text-rose-600">
                     -{formatMoney(totalMonto)}
                   </td>
-                  <td colSpan={4} />
+                  <td colSpan={5} />
                 </tr>
               </tfoot>
             </table>

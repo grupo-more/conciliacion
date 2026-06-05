@@ -1,0 +1,3997 @@
+{
+    "data": [
+        {
+            "contexto": {
+                "id": 700437163,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "MSILVAL     ",
+                    "nombre": "MANUEL SILVA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1167542
+            },
+            "glosa": "DEP. BCI ME OSCAR LOBO BOL. 1167542",
+            "fecha": "2026-06-05T12:32:48",
+            "monto": 4580000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP. BCI ME OSCAR LOBO BOL. 1167542",
+                    "cantidad": 1,
+                    "precioUnitario": 4580000.00,
+                    "monto": 4580000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T12:34:54.897"
+        },
+        {
+            "contexto": {
+                "id": 700437160,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "MSILVAL     ",
+                    "nombre": "MANUEL SILVA LIRA             "
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1167534
+            },
+            "glosa": "EGRESO - DEP. BCI ME BIS EVENTOS Y MEDICOS SPA BOL 1167534",
+            "fecha": "2026-06-05T12:27:39",
+            "monto": -450000.00,
+            "currency": "CLP",
+            "tipoOperacion": "EGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "EGRESO - DEP. BCI ME BIS EVENTOS Y MEDICOS SPA BOL 1167534",
+                    "cantidad": 1,
+                    "precioUnitario": -450000.00,
+                    "monto": -450000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T12:30:50.5"
+        },
+        {
+            "contexto": {
+                "id": 300376055,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1167433
+            },
+            "glosa": "DEP ME SNTA BOL 1167433 RODRIGO MORALES DIF EFECTI",
+            "fecha": "2026-06-05T10:57:31",
+            "monto": 84261.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP ME SNTA BOL 1167433 RODRIGO MORALES DIF EFECTI",
+                    "cantidad": 1,
+                    "precioUnitario": 84261.00,
+                    "monto": 84261.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T10:58:46.383"
+        },
+        {
+            "contexto": {
+                "id": 800163667,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 8,
+                    "nombre": "VALPARAISO"
+                },
+                "cajero": {
+                    "id": "JGUERRA     ",
+                    "nombre": "JOAQUIN GUERRA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 77.716.211-K SANTANDER MG SPA",
+            "fecha": "2026-06-05T10:00:24",
+            "monto": 115000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander MG",
+            "rubroBanco": 232,
+            "rubroSucursal": 208,
+            "bancoSucursal": "Santander MG",
+            "bancoDetectado": "Santander MG",
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 77.716.211-K SANTANDER MG SPA",
+                    "cantidad": 1,
+                    "precioUnitario": 115000.00,
+                    "monto": 115000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T10:03:04.167"
+        },
+        {
+            "contexto": {
+                "id": 700437079,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "MSILVAL     ",
+                    "nombre": "MANUEL SILVA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1167365
+            },
+            "glosa": "DEP. BCI ME JOHAN AMAYA BOL. 1167365",
+            "fecha": "2026-06-05T09:49:07",
+            "monto": 536000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP. BCI ME JOHAN AMAYA BOL. 1167365",
+                    "cantidad": 1,
+                    "precioUnitario": 536000.00,
+                    "monto": 536000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T09:52:51.413"
+        },
+        {
+            "contexto": {
+                "id": 700437026,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP.77.096.117-3 ME BCI  SERV. MED E INV GIMBERNAT",
+            "fecha": "2026-06-04T16:15:38",
+            "monto": 4520000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.77.096.117-3 ME BCI  SERV. MED E INV GIMBERNAT",
+                    "cantidad": 1,
+                    "precioUnitario": 4520000.00,
+                    "monto": 4520000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.557"
+        },
+        {
+            "contexto": {
+                "id": 400310621,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 4,
+                    "nombre": "VIÑA DEL MAR"
+                },
+                "cajero": {
+                    "id": "RESTAY      ",
+                    "nombre": "ROBINSON ESTAY"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP.8.100.662-8 SANTANDER MG TICKET 13356",
+            "fecha": "2026-06-04T15:00:46",
+            "monto": 40000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander MG",
+            "rubroBanco": 232,
+            "rubroSucursal": 204,
+            "bancoSucursal": "Santander MG",
+            "bancoDetectado": "Santander MG",
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.8.100.662-8 SANTANDER MG TICKET 13356",
+                    "cantidad": 1,
+                    "precioUnitario": 40000.00,
+                    "monto": 40000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:21.427"
+        },
+        {
+            "contexto": {
+                "id": 900178350,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 9,
+                    "nombre": "IQUIQUE"
+                },
+                "cajero": {
+                    "id": "ECHUVIRU    ",
+                    "nombre": "EMILENY "
+                }
+            },
+            "documento": null,
+            "glosa": "APP MORE GIROS TICKET:13353 MG SPA-BANCO SANTANDER",
+            "fecha": "2026-06-04T14:21:46",
+            "monto": 53837.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 209,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "APP MORE GIROS TICKET:13353 MG SPA-BANCO SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 53837.00,
+                    "monto": 53837.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:34.67"
+        },
+        {
+            "contexto": {
+                "id": 900178345,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 9,
+                    "nombre": "IQUIQUE"
+                },
+                "cajero": {
+                    "id": "ECHUVIRU    ",
+                    "nombre": "EMILENY "
+                }
+            },
+            "documento": null,
+            "glosa": "APP MORE GIROS TICKET:13352 MG SPA-BANCO SANTANDER",
+            "fecha": "2026-06-04T14:15:50",
+            "monto": 1361706.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 209,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "APP MORE GIROS TICKET:13352 MG SPA-BANCO SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 1361706.00,
+                    "monto": 1361706.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:34.667"
+        },
+        {
+            "contexto": {
+                "id": 900178339,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 9,
+                    "nombre": "IQUIQUE"
+                },
+                "cajero": {
+                    "id": "ECHUVIRU    ",
+                    "nombre": "EMILENY "
+                }
+            },
+            "documento": null,
+            "glosa": "APP MORE GIROS TICKET:13354",
+            "fecha": "2026-06-04T13:57:20",
+            "monto": 53916.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 209,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "APP MORE GIROS TICKET:13354",
+                    "cantidad": 1,
+                    "precioUnitario": 53916.00,
+                    "monto": 53916.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:34.663"
+        },
+        {
+            "contexto": {
+                "id": 300375957,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "CCARREÑO    ",
+                    "nombre": "CESAR CARREÑO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 16.474.405-1 ME SANTANDER",
+            "fecha": "2026-06-04T13:46:42",
+            "monto": 1050000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 16.474.405-1 ME SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 1050000.00,
+                    "monto": 1050000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.203"
+        },
+        {
+            "contexto": {
+                "id": 300375956,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "CCARREÑO    ",
+                    "nombre": "CESAR CARREÑO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 16.474.405-1 ME SANTANDER",
+            "fecha": "2026-06-04T13:45:13",
+            "monto": 250000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 16.474.405-1 ME SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 250000.00,
+                    "monto": 250000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.2"
+        },
+        {
+            "contexto": {
+                "id": 700436926,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 78.226.277-7 ME BCI  M4YOU B1167088",
+            "fecha": "2026-06-04T13:22:03",
+            "monto": 1127500.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 78.226.277-7 ME BCI  M4YOU B1167088",
+                    "cantidad": 1,
+                    "precioUnitario": 1127500.00,
+                    "monto": 1127500.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:30.033"
+        },
+        {
+            "contexto": {
+                "id": 800163565,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 8,
+                    "nombre": "VALPARAISO"
+                },
+                "cajero": {
+                    "id": "PLOPEZ      ",
+                    "nombre": "PATRICIO LOPEZ"
+                }
+            },
+            "documento": null,
+            "glosa": "DEPORITÓ 76.864.039-4 SANTANDER MG SPA",
+            "fecha": "2026-06-04T12:30:44",
+            "monto": 269690.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander MG",
+            "rubroBanco": 232,
+            "rubroSucursal": 208,
+            "bancoSucursal": "Santander MG",
+            "bancoDetectado": "Santander MG",
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEPORITÓ 76.864.039-4 SANTANDER MG SPA",
+                    "cantidad": 1,
+                    "precioUnitario": 269690.00,
+                    "monto": 269690.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:34.193"
+        },
+        {
+            "contexto": {
+                "id": 300375927,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 24.909.056-5 ME SANTNADER TICKET 13350",
+            "fecha": "2026-06-04T11:55:02",
+            "monto": 96000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 24.909.056-5 ME SANTNADER TICKET 13350",
+                    "cantidad": 1,
+                    "precioUnitario": 96000.00,
+                    "monto": 96000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.197"
+        },
+        {
+            "contexto": {
+                "id": 700436861,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 78.143.630-5 ME BCI JARA  DEL FAVERO",
+            "fecha": "2026-06-04T11:46:20",
+            "monto": 624704.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 78.143.630-5 ME BCI JARA  DEL FAVERO",
+                    "cantidad": 1,
+                    "precioUnitario": 624704.00,
+                    "monto": 624704.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:30"
+        },
+        {
+            "contexto": {
+                "id": 300375899,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 12.881.864-2 ME SANTANDER TICKET 13348",
+            "fecha": "2026-06-04T09:47:52",
+            "monto": 91602.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 12.881.864-2 ME SANTANDER TICKET 13348",
+                    "cantidad": 1,
+                    "precioUnitario": 91602.00,
+                    "monto": 91602.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.193"
+        },
+        {
+            "contexto": {
+                "id": 700436781,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 76.904.776-K BCI ME",
+            "fecha": "2026-06-03T17:56:57",
+            "monto": 1078225.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 76.904.776-K BCI ME",
+                    "cantidad": 1,
+                    "precioUnitario": 1078225.00,
+                    "monto": 1078225.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.867"
+        },
+        {
+            "contexto": {
+                "id": 700436772,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP.76.003.890-3 SANTANDER ME F13609",
+            "fecha": "2026-06-03T17:30:38",
+            "monto": 14381736.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": "Santander ME",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP.76.003.890-3 SANTANDER ME F13609",
+                    "cantidad": 1,
+                    "precioUnitario": 14381736.00,
+                    "monto": 14381736.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.953"
+        },
+        {
+            "contexto": {
+                "id": 200376045,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 2,
+                    "nombre": "BOSQUE"
+                },
+                "cajero": {
+                    "id": "JTORRES     ",
+                    "nombre": "JOSE LUIS TORRES              "
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1166838
+            },
+            "glosa": "EGRESO - TRF A YAMEN BADER BOL 1166838",
+            "fecha": "2026-06-03T16:59:22",
+            "monto": -1047000.00,
+            "currency": "CLP",
+            "tipoOperacion": "EGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 202,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "EGRESO - TRF A YAMEN BADER BOL 1166838",
+                    "cantidad": 1,
+                    "precioUnitario": -1047000.00,
+                    "monto": -1047000.00
+                }
+            ],
+            "fechaCarga": "2026-06-04T23:49:06.4"
+        },
+        {
+            "contexto": {
+                "id": 700436749,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "DCONCHA     ",
+                    "nombre": "DANIEL CONCHA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 76.003.890-3 SANTANDER ME",
+            "fecha": "2026-06-03T16:08:22",
+            "monto": 2050000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": "Santander ME",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 76.003.890-3 SANTANDER ME",
+                    "cantidad": 1,
+                    "precioUnitario": 2050000.00,
+                    "monto": 2050000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.97"
+        },
+        {
+            "contexto": {
+                "id": 700436748,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "DCONCHA     ",
+                    "nombre": "DANIEL CONCHA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 76.003.890-3 SANTANDER ME",
+            "fecha": "2026-06-03T16:07:10",
+            "monto": 7000000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": "Santander ME",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 76.003.890-3 SANTANDER ME",
+                    "cantidad": 1,
+                    "precioUnitario": 7000000.00,
+                    "monto": 7000000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.96"
+        },
+        {
+            "contexto": {
+                "id": 200376019,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 2,
+                    "nombre": "BOSQUE"
+                },
+                "cajero": {
+                    "id": "JTORRES     ",
+                    "nombre": "JOSE LUIS"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 2001199
+            },
+            "glosa": "AMIN, ANDREA YANINA (2001199). Ref:  1166792",
+            "fecha": "2026-06-03T15:50:43",
+            "monto": 1700800.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 202,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "AMIN, ANDREA YANINA (2001199). Ref:  1166792",
+                    "cantidad": 1,
+                    "precioUnitario": 1700800.00,
+                    "monto": 1700800.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:10.92"
+        },
+        {
+            "contexto": {
+                "id": 700436725,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1166751
+            },
+            "glosa": "DEP 1166751 SANTANDER  ME",
+            "fecha": "2026-06-03T15:03:00",
+            "monto": 3574750.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 1166751 SANTANDER  ME",
+                    "cantidad": 1,
+                    "precioUnitario": 3574750.00,
+                    "monto": 3574750.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:30.02"
+        },
+        {
+            "contexto": {
+                "id": 700436659,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "MSILVAL     ",
+                    "nombre": "MANUEL SILVA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1166616
+            },
+            "glosa": "DEP. SANTANDER BACO MACARENA ESPINOA BOL. 1166616",
+            "fecha": "2026-06-03T13:06:37",
+            "monto": 180600.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP. SANTANDER BACO MACARENA ESPINOA BOL. 1166616",
+                    "cantidad": 1,
+                    "precioUnitario": 180600.00,
+                    "monto": 180600.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.88"
+        },
+        {
+            "contexto": {
+                "id": 300375803,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 8.869.569-0 DE ITAU A BCI",
+            "fecha": "2026-06-03T12:56:29",
+            "monto": 1594500.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 8.869.569-0 DE ITAU A BCI",
+                    "cantidad": 1,
+                    "precioUnitario": 1594500.00,
+                    "monto": 1594500.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.187"
+        },
+        {
+            "contexto": {
+                "id": 400310512,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 4,
+                    "nombre": "VIÑA DEL MAR"
+                },
+                "cajero": {
+                    "id": "XROJAS      ",
+                    "nombre": "XIMENA ROJAS"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP. 27.217.945-K SANTANDER MG",
+            "fecha": "2026-06-03T12:35:22",
+            "monto": 90000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander MG",
+            "rubroBanco": 232,
+            "rubroSucursal": 204,
+            "bancoSucursal": "Santander MG",
+            "bancoDetectado": "Santander MG",
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP. 27.217.945-K SANTANDER MG",
+                    "cantidad": 1,
+                    "precioUnitario": 90000.00,
+                    "monto": 90000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:21.42"
+        },
+        {
+            "contexto": {
+                "id": 200375917,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 2,
+                    "nombre": "BOSQUE"
+                },
+                "cajero": {
+                    "id": "JTORRES     ",
+                    "nombre": "JOSE LUIS TORRES              "
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1166475
+            },
+            "glosa": "EGRESO - TRF A EMBAJADA DE PORTUGAL BOL 1166475",
+            "fecha": "2026-06-03T12:30:29",
+            "monto": -760000.00,
+            "currency": "CLP",
+            "tipoOperacion": "EGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 202,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "EGRESO - TRF A EMBAJADA DE PORTUGAL BOL 1166475",
+                    "cantidad": 1,
+                    "precioUnitario": -760000.00,
+                    "monto": -760000.00
+                }
+            ],
+            "fechaCarga": "2026-06-04T23:49:06.4"
+        },
+        {
+            "contexto": {
+                "id": 300375784,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "CCARREÑO    ",
+                    "nombre": "CESAR CARREÑO"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1166466
+            },
+            "glosa": "TRANS ME BCI BOL 1166466 ANDREA ESPINDOLA",
+            "fecha": "2026-06-03T11:12:39",
+            "monto": 1810000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "TRANS ME BCI BOL 1166466 ANDREA ESPINDOLA",
+                    "cantidad": 1,
+                    "precioUnitario": 1810000.00,
+                    "monto": 1810000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.283"
+        },
+        {
+            "contexto": {
+                "id": 700436613,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "FGUERRA     ",
+                    "nombre": "FERNANDO GUERRA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1166458
+            },
+            "glosa": "DEP 1166458 VGM CRGO BCI ME",
+            "fecha": "2026-06-03T11:08:56",
+            "monto": 3877020.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 1166458 VGM CRGO BCI ME",
+                    "cantidad": 1,
+                    "precioUnitario": 3877020.00,
+                    "monto": 3877020.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.573"
+        },
+        {
+            "contexto": {
+                "id": 1000152281,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "JMEZA       ",
+                    "nombre": "JUAN ANTONIO"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 10001373
+            },
+            "glosa": "REYES BARRIENTO, ROBERTO (10001373). Ref:  1166415",
+            "fecha": "2026-06-03T10:26:45",
+            "monto": 111600.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "REYES BARRIENTO, ROBERTO (10001373). Ref:  1166415",
+                    "cantidad": 1,
+                    "precioUnitario": 111600.00,
+                    "monto": 111600.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.45"
+        },
+        {
+            "contexto": {
+                "id": 1000152262,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "DCORONA     ",
+                    "nombre": "DEIBIS CORONA"
+                }
+            },
+            "documento": null,
+            "glosa": "GIRO 13329",
+            "fecha": "2026-06-02T18:28:27",
+            "monto": 28192.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "GIRO 13329",
+                    "cantidad": 1,
+                    "precioUnitario": 28192.00,
+                    "monto": 28192.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.447"
+        },
+        {
+            "contexto": {
+                "id": 700436509,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1166131
+            },
+            "glosa": "DEP.1166131.ALEJANDRO CRUZ",
+            "fecha": "2026-06-02T15:28:19",
+            "monto": 6997050.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1166131.ALEJANDRO CRUZ",
+                    "cantidad": 1,
+                    "precioUnitario": 6997050.00,
+                    "monto": 6997050.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.703"
+        },
+        {
+            "contexto": {
+                "id": 700436496,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "FGUERRA     ",
+                    "nombre": "FERNANDO GUERRA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1166193
+            },
+            "glosa": "DEP 1166193 BCI ME ANDREA CASTILLO",
+            "fecha": "2026-06-02T14:48:40",
+            "monto": 543000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 1166193 BCI ME ANDREA CASTILLO",
+                    "cantidad": 1,
+                    "precioUnitario": 543000.00,
+                    "monto": 543000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.903"
+        },
+        {
+            "contexto": {
+                "id": 300375700,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1166154
+            },
+            "glosa": "DEP ME STA B 1166154/1166157/1166151 GIULIANA SALV",
+            "fecha": "2026-06-02T14:06:34",
+            "monto": 338000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP ME STA B 1166154/1166157/1166151 GIULIANA SALV",
+                    "cantidad": 1,
+                    "precioUnitario": 338000.00,
+                    "monto": 338000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.27"
+        },
+        {
+            "contexto": {
+                "id": 400310413,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 4,
+                    "nombre": "VIÑA DEL MAR"
+                },
+                "cajero": {
+                    "id": "RESTAY      ",
+                    "nombre": "ROBINSON ESTAY"
+                }
+            },
+            "documento": null,
+            "glosa": "FACTURA 13603 MG SPA",
+            "fecha": "2026-06-02T12:51:18",
+            "monto": 37050922.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander MG",
+            "rubroBanco": 232,
+            "rubroSucursal": 204,
+            "bancoSucursal": "Santander MG",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "FACTURA 13603 MG SPA",
+                    "cantidad": 1,
+                    "precioUnitario": 37050922.00,
+                    "monto": 37050922.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:21.417"
+        },
+        {
+            "contexto": {
+                "id": 200375729,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 2,
+                    "nombre": "BOSQUE"
+                },
+                "cajero": {
+                    "id": "JTORRES     ",
+                    "nombre": "JOSE LUIS"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 2001305
+            },
+            "glosa": "HB INSUMOS LIMITADA (2001305). Ref:  1166040",
+            "fecha": "2026-06-02T12:17:54",
+            "monto": 4006435.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 202,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "HB INSUMOS LIMITADA (2001305). Ref:  1166040",
+                    "cantidad": 1,
+                    "precioUnitario": 4006435.00,
+                    "monto": 4006435.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:10.91"
+        },
+        {
+            "contexto": {
+                "id": 1000152187,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "DCORONA     ",
+                    "nombre": "DEIBIS CORONA"
+                }
+            },
+            "documento": null,
+            "glosa": "TRANSFIERE CONTATTO S.A",
+            "fecha": "2026-06-02T11:03:42",
+            "monto": 910000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "TRANSFIERE CONTATTO S.A",
+                    "cantidad": 1,
+                    "precioUnitario": 910000.00,
+                    "monto": 910000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.443"
+        },
+        {
+            "contexto": {
+                "id": 1000152185,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "DCORONA     ",
+                    "nombre": "DEIBIS CORONA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 3001582
+            },
+            "glosa": "SERVICIOS DE CAPACITACION (3001582). Ref:  1165957",
+            "fecha": "2026-06-02T10:59:08",
+            "monto": 1810000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "SERVICIOS DE CAPACITACION (3001582). Ref:  1165957",
+                    "cantidad": 1,
+                    "precioUnitario": 1810000.00,
+                    "monto": 1810000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.44"
+        },
+        {
+            "contexto": {
+                "id": 700436372,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "MSANHUEZA   ",
+                    "nombre": "MARTIN SANHUEZA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP ME BCI LEON COHEN",
+            "fecha": "2026-06-02T09:30:20",
+            "monto": 1070000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP ME BCI LEON COHEN",
+                    "cantidad": 1,
+                    "precioUnitario": 1070000.00,
+                    "monto": 1070000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.503"
+        },
+        {
+            "contexto": {
+                "id": 700436367,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "MSANHUEZA   ",
+                    "nombre": "MARTIN SANHUEZA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP ME BCI LEON COHEN",
+            "fecha": "2026-06-02T09:28:46",
+            "monto": 905000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP ME BCI LEON COHEN",
+                    "cantidad": 1,
+                    "precioUnitario": 905000.00,
+                    "monto": 905000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.98"
+        },
+        {
+            "contexto": {
+                "id": 1000152156,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "JMEZA       ",
+                    "nombre": "JUAN ANTONIO"
+                }
+            },
+            "documento": null,
+            "glosa": "ENVIO APP. TCKT. 13308 - MALVIRA CANTILLO",
+            "fecha": "2026-06-01T18:15:01",
+            "monto": 102050.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "ENVIO APP. TCKT. 13308 - MALVIRA CANTILLO",
+                    "cantidad": 1,
+                    "precioUnitario": 102050.00,
+                    "monto": 102050.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.437"
+        },
+        {
+            "contexto": {
+                "id": 700436360,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1165849
+            },
+            "glosa": "DEP.1165849.ME BCI SERV MED EINV GIMBER",
+            "fecha": "2026-06-01T17:46:07",
+            "monto": 4983000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1165849.ME BCI SERV MED EINV GIMBER",
+                    "cantidad": 1,
+                    "precioUnitario": 4983000.00,
+                    "monto": 4983000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.59"
+        },
+        {
+            "contexto": {
+                "id": 700436359,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1165849
+            },
+            "glosa": "DEP.1165849.ME BCI SERV MED EINV GIMBER",
+            "fecha": "2026-06-01T17:45:28",
+            "monto": 3135000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1165849.ME BCI SERV MED EINV GIMBER",
+                    "cantidad": 1,
+                    "precioUnitario": 3135000.00,
+                    "monto": 3135000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.88"
+        },
+        {
+            "contexto": {
+                "id": 1000152122,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "JMEZA       ",
+                    "nombre": "JUAN ANTONIO"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 10001372
+            },
+            "glosa": "Cruz tormen, Alejandro al (10001372). Ref:  116575",
+            "fecha": "2026-06-01T16:47:43",
+            "monto": 6903000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "Cruz tormen, Alejandro al (10001372). Ref:  116575",
+                    "cantidad": 1,
+                    "precioUnitario": 6903000.00,
+                    "monto": 6903000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.433"
+        },
+        {
+            "contexto": {
+                "id": 600244981,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 6,
+                    "nombre": "PATRONATO"
+                },
+                "cajero": {
+                    "id": "FSEPULVEDA  ",
+                    "nombre": "FABRIZIO SEPULVEDA"
+                }
+            },
+            "documento": null,
+            "glosa": "28.588.195-1 DEP SANTANDER ME SPA GIRO APP 13305",
+            "fecha": "2026-06-01T16:29:36",
+            "monto": 48149.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 206,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander ME",
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "28.588.195-1 DEP SANTANDER ME SPA GIRO APP 13305",
+                    "cantidad": 1,
+                    "precioUnitario": 48149.00,
+                    "monto": 48149.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:27.69"
+        },
+        {
+            "contexto": {
+                "id": 700436315,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1165757
+            },
+            "glosa": "DEP.1165757.ME BCI  MARTIN SANHUEZA",
+            "fecha": "2026-06-01T15:47:27",
+            "monto": 2450000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1165757.ME BCI  MARTIN SANHUEZA",
+                    "cantidad": 1,
+                    "precioUnitario": 2450000.00,
+                    "monto": 2450000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.82"
+        },
+        {
+            "contexto": {
+                "id": 700436296,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1165538
+            },
+            "glosa": "DEP.1165538.ME BCI",
+            "fecha": "2026-06-01T15:13:04",
+            "monto": 588500.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1165538.ME BCI",
+                    "cantidad": 1,
+                    "precioUnitario": 588500.00,
+                    "monto": 588500.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.937"
+        },
+        {
+            "contexto": {
+                "id": 400310326,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 4,
+                    "nombre": "VIÑA DEL MAR"
+                },
+                "cajero": {
+                    "id": "RESTAY      ",
+                    "nombre": "ROBINSON ESTAY"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 4000346
+            },
+            "glosa": "ANDAUR APABLAZA, GUIDO AN (4000346). Ref:  1165711",
+            "fecha": "2026-06-01T15:07:55",
+            "monto": 469000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander MG",
+            "rubroBanco": 232,
+            "rubroSucursal": 204,
+            "bancoSucursal": "Santander MG",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "ANDAUR APABLAZA, GUIDO AN (4000346). Ref:  1165711",
+                    "cantidad": 1,
+                    "precioUnitario": 469000.00,
+                    "monto": 469000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:21.4"
+        },
+        {
+            "contexto": {
+                "id": 300375578,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "CCARREÑO    ",
+                    "nombre": "CESAR CARREÑO"
+                }
+            },
+            "documento": null,
+            "glosa": "FAC 13598 RICARDO PIZARRO ME SANTANDER",
+            "fecha": "2026-06-01T14:43:34",
+            "monto": 558000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "FAC 13598 RICARDO PIZARRO ME SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 558000.00,
+                    "monto": 558000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.23"
+        },
+        {
+            "contexto": {
+                "id": 300375577,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "CCARREÑO    ",
+                    "nombre": "CESAR CARREÑO"
+                }
+            },
+            "documento": null,
+            "glosa": "FAC 13598 RICARDO PIZARRO ME SANTANDER",
+            "fecha": "2026-06-01T14:43:29",
+            "monto": 2000000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "FAC 13598 RICARDO PIZARRO ME SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 2000000.00,
+                    "monto": 2000000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.217"
+        },
+        {
+            "contexto": {
+                "id": 300375575,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "CCARREÑO    ",
+                    "nombre": "CESAR CARREÑO"
+                }
+            },
+            "documento": null,
+            "glosa": "FAC 13598 RICARDO PIZARRO ME SANTANDER",
+            "fecha": "2026-06-01T14:42:45",
+            "monto": 2000000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "FAC 13598 RICARDO PIZARRO ME SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 2000000.00,
+                    "monto": 2000000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.247"
+        },
+        {
+            "contexto": {
+                "id": 300375559,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 25.472.370-3 A ME SANTANDER GIRO 13281",
+            "fecha": "2026-06-01T14:20:22",
+            "monto": 101511.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 25.472.370-3 A ME SANTANDER GIRO 13281",
+                    "cantidad": 1,
+                    "precioUnitario": 101511.00,
+                    "monto": 101511.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.177"
+        },
+        {
+            "contexto": {
+                "id": 700436263,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1165658
+            },
+            "glosa": "DEP. 1165658.ME BCI  JUAN MEDINA",
+            "fecha": "2026-06-01T14:14:29",
+            "monto": 70845.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP. 1165658.ME BCI  JUAN MEDINA",
+                    "cantidad": 1,
+                    "precioUnitario": 70845.00,
+                    "monto": 70845.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.787"
+        },
+        {
+            "contexto": {
+                "id": 700436262,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1165658
+            },
+            "glosa": "DEP. 1165658.ME BCI  JUAN MEDINA",
+            "fecha": "2026-06-01T14:14:23",
+            "monto": 250000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP. 1165658.ME BCI  JUAN MEDINA",
+                    "cantidad": 1,
+                    "precioUnitario": 250000.00,
+                    "monto": 250000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.793"
+        },
+        {
+            "contexto": {
+                "id": 700436261,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1165658
+            },
+            "glosa": "DEP. 1165658.ME BCI  JUAN MEDINA",
+            "fecha": "2026-06-01T14:13:57",
+            "monto": 250000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP. 1165658.ME BCI  JUAN MEDINA",
+                    "cantidad": 1,
+                    "precioUnitario": 250000.00,
+                    "monto": 250000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.74"
+        },
+        {
+            "contexto": {
+                "id": 300375548,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 12.881.864-2 DE ITAU A ME SAN GIRO 13299",
+            "fecha": "2026-06-01T14:05:27",
+            "monto": 64708.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 12.881.864-2 DE ITAU A ME SAN GIRO 13299",
+                    "cantidad": 1,
+                    "precioUnitario": 64708.00,
+                    "monto": 64708.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.17"
+        },
+        {
+            "contexto": {
+                "id": 300375552,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1165630
+            },
+            "glosa": "DIF PAGO GIRO BOL 1165630 JULIO AVILA",
+            "fecha": "2026-06-01T14:01:57",
+            "monto": 73475.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DIF PAGO GIRO BOL 1165630 JULIO AVILA",
+                    "cantidad": 1,
+                    "precioUnitario": 73475.00,
+                    "monto": 73475.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.243"
+        },
+        {
+            "contexto": {
+                "id": 300375547,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 10.343.038-0 DE SC A ME BCI ENVIO AP TKT 13291",
+            "fecha": "2026-06-01T13:59:42",
+            "monto": 126525.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 10.343.038-0 DE SC A ME BCI ENVIO AP TKT 13291",
+                    "cantidad": 1,
+                    "precioUnitario": 126525.00,
+                    "monto": 126525.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.17"
+        },
+        {
+            "contexto": {
+                "id": 1000152088,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "DCORONA     ",
+                    "nombre": "DEIBIS CORONA"
+                }
+            },
+            "documento": null,
+            "glosa": "GIRO 13297",
+            "fecha": "2026-06-01T13:49:36",
+            "monto": 109014.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "GIRO 13297",
+                    "cantidad": 1,
+                    "precioUnitario": 109014.00,
+                    "monto": 109014.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.43"
+        },
+        {
+            "contexto": {
+                "id": 1000152080,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "DCORONA     ",
+                    "nombre": "DEIBIS CORONA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1165214
+            },
+            "glosa": "DEP/1165214 STDER BACO - (EA)",
+            "fecha": "2026-06-01T13:12:04",
+            "monto": 2150000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP/1165214 STDER BACO - (EA)",
+                    "cantidad": 1,
+                    "precioUnitario": 2150000.00,
+                    "monto": 2150000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.533"
+        },
+        {
+            "contexto": {
+                "id": 200375592,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 2,
+                    "nombre": "BOSQUE"
+                },
+                "cajero": {
+                    "id": "JTORRES     ",
+                    "nombre": "JOSE LUIS"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1165566
+            },
+            "glosa": "TRF A MESANT CARLOS PAZOS BOL 1165566",
+            "fecha": "2026-06-01T13:04:23",
+            "monto": 588500.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 202,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "TRF A MESANT CARLOS PAZOS BOL 1165566",
+                    "cantidad": 1,
+                    "precioUnitario": 588500.00,
+                    "monto": 588500.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:10.907"
+        },
+        {
+            "contexto": {
+                "id": 1000152058,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "JMEZA       ",
+                    "nombre": "JUAN ANTONIO"
+                }
+            },
+            "documento": null,
+            "glosa": "ENVIO APP. TCKT. 13295 - MALVIRA CANTILLO",
+            "fecha": "2026-06-01T11:52:58",
+            "monto": 503200.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "ENVIO APP. TCKT. 13295 - MALVIRA CANTILLO",
+                    "cantidad": 1,
+                    "precioUnitario": 503200.00,
+                    "monto": 503200.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.43"
+        },
+        {
+            "contexto": {
+                "id": 300375506,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 27.617.928-4 DE SANTANDER A ME BCI",
+            "fecha": "2026-06-01T11:52:32",
+            "monto": 550000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 27.617.928-4 DE SANTANDER A ME BCI",
+                    "cantidad": 1,
+                    "precioUnitario": 550000.00,
+                    "monto": 550000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.16"
+        },
+        {
+            "contexto": {
+                "id": 200375556,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 2,
+                    "nombre": "BOSQUE"
+                },
+                "cajero": {
+                    "id": "JTORRES     ",
+                    "nombre": "JOSE LUIS"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 2001209
+            },
+            "glosa": "DE OLIVEIRA LANZILLOTTI, (2001209). Ref:  1165454",
+            "fecha": "2026-06-01T11:15:10",
+            "monto": 265500.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 202,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DE OLIVEIRA LANZILLOTTI, (2001209). Ref:  1165454",
+                    "cantidad": 1,
+                    "precioUnitario": 265500.00,
+                    "monto": 265500.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:10.9"
+        },
+        {
+            "contexto": {
+                "id": 700436120,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "MSILVAL     ",
+                    "nombre": "MANUEL SILVA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1165353
+            },
+            "glosa": "DEP. BCI ME JOHAN AMAYA BOL. 1165353",
+            "fecha": "2026-06-01T09:48:27",
+            "monto": 532500.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP. BCI ME JOHAN AMAYA BOL. 1165353",
+                    "cantidad": 1,
+                    "precioUnitario": 532500.00,
+                    "monto": 532500.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.877"
+        },
+        {
+            "contexto": {
+                "id": 700436117,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1165347
+            },
+            "glosa": "DEP.1165347.ME BCI GONZALO MARIA",
+            "fecha": "2026-06-01T09:46:28",
+            "monto": 4525000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1165347.ME BCI GONZALO MARIA",
+                    "cantidad": 1,
+                    "precioUnitario": 4525000.00,
+                    "monto": 4525000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.937"
+        },
+        {
+            "contexto": {
+                "id": 600244862,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 6,
+                    "nombre": "PATRONATO"
+                },
+                "cajero": {
+                    "id": "MLEIVA      ",
+                    "nombre": "MILENA LEIVA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 27.872.668-1ME SANTANDER ENVIO TICKET 13285",
+            "fecha": "2026-05-30T13:18:05",
+            "monto": 1499102.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 206,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 27.872.668-1ME SANTANDER ENVIO TICKET 13285",
+                    "cantidad": 1,
+                    "precioUnitario": 1499102.00,
+                    "monto": 1499102.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:27.683"
+        },
+        {
+            "contexto": {
+                "id": 700436069,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1165196
+            },
+            "glosa": "DEP.1165196.ME BCI  LUNA LOPEZ",
+            "fecha": "2026-05-30T12:27:47",
+            "monto": 584100.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1165196.ME BCI  LUNA LOPEZ",
+                    "cantidad": 1,
+                    "precioUnitario": 584100.00,
+                    "monto": 584100.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.777"
+        },
+        {
+            "contexto": {
+                "id": 800162920,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 8,
+                    "nombre": "VALPARAISO"
+                },
+                "cajero": {
+                    "id": "JGUERRA     ",
+                    "nombre": "JOAQUIN GUERRA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 15436919
+            },
+            "glosa": "15436919 SANT MG ENVIO MONEYGR RIGOBERTO PINOCHET",
+            "fecha": "2026-05-29T16:30:57",
+            "monto": 612000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander MG",
+            "rubroBanco": 232,
+            "rubroSucursal": 208,
+            "bancoSucursal": "Santander MG",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "15436919 SANT MG ENVIO MONEYGR RIGOBERTO PINOCHET",
+                    "cantidad": 1,
+                    "precioUnitario": 612000.00,
+                    "monto": 612000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:33.77"
+        },
+        {
+            "contexto": {
+                "id": 700435997,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1164996
+            },
+            "glosa": "DEP.1164996.1164998.ME BCI  SMART WAY",
+            "fecha": "2026-05-29T16:20:53",
+            "monto": 9000000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1164996.1164998.ME BCI  SMART WAY",
+                    "cantidad": 1,
+                    "precioUnitario": 9000000.00,
+                    "monto": 9000000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.623"
+        },
+        {
+            "contexto": {
+                "id": 700435984,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "FGUERRA     ",
+                    "nombre": "FERNANDO GUERRA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1164992
+            },
+            "glosa": "DEP 1164992 SANTANDER ME SCHKOLNICK",
+            "fecha": "2026-05-29T16:07:54",
+            "monto": 5475250.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": "Santander ME",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 1164992 SANTANDER ME SCHKOLNICK",
+                    "cantidad": 1,
+                    "precioUnitario": 5475250.00,
+                    "monto": 5475250.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.967"
+        },
+        {
+            "contexto": {
+                "id": 700435971,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1164965
+            },
+            "glosa": "DEP. 1164965.ME BCI  MARTIN S.",
+            "fecha": "2026-05-29T15:38:40",
+            "monto": 350000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP. 1164965.ME BCI  MARTIN S.",
+                    "cantidad": 1,
+                    "precioUnitario": 350000.00,
+                    "monto": 350000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.523"
+        },
+        {
+            "contexto": {
+                "id": 200375403,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 2,
+                    "nombre": "BOSQUE"
+                },
+                "cajero": {
+                    "id": "JTORRES     ",
+                    "nombre": "JOSE LUIS"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1164930
+            },
+            "glosa": "TRF A MESANT BOL 1164930 (500+250+150+150)",
+            "fecha": "2026-05-29T14:58:39",
+            "monto": 1050000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 202,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "TRF A MESANT BOL 1164930 (500+250+150+150)",
+                    "cantidad": 1,
+                    "precioUnitario": 1050000.00,
+                    "monto": 1050000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:07.61"
+        },
+        {
+            "contexto": {
+                "id": 300375341,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "CCARREÑO    ",
+                    "nombre": "CESAR CARREÑO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEL 76.904.776-K SANTANDER A BCI ME AR MODA",
+            "fecha": "2026-05-29T12:39:44",
+            "monto": 2000000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEL 76.904.776-K SANTANDER A BCI ME AR MODA",
+                    "cantidad": 1,
+                    "precioUnitario": 2000000.00,
+                    "monto": 2000000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.147"
+        },
+        {
+            "contexto": {
+                "id": 200375337,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 2,
+                    "nombre": "BOSQUE"
+                },
+                "cajero": {
+                    "id": "JTORRES     ",
+                    "nombre": "JOSE LUIS"
+                }
+            },
+            "documento": null,
+            "glosa": "ENVIO TICKET 13262",
+            "fecha": "2026-05-29T12:35:21",
+            "monto": 255100.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 202,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "ENVIO TICKET 13262",
+                    "cantidad": 1,
+                    "precioUnitario": 255100.00,
+                    "monto": 255100.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:07.607"
+        },
+        {
+            "contexto": {
+                "id": 600244735,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 6,
+                    "nombre": "PATRONATO"
+                },
+                "cajero": {
+                    "id": "FSEPULVEDA  ",
+                    "nombre": "FABRIZIO SEPULVEDA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 27927039
+            },
+            "glosa": "DEP 27927039-8 SANTANDER ME SPA ENVIO APP 13260",
+            "fecha": "2026-05-29T11:32:30",
+            "monto": 119695.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 206,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander ME",
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 27927039-8 SANTANDER ME SPA ENVIO APP 13260",
+                    "cantidad": 1,
+                    "precioUnitario": 119695.00,
+                    "monto": 119695.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:27.67"
+        },
+        {
+            "contexto": {
+                "id": 1000151644,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "DCORONA     ",
+                    "nombre": "DEIBIS CORONA"
+                }
+            },
+            "documento": null,
+            "glosa": "GIRO 13259",
+            "fecha": "2026-05-29T11:11:25",
+            "monto": 64648.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "GIRO 13259",
+                    "cantidad": 1,
+                    "precioUnitario": 64648.00,
+                    "monto": 64648.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.397"
+        },
+        {
+            "contexto": {
+                "id": 1000151643,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "DCORONA     ",
+                    "nombre": "DEIBIS CORONA"
+                }
+            },
+            "documento": null,
+            "glosa": "GIRO 13258",
+            "fecha": "2026-05-29T11:07:33",
+            "monto": 2900000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "GIRO 13258",
+                    "cantidad": 1,
+                    "precioUnitario": 2900000.00,
+                    "monto": 2900000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.397"
+        },
+        {
+            "contexto": {
+                "id": 700435871,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "MSILVAL     ",
+                    "nombre": "MANUEL SILVA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1164693
+            },
+            "glosa": "DEP. BCI ME CAROLINA CIFUENTES BOL. 1164693",
+            "fecha": "2026-05-29T10:55:33",
+            "monto": 611220.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP. BCI ME CAROLINA CIFUENTES BOL. 1164693",
+                    "cantidad": 1,
+                    "precioUnitario": 611220.00,
+                    "monto": 611220.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.657"
+        },
+        {
+            "contexto": {
+                "id": 600244725,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 6,
+                    "nombre": "PATRONATO"
+                },
+                "cajero": {
+                    "id": "MLEIVA      ",
+                    "nombre": "MILENA LEIVA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 18.422.537-9 BACO SANTANDER",
+            "fecha": "2026-05-29T10:08:22",
+            "monto": 26970.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 206,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 18.422.537-9 BACO SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 26970.00,
+                    "monto": 26970.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:27.663"
+        },
+        {
+            "contexto": {
+                "id": 600244723,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 6,
+                    "nombre": "PATRONATO"
+                },
+                "cajero": {
+                    "id": "MLEIVA      ",
+                    "nombre": "MILENA LEIVA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 18.422.537-9 BACO SANTANDER",
+            "fecha": "2026-05-29T10:02:41",
+            "monto": 32160.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 206,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 18.422.537-9 BACO SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 32160.00,
+                    "monto": 32160.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:27.66"
+        },
+        {
+            "contexto": {
+                "id": 800162712,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 8,
+                    "nombre": "VALPARAISO"
+                },
+                "cajero": {
+                    "id": "PLOPEZ      ",
+                    "nombre": "PATRICIO LOPEZ"
+                }
+            },
+            "documento": null,
+            "glosa": "DEPOSITÓ 77.480.740-3 BANCO SANTANDER MG SPA",
+            "fecha": "2026-05-28T15:58:39",
+            "monto": 228000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander MG",
+            "rubroBanco": 232,
+            "rubroSucursal": 208,
+            "bancoSucursal": "Santander MG",
+            "bancoDetectado": "Santander MG",
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEPOSITÓ 77.480.740-3 BANCO SANTANDER MG SPA",
+                    "cantidad": 1,
+                    "precioUnitario": 228000.00,
+                    "monto": 228000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:33.763"
+        },
+        {
+            "contexto": {
+                "id": 700435770,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "MSANHUEZA   ",
+                    "nombre": "MARTIN SANHUEZA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP ME BCI SCHKOLNICK",
+            "fecha": "2026-05-28T15:47:46",
+            "monto": 3483840.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP ME BCI SCHKOLNICK",
+                    "cantidad": 1,
+                    "precioUnitario": 3483840.00,
+                    "monto": 3483840.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.55"
+        },
+        {
+            "contexto": {
+                "id": 1000151531,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "JMEZA       ",
+                    "nombre": "JUAN ANTONIO"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1164492
+            },
+            "glosa": "DEP. 1164492 STDER BACO - SOFIA MUÑOZ",
+            "fecha": "2026-05-28T15:44:45",
+            "monto": 55200.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP. 1164492 STDER BACO - SOFIA MUÑOZ",
+                    "cantidad": 1,
+                    "precioUnitario": 55200.00,
+                    "monto": 55200.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.483"
+        },
+        {
+            "contexto": {
+                "id": 700435755,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1164460
+            },
+            "glosa": "DEP.1164460.ME BCI M4YOU",
+            "fecha": "2026-05-28T15:19:17",
+            "monto": 3640000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1164460.ME BCI M4YOU",
+                    "cantidad": 1,
+                    "precioUnitario": 3640000.00,
+                    "monto": 3640000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.447"
+        },
+        {
+            "contexto": {
+                "id": 1000151514,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "DCORONA     ",
+                    "nombre": "DEIBIS CORONA"
+                }
+            },
+            "documento": null,
+            "glosa": "GIRO 13254",
+            "fecha": "2026-05-28T15:06:44",
+            "monto": 257244.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "GIRO 13254",
+                    "cantidad": 1,
+                    "precioUnitario": 257244.00,
+                    "monto": 257244.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.393"
+        },
+        {
+            "contexto": {
+                "id": 700435733,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1164426
+            },
+            "glosa": "DEP.1164426.HERNAN BUCCI",
+            "fecha": "2026-05-28T14:51:38",
+            "monto": 4095000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1164426.HERNAN BUCCI",
+                    "cantidad": 1,
+                    "precioUnitario": 4095000.00,
+                    "monto": 4095000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:30"
+        },
+        {
+            "contexto": {
+                "id": 700435732,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ FIGUEROA     "
+                }
+            },
+            "documento": null,
+            "glosa": "EGRESO - DEP.13582.MORE CAPITAL COMPRA EUROS MOTALE",
+            "fecha": "2026-05-28T14:50:25",
+            "monto": -21000000.00,
+            "currency": "CLP",
+            "tipoOperacion": "EGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "EGRESO - DEP.13582.MORE CAPITAL COMPRA EUROS MOTALE",
+                    "cantidad": 1,
+                    "precioUnitario": -21000000.00,
+                    "monto": -21000000.00
+                }
+            ],
+            "fechaCarga": "2026-06-04T23:49:05.863"
+        },
+        {
+            "contexto": {
+                "id": 300375220,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 78.778.890-4 BANCO ESTADO ME SANTANDER",
+            "fecha": "2026-05-28T14:46:54",
+            "monto": 1527769.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 78.778.890-4 BANCO ESTADO ME SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 1527769.00,
+                    "monto": 1527769.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.137"
+        },
+        {
+            "contexto": {
+                "id": 1000151507,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 10,
+                    "nombre": "PARQUE ARAUCO"
+                },
+                "cajero": {
+                    "id": "DCORONA     ",
+                    "nombre": "DEIBIS CORONA"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": "BOLETA",
+                "folio": 1164239
+            },
+            "glosa": "BOL.1164239 GIRO 13218",
+            "fecha": "2026-05-28T14:39:06",
+            "monto": 52570.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander BAGO",
+            "rubroBanco": 240,
+            "rubroSucursal": 210,
+            "bancoSucursal": "Santander BAGO",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "BOL.1164239 GIRO 13218",
+                    "cantidad": 1,
+                    "precioUnitario": 52570.00,
+                    "monto": 52570.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:35.52"
+        },
+        {
+            "contexto": {
+                "id": 700435709,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1164385
+            },
+            "glosa": "DEP.JUAN ESPINOS B.1164385",
+            "fecha": "2026-05-28T14:11:03",
+            "monto": 4280000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.JUAN ESPINOS B.1164385",
+                    "cantidad": 1,
+                    "precioUnitario": 4280000.00,
+                    "monto": 4280000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:30.01"
+        },
+        {
+            "contexto": {
+                "id": 600244675,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 6,
+                    "nombre": "PATRONATO"
+                },
+                "cajero": {
+                    "id": "MLEIVA      ",
+                    "nombre": "MILENA LEIVA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 27.622.330-5 A ME SANTANDER ENVIO TICKET13251",
+            "fecha": "2026-05-28T14:07:06",
+            "monto": 673042.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 206,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 27.622.330-5 A ME SANTANDER ENVIO TICKET13251",
+                    "cantidad": 1,
+                    "precioUnitario": 673042.00,
+                    "monto": 673042.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:27.657"
+        },
+        {
+            "contexto": {
+                "id": 600244662,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 6,
+                    "nombre": "PATRONATO"
+                },
+                "cajero": {
+                    "id": "MLEIVA      ",
+                    "nombre": "MILENA LEIVA"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 8.348.811-5 A ME SANTANDER",
+            "fecha": "2026-05-28T13:31:40",
+            "monto": 537500.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 206,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 8.348.811-5 A ME SANTANDER",
+                    "cantidad": 1,
+                    "precioUnitario": 537500.00,
+                    "monto": 537500.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:27.653"
+        },
+        {
+            "contexto": {
+                "id": 700435675,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP.13580.MG SANTADNER  DISCEPOLIN",
+            "fecha": "2026-05-28T13:06:59",
+            "monto": 11804000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.13580.MG SANTADNER  DISCEPOLIN",
+                    "cantidad": 1,
+                    "precioUnitario": 11804000.00,
+                    "monto": 11804000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.647"
+        },
+        {
+            "contexto": {
+                "id": 300375173,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 77.433.524-2 SANTANDER BCI ME",
+            "fecha": "2026-05-28T12:38:10",
+            "monto": 4434000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander",
+            "rubroBanco": 240,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": "Santander",
+            "esExcepcion": true,
+            "items": [
+                {
+                    "nombre": "DEP 77.433.524-2 SANTANDER BCI ME",
+                    "cantidad": 1,
+                    "precioUnitario": 4434000.00,
+                    "monto": 4434000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.13"
+        },
+        {
+            "contexto": {
+                "id": 700435655,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1164293
+            },
+            "glosa": "DEP.1164293.CAROLI AR MODA",
+            "fecha": "2026-05-28T12:32:11",
+            "monto": 1293225.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1164293.CAROLI AR MODA",
+                    "cantidad": 1,
+                    "precioUnitario": 1293225.00,
+                    "monto": 1293225.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.87"
+        },
+        {
+            "contexto": {
+                "id": 300375168,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 9.607.114-0 BCI",
+            "fecha": "2026-05-28T12:32:02",
+            "monto": 90700.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 9.607.114-0 BCI",
+                    "cantidad": 1,
+                    "precioUnitario": 90700.00,
+                    "monto": 90700.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.127"
+        },
+        {
+            "contexto": {
+                "id": 700435646,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 7,
+                    "nombre": "SAN SEBASTIAN"
+                },
+                "cajero": {
+                    "id": "CGUTIERREZ  ",
+                    "nombre": "CAMILO GUTIERREZ"
+                }
+            },
+            "documento": {
+                "codigo": 0,
+                "tipo": null,
+                "folio": 1164281
+            },
+            "glosa": "DEP.1164281.CAROLINA SEGUEL  ME",
+            "fecha": "2026-05-28T12:25:26",
+            "monto": 4095000.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "BCI ME",
+            "rubroBanco": 231,
+            "rubroSucursal": 207,
+            "bancoSucursal": "BCI ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP.1164281.CAROLINA SEGUEL  ME",
+                    "cantidad": 1,
+                    "precioUnitario": 4095000.00,
+                    "monto": 4095000.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:16:29.84"
+        },
+        {
+            "contexto": {
+                "id": 300375162,
+                "cliente": {
+                    "nombre": "CLIENTE GENERICO",
+                    "documento": "55.555.555-5"
+                },
+                "sucursal": {
+                    "id": 3,
+                    "nombre": "SUECIA"
+                },
+                "cajero": {
+                    "id": "JVALDEVENITO",
+                    "nombre": "JAVIER VALDEVENITO"
+                }
+            },
+            "documento": null,
+            "glosa": "DEP 12.881.864-2 ITAU ME SPA APP MG TICKET 13249",
+            "fecha": "2026-05-28T11:19:39",
+            "monto": 257816.00,
+            "currency": "CLP",
+            "tipoOperacion": "INGRESO",
+            "banco": "Santander ME",
+            "rubroBanco": 230,
+            "rubroSucursal": 203,
+            "bancoSucursal": "Santander ME",
+            "bancoDetectado": null,
+            "esExcepcion": false,
+            "items": [
+                {
+                    "nombre": "DEP 12.881.864-2 ITAU ME SPA APP MG TICKET 13249",
+                    "cantidad": 1,
+                    "precioUnitario": 257816.00,
+                    "monto": 257816.00
+                }
+            ],
+            "fechaCarga": "2026-06-05T01:17:12.123"
+        }
+    ],
+    "pagination": {
+        "limit": 100,
+        "next_after_id": 1000152281,
+        "has_more": true
+    }
+}

@@ -52,6 +52,19 @@ export async function GET(req: Request) {
           alias: true,
         },
       },
+      // Estado de conciliacion contra el egreso de Dynatech, si existe.
+      consolidadoLinks: {
+        select: {
+          consolidado: {
+            select: {
+              status: true,
+              matchType: true,
+              tesoreriaMovement: { select: { externalId: true } },
+            },
+          },
+        },
+        take: 1,
+      },
     },
     orderBy: [{ postDate: "desc" }, { createdAt: "desc" }],
     take: 10000,
@@ -99,6 +112,15 @@ export async function GET(req: Request) {
 
     const cuentaNumero = bm.account.displayNumber || bm.account.accountNumber;
 
+    const cLink = bm.consolidadoLinks[0]?.consolidado ?? null;
+    const conciliacion = cLink
+      ? {
+          status: cLink.status,
+          matchType: cLink.matchType,
+          tesoreriaExternalId: cLink.tesoreriaMovement.externalId.toString(),
+        }
+      : null;
+
     rows.push({
       id: bm.id,
       fecha: bm.postDate.toISOString(),
@@ -111,6 +133,7 @@ export async function GET(req: Request) {
       counterpartyName: bm.counterpartyName,
       description: bm.description,
       quality: rowQuality,
+      conciliacion,
     });
   }
 
@@ -167,6 +190,11 @@ interface EgresoTerceroRow {
   counterpartyName: string | null;
   description: string | null;
   quality: Quality;
+  conciliacion: {
+    status: string;
+    matchType: string | null;
+    tesoreriaExternalId: string;
+  } | null;
 }
 
 function parseRange(

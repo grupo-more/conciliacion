@@ -58,6 +58,9 @@ const rowSchema = z.object({
   glosa: z.string().optional().default(""),
   fecha: z.string(),
   monto: z.number(),
+  // INGRESO | EGRESO. Campo nuevo de la API (jun-2026). Si no viene, se deriva
+  // del signo del monto en el upsert (negativo = EGRESO).
+  tipoOperacion: z.enum(["INGRESO", "EGRESO"]).optional().nullable(),
   currency: z.string().optional().default("CLP"),
   banco: z.string().optional().nullable(),
   rubroBanco: z.number().int().optional().nullable(),
@@ -220,6 +223,12 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
     const clienteName = r.contexto.cliente?.nombre?.trim() || null;
     const wasExisting = existingSet.has(BigInt(r.contexto.id).toString());
 
+    // tipoOperacion: usar el de la API si vino; si no, derivar del signo del
+    // monto (negativo = EGRESO). Asi quedamos robustos si la API a veces no lo
+    // manda o si hay payloads viejos.
+    const tipoOperacion: "INGRESO" | "EGRESO" =
+      r.tipoOperacion ?? (r.monto < 0 ? "EGRESO" : "INGRESO");
+
     const payload = {
       sucursalId: r.contexto.sucursal.id,
       sucursalName: r.contexto.sucursal.nombre ?? null,
@@ -237,6 +246,7 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
       rubroBanco: r.rubroBanco ?? null,
       rubroSucursal: r.rubroSucursal ?? null,
       monto: BigInt(Math.round(r.monto)),
+      tipoOperacion,
       fecha: parseTesoreriaDate(r.fecha),
       fechaCarga: r.fechaCarga ? parseTesoreriaDate(r.fechaCarga) : null,
       esExcepcion: r.esExcepcion ?? false,
