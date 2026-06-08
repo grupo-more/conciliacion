@@ -43,12 +43,46 @@ export async function GET(req: Request) {
     ];
   }
 
-  const [rows, total, sucursales, agg] = await Promise.all([
-    prisma.transbankSale.findMany({ where, orderBy: { fechaVenta: "desc" }, take: limit, skip: offset }),
-    prisma.transbankSale.count({ where }),
+  const soloSinConciliar = url.searchParams.get("soloSinConciliar") === "true";
+
+  // Cargamos TODO el rango (son pocos) para poder marcar conciliación contra el
+  // POS y filtrar/paginar en memoria.
+  const [allRows, sucursales, posRows] = await Promise.all([
+    prisma.transbankSale.findMany({ where, orderBy: { fechaVenta: "desc" } }),
     prisma.transbankSale.groupBy({ by: ["sucursalId"], orderBy: [{ sucursalId: "asc" }] }),
-    prisma.transbankSale.aggregate({ where, _sum: { montoVenta: true, comision: true, ivaComision: true, totalAbono: true } }),
+    prisma.tbkTesoreria.findMany({ select: { opNumber: true, monto: true } }),
   ]);
+
+  // Conciliación: un abono está cuadrado si hay un POS con la misma boleta(=OP)
+  // y monto dentro de la tolerancia (recargo de crédito ~2%). Misma llave que
+  // el motor de Cruce Transbank.
+  const absB = (n: bigint) => (n < 0n ? -n : n);
+  const posByOp = new Map<string, bigint[]>();
+  for (const p of posRows) {
+    if (!p.opNumber) continue;
+    (posByOp.get(p.opNumber) ?? posByOp.set(p.opNumber, []).get(p.opNumber)!).push(p.monto);
+  }
+  const isConciliado = (s: { numeroBoleta: string | null; montoVenta: bigint }) => {
+    if (!s.numeroBoleta) return false;
+    const base = Number(absB(s.montoVenta));
+    return (posByOp.get(s.numeroBoleta) ?? []).some(
+      (m) => base > 0 && Number(absB(m - s.montoVenta)) / base <= 0.05,
+    );
+  };
+
+  const withC = allRows.map((s) => ({ s, conc: isConciliado(s) }));
+  const conciliados = withC.filter((x) => x.conc).length;
+  const sinConciliar = withC.length - conciliados;
+  const filtered = soloSinConciliar ? withC.filter((x) => !x.conc) : withC;
+  const total = filtered.length;
+  const pageItems = filtered.slice(offset, offset + limit);
+
+  let sumBruto = 0n, sumCom = 0n, sumNeto = 0n;
+  for (const x of filtered) {
+    sumBruto += x.s.montoVenta;
+    sumCom += x.s.comision + x.s.ivaComision;
+    sumNeto += x.s.totalAbono;
+  }
 
   // Nombres de sucursal desde el catálogo de TbkTesoreria (las settlement no
   // siempre traen sucursalId resuelto).
@@ -63,18 +97,18 @@ export async function GET(req: Request) {
   for (const s of tesoSuc) if (s.sucursalName) sucMap.set(s.sucursalId, s.sucursalName);
   for (const s of tbkSuc) if (s.sucursalName) sucMap.set(s.sucursalId, s.sucursalName);
 
-  const comisionTotal = (agg._sum.comision ?? 0n) + (agg._sum.ivaComision ?? 0n);
-
   return NextResponse.json({
     total,
     limit,
     offset,
+    conciliados,
+    sinConciliar,
     sums: {
-      bruto: (agg._sum.montoVenta ?? 0n).toString(),
-      comision: comisionTotal.toString(),
-      neto: (agg._sum.totalAbono ?? 0n).toString(),
+      bruto: sumBruto.toString(),
+      comision: sumCom.toString(),
+      neto: sumNeto.toString(),
     },
-    sales: rows.map((s) => ({
+    sales: pageItems.map(({ s, conc }) => ({
       id: s.id,
       fechaVenta: s.fechaVenta.toISOString(),
       nombreLocal: s.nombreLocal,
@@ -85,6 +119,7 @@ export async function GET(req: Request) {
       totalAbono: s.totalAbono.toString(),
       numeroBoleta: s.numeroBoleta,
       tid: s.tid,
+      conciliado: conc,
     })),
     facets: {
       sucursales: sucursales

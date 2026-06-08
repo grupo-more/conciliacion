@@ -14,9 +14,12 @@ interface Sale {
   totalAbono: string;
   numeroBoleta: string | null;
   tid: string | null;
+  conciliado: boolean;
 }
 interface Resp {
   total: number;
+  conciliados: number;
+  sinConciliar: number;
   sums: { bruto: string; comision: string; neto: string };
   sales: Sale[];
   facets: { sucursales: { id: number; name: string | null }[] };
@@ -32,6 +35,7 @@ export function TransbankSalesView() {
   const [until, setUntil] = useState("");
   const [sucursalId, setSucursalId] = useState("");
   const [q, setQ] = useState("");
+  const [soloSinConciliar, setSoloSinConciliar] = useState(false);
   const [data, setData] = useState<Resp | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -43,6 +47,7 @@ export function TransbankSalesView() {
       if (until) p.set("until", until);
       if (sucursalId) p.set("sucursalId", sucursalId);
       if (q) p.set("q", q);
+      if (soloSinConciliar) p.set("soloSinConciliar", "true");
       const res = await fetch(`/api/transbank/sales?${p}`);
       setData(res.ok ? await res.json() : null);
     } finally {
@@ -54,7 +59,7 @@ export function TransbankSalesView() {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [since, until, sucursalId, q]);
+  }, [since, until, sucursalId, q, soloSinConciliar]);
 
   return (
     <div className="space-y-3 min-w-0">
@@ -78,10 +83,17 @@ export function TransbankSalesView() {
           <label className="label">Hasta</label>
           <input type="date" className="input" value={until} onChange={(e) => setUntil(e.target.value)} />
         </div>
+        <label className="flex items-center gap-1.5 text-sm cursor-pointer select-none pb-1.5">
+          <input type="checkbox" checked={soloSinConciliar} onChange={(e) => setSoloSinConciliar(e.target.checked)} />
+          Solo sin conciliar
+        </label>
         {data && (
           <div className="ml-auto text-sm text-text-muted text-right leading-tight">
-            <div><b>{data.total.toLocaleString("es-CL")}</b> abonos · neto ${formatMoney(BigInt(data.sums.neto))}</div>
-            <div className="text-xs">Bruto ${formatMoney(BigInt(data.sums.bruto))} · comisión ${formatMoney(BigInt(data.sums.comision))}</div>
+            <div>
+              <b className="text-emerald-700">{data.conciliados}</b> conciliados ·{" "}
+              <b className="text-amber-700">{data.sinConciliar}</b> sin conciliar
+            </div>
+            <div className="text-xs">Neto ${formatMoney(BigInt(data.sums.neto))} · comisión ${formatMoney(BigInt(data.sums.comision))}</div>
           </div>
         )}
       </div>
@@ -97,12 +109,13 @@ export function TransbankSalesView() {
               <th className="px-3 py-2 text-right">Bruto</th>
               <th className="px-3 py-2 text-right">Comisión</th>
               <th className="px-3 py-2 text-right">Neto abono</th>
+              <th className="px-3 py-2 text-left">Conciliación</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={7} className="px-3 py-6 text-center text-text-muted">Cargando…</td></tr>}
+            {loading && <tr><td colSpan={8} className="px-3 py-6 text-center text-text-muted">Cargando…</td></tr>}
             {!loading && data && data.sales.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-6 text-center text-text-muted">
+              <tr><td colSpan={8} className="px-3 py-6 text-center text-text-muted">
                 Sin abonos Transbank. Subí el .xls con el botón “Subir abonos Transbank”.
               </td></tr>
             )}
@@ -118,6 +131,17 @@ export function TransbankSalesView() {
                 <td className="px-3 py-2 text-right font-mono whitespace-nowrap">${formatMoney(BigInt(s.montoVenta))}</td>
                 <td className="px-3 py-2 text-right font-mono whitespace-nowrap text-text-muted">${formatMoney(BigInt(s.comision))}</td>
                 <td className="px-3 py-2 text-right font-mono whitespace-nowrap text-success">${formatMoney(BigInt(s.totalAbono))}</td>
+                <td className="px-3 py-2 whitespace-nowrap">
+                  {s.conciliado ? (
+                    <span className="inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold bg-emerald-100 text-emerald-800 border-emerald-200">
+                      Cuadrado
+                    </span>
+                  ) : (
+                    <span className="inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold bg-amber-100 text-amber-800 border-amber-300">
+                      Sin conciliar
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
