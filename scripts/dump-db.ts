@@ -38,6 +38,9 @@ async function main() {
     bankMovementsRaw,
     consolidadosRaw,
     syncRuns,
+    tbkRaw,
+    salesRaw,
+    egresoRaw,
   ] = await Promise.all([
     prisma.bankAccount.findMany(),
     prisma.bankAccountAlias.findMany(),
@@ -87,6 +90,9 @@ async function main() {
       take: 15,
       orderBy: { startedAt: "desc" },
     }),
+    prisma.tbkTesoreria.findMany({ take: TAKE, orderBy: { fecha: "desc" } }),
+    prisma.transbankSale.findMany({ take: TAKE, orderBy: { fechaVenta: "desc" } }),
+    prisma.egresoMovement.findMany({ take: TAKE, orderBy: { fecha: "desc" } }),
   ]);
 
   // Resumen de egresos para imprimir en consola (diagnostico rapido).
@@ -112,6 +118,9 @@ async function main() {
       bankMovements: bankMovementsRaw.length,
       bankMovementsOUT: outBmCount,
       consolidados: consolidadosRaw.length,
+      tbkTesoreria: tbkRaw.length,
+      transbankSale: salesRaw.length,
+      egresoMovement: egresoRaw.length,
     },
     egresosPorStatus,
     bankAccounts,
@@ -170,6 +179,22 @@ async function main() {
       score: c.score,
       resolvedAccountId: c.resolvedAccountId,
       links: c.links,
+    })),
+    tbkTesoreria: tbkRaw.map((t) => ({
+      externalId: t.externalId, sucursalId: t.sucursalId, sucursalName: t.sucursalName,
+      glosa: t.glosa, opNumber: t.opNumber, fecha: t.fecha, monto: t.monto,
+      folio: t.folio, rubro: t.rubro, cajeroName: t.cajeroName,
+    })),
+    transbankSale: salesRaw.map((s) => ({
+      fechaVenta: s.fechaVenta, nombreLocal: s.nombreLocal, sucursalId: s.sucursalId,
+      medioPago: s.medioPago, montoVenta: s.montoVenta, comision: s.comision,
+      ivaComision: s.ivaComision, totalAbono: s.totalAbono, numeroBoleta: s.numeroBoleta,
+      tid: s.tid, codigoComercio: s.codigoComercio,
+    })),
+    egresoMovement: egresoRaw.map((e) => ({
+      externalId: e.externalId, fecha: e.fecha, monto: e.monto, glosa: e.glosa,
+      sucursalId: e.sucursalId, sucursalName: e.sucursalName,
+      rubroId: e.rubroId, rubroNombre: e.rubroNombre, cajeroName: e.cajeroName,
     })),
   };
 
