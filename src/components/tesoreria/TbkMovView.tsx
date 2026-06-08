@@ -28,15 +28,17 @@ export function TbkMovView() {
   const [to, setTo] = useState("");
   const [sucursalId, setSucursalId] = useState("");
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(0);
   const [data, setData] = useState<Resp | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
+  const PAGE_SIZE = 500;
 
   async function load() {
     setLoading(true);
     try {
-      const p = new URLSearchParams();
+      const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
       if (from) p.set("since", from);
       if (to) p.set("until", to);
       if (sucursalId) p.set("sucursalId", sucursalId);
@@ -48,11 +50,14 @@ export function TbkMovView() {
     }
   }
 
+  // Reset a página 0 cuando cambian los filtros.
+  useEffect(() => { setPage(0); }, [from, to, sucursalId, q]);
+
   useEffect(() => {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to, sucursalId, q]);
+  }, [from, to, sucursalId, q, page]);
 
   async function onSync() {
     setBusy(true);
@@ -127,8 +132,24 @@ export function TbkMovView() {
           </tbody>
         </table>
       </div>
-      {data && data.total > data.movements.length && (
-        <p className="text-xs text-text-muted">Mostrando {data.movements.length} de {data.total}. Refiná los filtros.</p>
+      {data && data.total > PAGE_SIZE && (
+        <div className="flex items-center justify-between text-sm">
+          <span className="text-text-muted">
+            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, data.total)} de {data.total.toLocaleString("es-CL")}
+          </span>
+          <div className="flex gap-2">
+            <button className="btn-ghost text-xs" disabled={page === 0} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+              ← Anterior
+            </button>
+            <button
+              className="btn-ghost text-xs"
+              disabled={(page + 1) * PAGE_SIZE >= data.total}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Siguiente →
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
