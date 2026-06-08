@@ -205,6 +205,34 @@ function hasStrongNameOrRutMatch(
   return false;
 }
 
+/** RUT embebido en la glosa de Tesoreria (ej. "DEP 76.810.587-1 ..."). */
+function rutFromGlosa(glosa: string | null | undefined): string | null {
+  if (!glosa) return null;
+  const m = glosa.match(/(\d{1,2}\.\d{3}\.\d{3}-[\dKk]|\d{7,9}-?[\dKk])/);
+  return m ? normalizeRut(m[1]) : null;
+}
+
+/**
+ * Identidad por GLOSA (para clientes GENERICO sin clienteName/RUT propio):
+ * RUT en la glosa que coincide con el counterparty del banco, o un token de
+ * nombre de la glosa presente en el counterparty. Se usa SOLO para habilitar
+ * el match cross-cuenta (banco mal asignado), nunca para el match directo.
+ */
+function glosaIdentityMatch(t: TesoreriaMovement, bm: BankMovement): boolean {
+  const gRut = rutFromGlosa(t.glosa);
+  const bRut = normalizeRut(bm.counterpartyRut);
+  if (gRut && bRut && gRut === bRut && gRut !== "55555555-5") return true;
+  // RUT de glosa tambien puede venir en la descripcion del banco
+  if (gRut && gRut !== "55555555-5") {
+    const desc = stripDiacritics(bm.description ?? "");
+    const gNum = gRut.replace(/[.\-]/g, "");
+    if (gNum.length >= 7 && desc.replace(/[.\-]/g, "").includes(gNum)) return true;
+  }
+  const cpName = stripDiacritics(bm.counterpartyName ?? "");
+  if (!cpName) return false;
+  return tokenize(t.glosa, 4).some((tok) => cpName.includes(tok));
+}
+
 /* =============================== Scoring =============================== */
 
 function scoreOnePair(
@@ -340,7 +368,7 @@ function matchTypeForSplit(deltaDaysMax: number): NonNullable<Consolidado["match
 function generateCandidates(
   t: TesoreriaMovement,
   aliasAccount: BankAccount,
-  sameBankAccounts: BankAccount[],
+  otherAccounts: BankAccount[],
   bmsByAccount: Map<string, BMWithAccount[]>
 ): CandidateBase[] {
   const candidates: CandidateBase[] = [];
@@ -450,24 +478,29 @@ function generateCandidates(
     }
   }
 
-  // === 3) 1:1 en OTRA cuenta del MISMO banco (excepcion) ===
-  // Solo si hay match firme de nombre o RUT (sino son coincidencias).
-  for (const otherAccount of sameBankAccounts) {
+  // === 3) 1:1 en OTRA cuenta (banco mal asignado), mismo banco O cruzado ===
+  // Solo con identidad firme: nombre/RUT del cliente, o RUT/nombre en la glosa
+  // (para CLIENTE GENERICO). Cruzado de banco => nunca AUTO (cap a SUGGESTED),
+  // porque el monto solo entre bancos distintos puede ser coincidencia.
+  for (const otherAccount of otherAccounts) {
     if (otherAccount.id === aliasAccount.id) continue;
     const otherBms = bmsByAccount.get(otherAccount.id) ?? [];
     for (const bm of otherBms) {
-      if (bm.amount !== t.monto) continue;
+      if (absBig(bm.amount) !== absBig(t.monto)) continue;
       if (bm.postDate < lowerT || bm.postDate > upperT) continue;
-      if (!hasStrongNameOrRutMatch(t, bm)) continue;
+      if (!hasStrongNameOrRutMatch(t, bm) && !glosaIdentityMatch(t, bm)) continue;
 
       const { score, factors, deltaDays } = scoreOnePair(t, bm, { wrongAccount: true });
+      const crossBank = otherAccount.bankCode !== aliasAccount.bankCode;
+      let status = statusForScore(score);
+      if (crossBank && status === "AUTO_MATCHED") status = "SUGGESTED";
       candidates.push({
         tesoreriaId: t.id,
         bms: [bm],
         score,
         factors,
         matchType: "ACCOUNT_MISMATCH",
-        status: statusForScore(score),
+        status,
         isException: true,
         primaryDeltaDays: Math.abs(deltaDays),
       });
@@ -591,6 +624,8 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
     arr.push(acc);
     accountsByBankCode.set(acc.bankCode, arr);
   }
+  // Todas las cuentas reales (cualquier banco) — para el match cross-cuenta.
+  const allRealAccounts = [...accountsByBankCode.values()].flat();
 
   // BMs que NO se pueden usar (ya estan en un MANUAL)
   const manualBmIds = new Set<string>();
@@ -651,8 +686,10 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
     const isEgreso = t.tipoOperacion === "EGRESO" || t.monto < 0n;
     const bmsByAccount = isEgreso ? bmsByAccountOUT : bmsByAccountIN;
 
-    const sameBank = accountsByBankCode.get(aliasAccount.bankCode) ?? [];
-    const cands = generateCandidates(t, aliasAccount, sameBank, bmsByAccount);
+    // Cross-cuenta: pasamos TODAS las cuentas reales (no solo las del mismo
+    // banco) para recuperar depositos que entraron a una cuenta distinta de la
+    // asignada. El gating de identidad evita falsos positivos.
+    const cands = generateCandidates(t, aliasAccount, allRealAccounts, bmsByAccount);
     allCandidates.push(...cands);
   }
 
