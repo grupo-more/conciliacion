@@ -26,8 +26,8 @@ interface Resp {
 
 /** Sub-tab "Egresos": gastos operativos (feed /api/egresos). */
 export function EgresoMovView() {
-  const [from, setFrom] = useState(firstDayOfMonthIso());
-  const [to, setTo] = useState(todayIso());
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const [sucursalId, setSucursalId] = useState("");
   const [rubroId, setRubroId] = useState("");
   const [q, setQ] = useState("");
@@ -39,7 +39,9 @@ export function EgresoMovView() {
   async function load() {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ since: from, until: to });
+      const p = new URLSearchParams();
+      if (from) p.set("since", from);
+      if (to) p.set("until", to);
       if (sucursalId) p.set("sucursalId", sucursalId);
       if (rubroId) p.set("rubroId", rubroId);
       if (q) p.set("q", q);
@@ -156,5 +158,3 @@ function Stat({ label, value }: { label: string; value: string }) {
     </div>
   );
 }
-function todayIso() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
-function firstDayOfMonthIso() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; }

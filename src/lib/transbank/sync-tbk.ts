@@ -91,7 +91,9 @@ export async function runTbkTesoreriaSync(): Promise<TbkSyncResult> {
     process.env.TBK_TESORERIA_API_URL ||
     "http://172.16.10.172:5158/api/tbk-tesoreria";
   const apiKey = process.env.TBK_TESORERIA_API_KEY || process.env.TESORERIA_API_KEY;
-  const limit = process.env.TBK_TESORERIA_API_LIMIT ?? "500";
+  // La API /api/tbk-tesoreria topa la pagina en 200 (limit mayor → HTTP 400).
+  // Paginamos por cursor (after_id) para traer todo.
+  const limit = process.env.TBK_TESORERIA_API_LIMIT ?? "200";
   const MAX_PAGES = 200;
 
   const t0 = Date.now();
