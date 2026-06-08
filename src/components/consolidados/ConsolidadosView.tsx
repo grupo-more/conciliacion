@@ -15,6 +15,7 @@ import { ConsolidadoDetail } from "./ConsolidadoDetail";
 import { CompareView } from "./CompareView";
 import { OKView } from "./OKView";
 import { AbonoTransbankView } from "./AbonoTransbankView";
+import { CruceTransbankView } from "./CruceTransbankView";
 import { DifMenorView } from "./DifMenorView";
 import { EgresosInternosView } from "./EgresosInternosView";
 import { EgresosTercerosView } from "./EgresosTercerosView";
@@ -26,6 +27,7 @@ type Tab =
   | "compare"
   | "ok"
   | "abono-transbank"
+  | "cruce-transbank"
   | "egresos-internos"
   | "egresos-terceros"
   | "traspasos-internos"
@@ -188,6 +190,12 @@ export function ConsolidadosView() {
             Abono Transbank
           </TabButton>
           <TabButton
+            active={tab === "cruce-transbank"}
+            onClick={() => setTab("cruce-transbank")}
+          >
+            Cruce Transbank
+          </TabButton>
+          <TabButton
             active={tab === "egresos-internos"}
             onClick={() => setTab("egresos-internos")}
           >
@@ -218,6 +226,7 @@ export function ConsolidadosView() {
       {tab === "compare" && <CompareView />}
       {tab === "ok" && <OKView />}
       {tab === "abono-transbank" && <AbonoTransbankView />}
+      {tab === "cruce-transbank" && <CruceTransbankView />}
       {tab === "egresos-internos" && <EgresosInternosView />}
       {tab === "egresos-terceros" && <EgresosTercerosView />}
       {tab === "traspasos-internos" && <TraspasosInternosView />}

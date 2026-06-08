@@ -331,3 +331,99 @@ model DifMenorSettings {
   rubroDiferencia Int      @default(2050) @map("rubro_diferencia")
   updatedAt       DateTime @updatedAt @map("updated_at")
 }
+
+// ============================ Transbank ============================
+//
+// Dos fuentes nuevas que se cuadran entre si en la tab "Cruce Transbank":
+//   - TransbankSale: detalle de liquidacion de Transbank (archivo "Abonos por
+//     dia" .xls). Cada fila es una venta con tarjeta: bruto, comision, neto.
+//   - TbkTesoreria: registro POS de la venta TBK (feed /api/tbk-tesoreria).
+//
+// NINGUNA de las dos entra al motor de Consolidados (ingresos/egresos): viven
+// aparte para no generar ruido. El cruce es POS <-> settlement por
+// sucursal + N° de boleta (= N° de OP de la glosa POS), con fallback a
+// sucursal + monto bruto + fecha.
+
+// Registro de cada import del archivo .xls de Transbank (mirror de StatementImport).
+model TransbankImport {
+  id           String   @id @default(uuid())
+  fileName     String   @map("file_name")
+  fileHash     String   @unique @map("file_hash")
+  empresaRut   String?  @map("empresa_rut")
+  cuentaAbono  String?  @map("cuenta_abono")
+  periodFrom   DateTime? @map("period_from")
+  periodTo     DateTime? @map("period_to")
+  rowsTotal    Int      @default(0) @map("rows_total")
+  rowsInserted Int      @default(0) @map("rows_inserted")
+  rowsDuplicated Int    @default(0) @map("rows_duplicated")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sales TransbankSale[]
+
+  @@index([createdAt])
+}
+
+// Una venta con tarjeta liquidada por Transbank (lado banco/abono).
+model TransbankSale {
+  id              String   @id @default(uuid())
+  importId        String   @map("import_id")
+  import          TransbankImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+
+  fechaVenta      DateTime @map("fecha_venta")
+  tipoMovimiento  String   @map("tipo_movimiento")          // "Venta" | anulacion...
+  codigoComercio  String   @map("codigo_comercio")
+  nombreLocal     String   @map("nombre_local")
+  sucursalId      Int?     @map("sucursal_id")               // resuelto desde nombreLocal
+  medioPago       String   @map("medio_pago")                // Débito/Crédito/Prepago
+
+  montoVenta      BigInt   @map("monto_venta")               // bruto (monto original de venta)
+  comision        BigInt   @default(0)
+  ivaComision     BigInt   @default(0) @map("iva_comision")
+  totalAbono      BigInt   @map("total_abono")               // neto que llega al banco
+
+  fechaAnulacion  DateTime? @map("fecha_anulacion")
+  montoAnulado    BigInt   @default(0) @map("monto_anulado")
+
+  numeroUnico     String   @unique @map("numero_unico")      // dedup natural (Transbank)
+  tid             String?
+  codigoAutorizacion String? @map("codigo_autorizacion")
+  numeroBoleta    String?  @map("numero_boleta")             // = N° de OP del POS
+
+  rawRow          Json     @map("raw_row")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([sucursalId, fechaVenta])
+  @@index([numeroBoleta])
+  @@index([montoVenta])
+}
+
+// Registro POS de una venta con tarjeta (feed /api/tbk-tesoreria). Mismo
+// shape que Dynatech pero aislado: tipo "TBK", rubro 17. NO se concilia
+// contra cartola en el motor de ingresos.
+model TbkTesoreria {
+  id             String   @id @default(uuid())
+  externalId     BigInt   @unique @map("external_id")        // contexto.id
+
+  sucursalId     Int      @map("sucursal_id")
+  sucursalName   String?  @map("sucursal_name")
+  cajeroUsername String?  @map("cajero_username")
+  cajeroName     String?  @map("cajero_name")
+
+  glosa          String   @db.Text
+  opNumber       String?  @map("op_number")                  // extraido de la glosa
+  fecha          DateTime
+  monto          BigInt                                       // bruto
+  folio          BigInt   @default(0)
+  rubro          Int?
+  tipo           String   @default("TBK")
+  clienteName    String?  @map("cliente_name")
+  clienteRut     String?  @map("cliente_rut")
+
+  fechaCarga     DateTime? @map("fecha_carga")
+  rawJson        Json     @map("raw_json")
+  syncedAt       DateTime @default(now()) @map("synced_at")
+
+  @@index([sucursalId, fecha])
+  @@index([opNumber])
+  @@index([monto])
+}

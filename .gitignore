@@ -11,6 +11,7 @@ next-env.d.ts
 *.sql.gz
 backups/
 dumps/
+dump/
 
 # Reportes y exploraciones temporales
 reports/
