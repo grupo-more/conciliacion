@@ -52,9 +52,16 @@ export async function GET(req: Request) {
 
   // Nombres de sucursal desde el catálogo de TbkTesoreria (las settlement no
   // siempre traen sucursalId resuelto).
+  // Nombres de sucursal: del POS (TbkTesoreria) y del feed Tesorería
+  // (TesoreriaMovement), que SÍ tiene Bosque/Suecia y demás. Así los abonos
+  // de sucursales sin POS muestran su nombre en vez de "#2"/"#3".
   const sucMap = new Map<number, string | null>();
-  const tbkSuc = await prisma.tbkTesoreria.groupBy({ by: ["sucursalId", "sucursalName"] });
-  for (const s of tbkSuc) sucMap.set(s.sucursalId, s.sucursalName);
+  const [tbkSuc, tesoSuc] = await Promise.all([
+    prisma.tbkTesoreria.groupBy({ by: ["sucursalId", "sucursalName"] }),
+    prisma.tesoreriaMovement.groupBy({ by: ["sucursalId", "sucursalName"] }),
+  ]);
+  for (const s of tesoSuc) if (s.sucursalName) sucMap.set(s.sucursalId, s.sucursalName);
+  for (const s of tbkSuc) if (s.sucursalName) sucMap.set(s.sucursalId, s.sucursalName);
 
   const comisionTotal = (agg._sum.comision ?? 0n) + (agg._sum.ivaComision ?? 0n);
 

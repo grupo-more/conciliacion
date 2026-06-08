@@ -36,6 +36,13 @@ export async function GET(req: Request) {
     }),
   ]);
 
+  // Nombres de sucursal: POS + feed Tesorería (que tiene Bosque/Suecia, etc.),
+  // para que los abonos "sin POS" muestren el nombre y no "#2"/"#3".
+  const sucName = new Map<number, string | null>();
+  const tesoSuc = await prisma.tesoreriaMovement.groupBy({ by: ["sucursalId", "sucursalName"] });
+  for (const s of tesoSuc) if (s.sucursalName) sucName.set(s.sucursalId, s.sucursalName);
+  for (const p of posAll) if (p.sucursalName) sucName.set(p.sucursalId, p.sucursalName);
+
   // Tolerancia de monto: el settlement de Transbank suma el RECARGO de crédito
   // (~2%) sobre el monto base del POS. Para débito la diferencia es 0; para
   // crédito ~2%. Aceptamos hasta este % y MOSTRAMOS la diferencia (auditable).
@@ -163,7 +170,7 @@ export async function GET(req: Request) {
       estado: "settlement_sin_pos",
       fecha: s.fechaVenta.toISOString(),
       sucursalId: s.sucursalId,
-      sucursalName: null,
+      sucursalName: s.sucursalId != null ? sucName.get(s.sucursalId) ?? null : null,
       op: null,
       glosa: s.nombreLocal,
       medioPago: s.medioPago,
@@ -198,11 +205,12 @@ export async function GET(req: Request) {
     totalRecargo: sumStr(cuadrados.map((r) => r.diferencia ?? "0")),
   };
 
-  // Facets de sucursal.
-  const sucMap = new Map<number, string | null>();
-  for (const p of posAll) sucMap.set(p.sucursalId, p.sucursalName);
-  const sucursales = Array.from(sucMap.entries())
-    .map(([id, name]) => ({ id, name }))
+  // Facets de sucursal: todas las vistas en POS o settlement (con nombre).
+  const sucIds = new Set<number>();
+  for (const p of posAll) sucIds.add(p.sucursalId);
+  for (const s of settAll) if (s.sucursalId != null) sucIds.add(s.sucursalId);
+  const sucursales = Array.from(sucIds)
+    .map((id) => ({ id, name: sucName.get(id) ?? null }))
     .sort((a, b) => a.id - b.id);
 
   return NextResponse.json({
