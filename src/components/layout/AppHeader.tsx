@@ -13,7 +13,7 @@ const SECTION_LABELS: Record<string, string> = {
   "/dashboard": "Dashboard general",
   "/dashboard/consolidados": "Consolidados",
   "/dashboard/cartolas": "Cartolas bancarias",
-  "/dashboard/tesoreria": "Movimientos 200",
+  "/dashboard/tesoreria": "Movimientos",
   "/dashboard/configuracion": "Configuración",
 };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { formatMoney, formatDate } from "@/lib/format";
 
 type Estado = "cuadrado" | "pos_sin_settlement" | "settlement_sin_pos";
@@ -52,7 +52,6 @@ export function CruceTransbankView() {
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
   const [busy, setBusy] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
     setLoading(true);
@@ -71,33 +70,6 @@ export function CruceTransbankView() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to, sucursalId, estado]);
-
-  async function onImportFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setBusy(true);
-    setBanner(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/transbank/import", { method: "POST", body: fd });
-      const j = await res.json();
-      if (!res.ok) {
-        setBanner({ kind: "err", msg: j.error || "Error al importar el archivo" });
-      } else {
-        setBanner({
-          kind: "ok",
-          msg: `Importado: ${j.inserted?.rowsInserted ?? 0} nuevos, ${j.totals?.duplicates ?? 0} duplicados${j.alreadyImported ? " (archivo ya importado)" : ""}`,
-        });
-        load();
-      }
-    } catch {
-      setBanner({ kind: "err", msg: "Error de red al importar" });
-    } finally {
-      setBusy(false);
-      if (fileRef.current) fileRef.current.value = "";
-    }
-  }
 
   async function onSyncPos() {
     setBusy(true);
@@ -127,26 +99,12 @@ export function CruceTransbankView() {
     <div className="space-y-4">
       {/* Acciones */}
       <div className="flex flex-wrap items-center gap-2">
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".xls,.xlsx"
-          onChange={onImportFile}
-          className="hidden"
-          id="tbk-file"
-        />
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={busy}
-          className="btn-primary"
-        >
-          Importar abonos Transbank (.xls)
-        </button>
-        <button onClick={onSyncPos} disabled={busy} className="btn-ghost">
+        <button onClick={onSyncPos} disabled={busy} className="btn-primary">
           {busy ? "Procesando…" : "Sincronizar POS"}
         </button>
         <span className="text-xs text-text-muted">
           Cruza el POS (tbk-tesoreria) contra el settlement de Transbank por N° de boleta + monto.
+          El archivo de abonos Transbank se sube desde <b>Cartolas → Subir abonos Transbank</b>.
         </span>
       </div>
 

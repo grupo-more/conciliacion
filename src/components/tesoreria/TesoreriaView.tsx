@@ -17,7 +17,7 @@ const SYNC_INTERVAL_MS = 30_000;
 
 type Tab = "list" | "report";
 
-export function TesoreriaView() {
+export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
   const [tab, setTab] = useState<Tab>("list");
   const [movements, setMovements] = useState<TesoreriaMovementDTO[]>([]);
   const [total, setTotal] = useState(0);
@@ -248,12 +248,18 @@ export function TesoreriaView() {
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4 animate-fade-in-down">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Movimientos 200</h1>
-          <p className="text-sm text-text-muted mt-0.5">
-            Movimientos del feed bancario con informe cruzado de rubros.
-          </p>
-        </div>
+        {embedded ? (
+          <div className="text-sm text-text-muted">
+            Movimientos del feed Tesorería (rubro 200) con informe cruzado de rubros.
+          </div>
+        ) : (
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Movimientos</h1>
+            <p className="text-sm text-text-muted mt-0.5">
+              Movimientos del feed bancario con informe cruzado de rubros.
+            </p>
+          </div>
+        )}
         <button onClick={() => doSync(true)} disabled={syncing} className="btn-primary">
           {syncing ? "Sincronizando…" : "Sincronizar ahora"}
         </button>

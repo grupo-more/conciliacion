@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ImportModal } from "./ImportModal";
+import { TransbankImportModal } from "./TransbankImportModal";
 import { ReassignModal } from "./ReassignModal";
 import { DuplicatesModal } from "./DuplicatesModal";
 import type {
@@ -38,6 +39,7 @@ export function CartolasView() {
 
   // Modales
   const [importOpen, setImportOpen] = useState(false);
+  const [transbankOpen, setTransbankOpen] = useState(false);
   const [reassignOpen, setReassignOpen] = useState(false);
   const [duplicatesOpen, setDuplicatesOpen] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -188,6 +190,13 @@ export function CartolasView() {
             title="Buscar y limpiar movimientos duplicados"
           >
             Detectar duplicados
+          </button>
+          <button
+            onClick={() => setTransbankOpen(true)}
+            className="btn-ghost text-sm"
+            title="Subir el reporte 'Abonos por día' de Transbank (.xls)"
+          >
+            Subir abonos Transbank
           </button>
           <button onClick={() => setImportOpen(true)} className="btn-primary">
             Subir cartola
@@ -545,6 +554,15 @@ export function CartolasView() {
           onClose={() => setImportOpen(false)}
           onImported={() => {
             onImported();
+          }}
+        />
+      )}
+
+      {transbankOpen && (
+        <TransbankImportModal
+          onClose={() => setTransbankOpen(false)}
+          onImported={() => {
+            // El import de Transbank no toca BankMovement; no recargamos cartolas.
           }}
         />
       )}

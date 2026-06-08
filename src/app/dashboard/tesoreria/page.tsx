@@ -1,5 +1,5 @@
-import { TesoreriaView } from "@/components/tesoreria/TesoreriaView";
+import { MovimientosView } from "@/components/tesoreria/MovimientosView";
 
 export default function TesoreriaPage() {
-  return <TesoreriaView />;
+  return <MovimientosView />;
 }

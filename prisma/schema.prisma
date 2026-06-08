@@ -427,3 +427,31 @@ model TbkTesoreria {
   @@index([opNumber])
   @@index([monto])
 }
+
+// Gastos operativos (feed /api/egresos). Shape plano, rubro {id,nombre}
+// (finiquitos, honorarios, arriendos, proveedores, impuestos...). Aislado del
+// motor de consolidados; por ahora es vista. Distinto de los egresos de
+// dynatech (tipoOperacion=EGRESO, transferencias bancarias) — IDs disjuntos.
+model EgresoMovement {
+  id             String   @id @default(uuid())
+  externalId     BigInt   @unique @map("external_id")     // r.id
+
+  sucursalId     Int      @map("sucursal_id")
+  sucursalName   String?  @map("sucursal_name")
+  cajeroUsername String?  @map("cajero_username")
+  cajeroName     String?  @map("cajero_name")
+
+  glosa          String   @db.Text
+  monto          BigInt                                     // negativo (gasto)
+  rubroId        Int?     @map("rubro_id")
+  rubroNombre    String?  @map("rubro_nombre")
+
+  fecha          DateTime
+  fechaCarga     DateTime? @map("fecha_carga")
+  rawJson        Json     @map("raw_json")
+  syncedAt       DateTime @default(now()) @map("synced_at")
+
+  @@index([sucursalId, fecha])
+  @@index([rubroId])
+  @@index([fecha])
+}
