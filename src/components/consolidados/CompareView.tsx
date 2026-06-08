@@ -326,9 +326,10 @@ export function CompareView() {
   const hasDiff = diff !== 0n;
   const absDiff = diff < 0n ? -diff : diff;
 
-  // El ajuste por diferencia solo se permite con N=1 tesorería. Con N>1, la
-  // suma DEBE coincidir exacto (no hay forma única de distribuir el ajuste).
-  const adjustmentAllowed = !isMultiTesoreria;
+  // El ajuste por diferencia se permite también en split inverso (N>1): la
+  // diferencia se carga al asiento de la tesorería que el backend deja con el
+  // faltante. El operador elige el rubro de diferencia igual que en 1:1.
+  const adjustmentAllowed = true;
 
   const canLink =
     selectedTesoreriaIds.size > 0 &&

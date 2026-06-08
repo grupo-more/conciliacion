@@ -92,17 +92,8 @@ export async function POST(req: Request) {
     );
   }
 
-  // Ajuste no soportado con multi-tesorería: no hay forma única de
-  // distribuirlo. El operador debe seleccionar las tesorerías exactas.
-  if (adjustment && uniqueTesoreriaIds.length > 1) {
-    return NextResponse.json(
-      {
-        error:
-          "El ajuste por diferencia no está soportado cuando seleccionás múltiples tesorerías. Asegurate de que la suma coincida exacto, o vinculá una a una.",
-      },
-      { status: 400 }
-    );
-  }
+  // Ajuste en multi-tesorería (split inverso): la diferencia se carga al
+  // asiento de la tesorería que el greedy deja con el faltante (ver más abajo).
 
   // === Fetch + validate entities ===
   const tms = await prisma.tesoreriaMovement.findMany({
@@ -205,7 +196,7 @@ export async function POST(req: Request) {
   } else if (sumBanks !== sumTms) {
     return NextResponse.json(
       {
-        error: `La suma de los movimientos bancarios (${sumBanks.toString()}) no coincide con la suma de Tesorería (${sumTms.toString()}). Si la diferencia es esperada, agregá un ajuste (solo soportado con 1 tesorería).`,
+        error: `La suma de los movimientos bancarios (${sumBanks.toString()}) no coincide con la suma de Tesorería (${sumTms.toString()}). Si la diferencia es esperada, agregá un ajuste a un rubro de diferencia.`,
       },
       { status: 400 }
     );
@@ -319,6 +310,8 @@ export async function POST(req: Request) {
   // links: array de { tmId, bmId, allocated } a crear en la transacción.
   type LinkSpec = { tmId: string; bmId: string; allocated: bigint | null };
   const linksToCreate: LinkSpec[] = [];
+  // En split inverso CON ajuste, la tesorería que absorbe la diferencia.
+  let adjustmentTmId: string | null = null;
 
   if (!isMultiTm) {
     // Single-tesorería: cada bm seleccionado va completo (amountAllocated
@@ -352,11 +345,40 @@ export async function POST(req: Request) {
         need -= take;
       }
       if (need !== 0n) {
-        // Sanity check: las sumas ya coincidían a nivel global, así que esto
-        // no debería pasar — pero si ocurre, error claro antes de tocar BD.
+        // FALTANTE: la cartola sumó menos que las tesorerías. Si hay ajuste y
+        // el faltante de ESTA tesorería es exactamente la diferencia, se lo
+        // cargamos como ajuste (es la última que quedó corta). Si no, error.
+        if (adjustment && adjustmentTmId === null && need === absDiff) {
+          adjustmentTmId = t.id;
+          need = 0n;
+        } else {
+          return NextResponse.json(
+            {
+              error: `Error interno repartiendo allocations (tesorería ${t.id.slice(0, 8)} quedó con ${need.toString()} sin cubrir). Reportá esto.`,
+            },
+            { status: 500 }
+          );
+        }
+      }
+    }
+
+    // EXCEDENTE: la cartola sumó más que las tesorerías. Si hay ajuste y el
+    // sobrante es la diferencia, se lo asignamos a la última tesorería.
+    const leftover = [...remaining.values()].reduce((a, b) => a + b, 0n);
+    if (leftover !== 0n) {
+      if (adjustment && leftover === absDiff) {
+        const lastTm = tmsSorted[tmsSorted.length - 1];
+        for (const bm of bmsSorted) {
+          const rem = remaining.get(bm.id) ?? 0n;
+          if (rem === 0n) continue;
+          linksToCreate.push({ tmId: lastTm.id, bmId: bm.id, allocated: rem });
+          remaining.set(bm.id, 0n);
+        }
+        adjustmentTmId = lastTm.id;
+      } else {
         return NextResponse.json(
           {
-            error: `Error interno repartiendo allocations (tesorería ${t.id.slice(0, 8)} quedó con ${need.toString()} sin cubrir). Reportá esto.`,
+            error: `Error interno: sobró cartola sin asignar (${leftover.toString()}). Reportá esto.`,
           },
           { status: 500 }
         );
@@ -380,10 +402,12 @@ export async function POST(req: Request) {
     // Crear/actualizar un Consolidado por tesorería
     const consolidadoByTmId = new Map<string, string>();
     for (const t of tmsSorted) {
-      // En multi-tesorería, el ajuste no se aplica (validado arriba).
-      const ajForThis = isMultiTm
-        ? { adjustmentAmount: null, adjustmentRubro: null, adjustmentNote: null }
-        : { adjustmentAmount, adjustmentRubro, adjustmentNote };
+      // 1 tesorería: el ajuste va a su consolidado.
+      // Split inverso: el ajuste va a la tesorería que absorbió la diferencia.
+      const aplicaAjuste = adjustment && (!isMultiTm || t.id === adjustmentTmId);
+      const ajForThis = aplicaAjuste
+        ? { adjustmentAmount, adjustmentRubro, adjustmentNote }
+        : { adjustmentAmount: null, adjustmentRubro: null, adjustmentNote: null };
 
       const c = t.consolidado
         ? await tx.consolidado.update({
