@@ -16,6 +16,8 @@ interface CruceRow {
   montoBruto: string;
   comision: string | null;
   neto: string | null;
+  diferencia: string | null;
+  diferenciaPct: number | null;
   tid: string | null;
   boleta: string | null;
 }
@@ -30,6 +32,8 @@ interface CruceResponse {
     totalBruto: string;
     totalComision: string;
     totalNeto: string;
+    conRecargo: number;
+    totalRecargo: string;
   };
   rows: CruceRow[];
   rowsTotal: number;
@@ -137,7 +141,10 @@ export function CruceTransbankView() {
               <b className="text-amber-700">{k.posSinSettlement}</b> sin settlement ·{" "}
               <b className="text-rose-700">{k.settlementSinPos}</b> sin POS
             </div>
-            <div className="text-xs">Neto cuadrado: ${formatMoney(BigInt(k.totalNeto))}</div>
+            <div className="text-xs">
+              Neto cuadrado: ${formatMoney(BigInt(k.totalNeto))}
+              {k.conRecargo > 0 && ` · ${k.conRecargo} c/recargo (+$${formatMoney(BigInt(k.totalRecargo))})`}
+            </div>
           </div>
         )}
       </div>
@@ -175,7 +182,8 @@ export function CruceTransbankView() {
                   <th className="px-3 py-2 text-left">Sucursal</th>
                   <th className="px-3 py-2 text-left">OP / Boleta</th>
                   <th className="px-3 py-2 text-left">Medio</th>
-                  <th className="px-3 py-2 text-right">Bruto</th>
+                  <th className="px-3 py-2 text-right">Monto POS</th>
+                  <th className="px-3 py-2 text-right">Dif (recargo)</th>
                   <th className="px-3 py-2 text-right">Comisión</th>
                   <th className="px-3 py-2 text-right">Neto</th>
                   <th className="px-3 py-2 text-left">Glosa / Local</th>
@@ -199,6 +207,16 @@ export function CruceTransbankView() {
                     <td className="px-3 py-2 whitespace-nowrap">{r.medioPago ?? "—"}</td>
                     <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
                       ${formatMoney(BigInt(r.montoBruto))}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
+                      {r.diferencia && r.diferencia !== "0" ? (
+                        <span className="text-amber-700" title="Recargo de crédito (settlement − base POS)">
+                          +${formatMoney(BigInt(r.diferencia))}
+                          {r.diferenciaPct != null && <span className="text-xs"> ({r.diferenciaPct}%)</span>}
+                        </span>
+                      ) : (
+                        <span className="text-text-dim">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono whitespace-nowrap text-text-muted">
                       {r.comision ? `$${formatMoney(BigInt(r.comision))}` : "—"}

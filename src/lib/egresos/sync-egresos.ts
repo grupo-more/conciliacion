@@ -48,11 +48,11 @@ function parseDate(s: string): Date {
   return new Date(`${s}${tz}`);
 }
 
-function withParams(base: string, limit: string, afterId: string | null): string {
+function withParams(base: string, limit: string, afterId: string | null, cursorParam: string): string {
   try {
     const u = new URL(base);
     if (!u.searchParams.has("limit")) u.searchParams.set("limit", limit);
-    if (afterId) u.searchParams.set("after_id", afterId);
+    if (afterId) u.searchParams.set(cursorParam, afterId);
     return u.toString();
   } catch {
     return base;
@@ -63,6 +63,7 @@ export async function runEgresosSync(): Promise<EgresosSyncResult> {
   const apiUrl = process.env.EGRESOS_API_URL || "http://172.16.10.172:5158/api/egresos";
   const apiKey = process.env.EGRESOS_API_KEY || process.env.TESORERIA_API_KEY;
   const limit = process.env.EGRESOS_API_LIMIT ?? "1000";
+  const cursorParam = process.env.EGRESOS_AFTER_PARAM ?? "after_id";
   const MAX_PAGES = 200;
 
   const t0 = Date.now();
@@ -72,7 +73,7 @@ export async function runEgresosSync(): Promise<EgresosSyncResult> {
 
   try {
     while (pages < MAX_PAGES) {
-      const res = await fetch(withParams(apiUrl, limit, afterId), {
+      const res = await fetch(withParams(apiUrl, limit, afterId, cursorParam), {
         cache: "no-store",
         headers: { Accept: "application/json", ...(apiKey ? { "X-API-Key": apiKey } : {}) },
       });

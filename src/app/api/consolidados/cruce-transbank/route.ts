@@ -36,37 +36,51 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  // Índice de settlements por (boleta|monto) y disponibilidad.
-  const settByKey = new Map<string, typeof settAll>();
+  // Tolerancia de monto: el settlement de Transbank suma el RECARGO de crédito
+  // (~2%) sobre el monto base del POS. Para débito la diferencia es 0; para
+  // crédito ~2%. Aceptamos hasta este % y MOSTRAMOS la diferencia (auditable).
+  const MATCH_TOLERANCE = 0.05;
+  const absB = (n: bigint) => (n < 0n ? -n : n);
+
+  // Índice de settlements por boleta(=OP); una OP puede repetirse en POS.
+  const settByBoleta = new Map<string, typeof settAll>();
   for (const sv of settAll) {
     if (!sv.numeroBoleta) continue;
-    const k = `${sv.numeroBoleta}|${sv.montoVenta.toString()}`;
-    (settByKey.get(k) ?? settByKey.set(k, []).get(k)!).push(sv);
+    (settByBoleta.get(sv.numeroBoleta) ?? settByBoleta.set(sv.numeroBoleta, []).get(sv.numeroBoleta)!).push(sv);
   }
   const usedSett = new Set<string>();
 
-  type Pair = { pos: (typeof posAll)[number]; sett: (typeof settAll)[number] | null };
+  type Pair = { pos: (typeof posAll)[number]; sett: (typeof settAll)[number] | null; diff: bigint };
   const pairs: Pair[] = [];
 
-  // Pass 1: primario por boleta(=OP) + monto.
+  // Pass 1: por boleta(=OP), elegir el settlement de monto más cercano dentro
+  // de la tolerancia (débito exacto, crédito dentro del recargo).
   const unmatchedPos: typeof posAll = [];
   for (const pos of posAll) {
     const op = pos.opNumber;
-    let matched: (typeof settAll)[number] | null = null;
+    let best: (typeof settAll)[number] | null = null;
+    let bestDiff = 0n;
     if (op) {
-      const k = `${op}|${pos.monto.toString()}`;
-      const cands = settByKey.get(k) ?? [];
-      matched = cands.find((c) => !usedSett.has(c.id)) ?? null;
+      const base = absB(pos.monto);
+      for (const c of settByBoleta.get(op) ?? []) {
+        if (usedSett.has(c.id)) continue;
+        const diff = c.montoVenta - pos.monto;
+        if (base > 0n && Number(absB(diff)) / Number(base) > MATCH_TOLERANCE) continue;
+        if (best === null || absB(diff) < absB(bestDiff)) {
+          best = c;
+          bestDiff = diff;
+        }
+      }
     }
-    if (matched) {
-      usedSett.add(matched.id);
-      pairs.push({ pos, sett: matched });
+    if (best) {
+      usedSett.add(best.id);
+      pairs.push({ pos, sett: best, diff: bestDiff });
     } else {
       unmatchedPos.push(pos);
     }
   }
 
-  // Pass 2: fallback por monto bruto + fecha (±1d) sobre los aún libres.
+  // Pass 2: fallback por monto exacto + fecha (±1.5d) para los sin boleta.
   const freeSett = settAll.filter((s) => !usedSett.has(s.id));
   const dayMs = 86400000;
   for (const pos of unmatchedPos) {
@@ -79,9 +93,9 @@ export async function GET(req: Request) {
     );
     if (cand) {
       usedSett.add(cand.id);
-      pairs.push({ pos, sett: cand });
+      pairs.push({ pos, sett: cand, diff: 0n });
     } else {
-      pairs.push({ pos, sett: null });
+      pairs.push({ pos, sett: null, diff: 0n });
     }
   }
 
@@ -99,6 +113,8 @@ export async function GET(req: Request) {
     montoBruto: string;
     comision: string | null;
     neto: string | null;
+    diferencia: string | null;     // settlement bruto - POS base (recargo crédito)
+    diferenciaPct: number | null;
     tid: string | null;
     boleta: string | null;
   };
@@ -106,6 +122,7 @@ export async function GET(req: Request) {
 
   for (const p of pairs) {
     if (p.sett) {
+      const base = Number(absB(p.pos.monto));
       rows.push({
         estado: "cuadrado",
         fecha: p.pos.fecha.toISOString(),
@@ -117,6 +134,8 @@ export async function GET(req: Request) {
         montoBruto: p.pos.monto.toString(),
         comision: (p.sett.comision + p.sett.ivaComision).toString(),
         neto: p.sett.totalAbono.toString(),
+        diferencia: p.diff.toString(),
+        diferenciaPct: base > 0 ? Math.round((Number(p.diff) / base) * 1000) / 10 : null,
         tid: p.sett.tid,
         boleta: p.sett.numeroBoleta,
       });
@@ -132,6 +151,8 @@ export async function GET(req: Request) {
         montoBruto: p.pos.monto.toString(),
         comision: null,
         neto: null,
+        diferencia: null,
+        diferenciaPct: null,
         tid: null,
         boleta: null,
       });
@@ -149,6 +170,8 @@ export async function GET(req: Request) {
       montoBruto: s.montoVenta.toString(),
       comision: (s.comision + s.ivaComision).toString(),
       neto: s.totalAbono.toString(),
+      diferencia: null,
+      diferenciaPct: null,
       tid: s.tid,
       boleta: s.numeroBoleta,
     });
@@ -171,6 +194,8 @@ export async function GET(req: Request) {
     totalBruto: sumStr(cuadrados.map((r) => r.montoBruto)),
     totalComision: sumStr(cuadrados.map((r) => r.comision ?? "0")),
     totalNeto: sumStr(cuadrados.map((r) => r.neto ?? "0")),
+    conRecargo: cuadrados.filter((r) => r.diferencia && r.diferencia !== "0").length,
+    totalRecargo: sumStr(cuadrados.map((r) => r.diferencia ?? "0")),
   };
 
   // Facets de sucursal.

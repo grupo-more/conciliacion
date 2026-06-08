@@ -75,11 +75,11 @@ export function extractOpNumber(glosa: string): string | null {
   return nums ? nums[nums.length - 1].replace(/^0+/, "") || nums[nums.length - 1] : null;
 }
 
-function withParams(base: string, limit: string, afterId: string | null): string {
+function withParams(base: string, limit: string, afterId: string | null, cursorParam: string): string {
   try {
     const u = new URL(base);
     if (!u.searchParams.has("limit")) u.searchParams.set("limit", limit);
-    if (afterId) u.searchParams.set("after_id", afterId);
+    if (afterId) u.searchParams.set(cursorParam, afterId);
     return u.toString();
   } catch {
     return base;
@@ -91,9 +91,11 @@ export async function runTbkTesoreriaSync(): Promise<TbkSyncResult> {
     process.env.TBK_TESORERIA_API_URL ||
     "http://172.16.10.172:5158/api/tbk-tesoreria";
   const apiKey = process.env.TBK_TESORERIA_API_KEY || process.env.TESORERIA_API_KEY;
-  // La API /api/tbk-tesoreria topa la pagina en 200 (limit mayor → HTTP 400).
-  // Paginamos por cursor (after_id) para traer todo.
-  const limit = process.env.TBK_TESORERIA_API_LIMIT ?? "200";
+  // El feed tope la pagina en 1000 y trae has_more cuando hay mas → paginamos
+  // por cursor. El nombre del parametro de cursor es configurable por si la API
+  // no usa "after_id" (el response trae next_after_id).
+  const limit = process.env.TBK_TESORERIA_API_LIMIT ?? "1000";
+  const cursorParam = process.env.TBK_TESORERIA_AFTER_PARAM ?? "after_id";
   const MAX_PAGES = 200;
 
   const t0 = Date.now();
@@ -107,7 +109,7 @@ export async function runTbkTesoreriaSync(): Promise<TbkSyncResult> {
 
   try {
     while (pages < MAX_PAGES) {
-      const url = withParams(apiUrl, limit, afterId);
+      const url = withParams(apiUrl, limit, afterId, cursorParam);
       const res = await fetch(url, {
         cache: "no-store",
         headers: { Accept: "application/json", ...(apiKey ? { "X-API-Key": apiKey } : {}) },
