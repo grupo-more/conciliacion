@@ -97,33 +97,7 @@ export function CruceTransbankView() {
 
   return (
     <div className="space-y-4">
-      {/* Acciones */}
-      <div className="flex flex-wrap items-center gap-2">
-        <button onClick={onSyncPos} disabled={busy} className="btn-primary">
-          {busy ? "Procesando…" : "Sincronizar POS"}
-        </button>
-        <span className="text-xs text-text-muted">
-          Cruza el POS (tbk-tesoreria) contra el settlement de Transbank por N° de boleta + monto.
-          El archivo de abonos Transbank se sube desde <b>Cartolas → Subir abonos Transbank</b>.
-        </span>
-      </div>
-
-      {banner && (
-        <div
-          className={`rounded-lg px-3 py-2 text-sm ${
-            banner.kind === "ok"
-              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-              : "bg-rose-50 text-rose-800 border border-rose-200"
-          }`}
-        >
-          {banner.msg}
-          <button onClick={() => setBanner(null)} className="ml-2 underline">
-            cerrar
-          </button>
-        </div>
-      )}
-
-      {/* Filtros */}
+      {/* Filtros + resumen (estilo egresos) */}
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
           <span className="block text-text-muted">Desde</span>
@@ -148,22 +122,38 @@ export function CruceTransbankView() {
           <span className="block text-text-muted">Estado</span>
           <select value={estado} onChange={(e) => setEstado(e.target.value as Estado | "")} className="input">
             <option value="">Todos</option>
-            <option value="cuadrado">Cuadrado</option>
-            <option value="pos_sin_settlement">POS sin settlement</option>
-            <option value="settlement_sin_pos">Settlement sin POS</option>
+            <option value="cuadrado">Cuadrados</option>
+            <option value="pos_sin_settlement">Sin settlement</option>
+            <option value="settlement_sin_pos">Sin POS (cartola)</option>
           </select>
         </label>
+        <button onClick={onSyncPos} disabled={busy} className="btn-ghost text-sm">
+          {busy ? "Sincronizando…" : "Sincronizar POS"}
+        </button>
+        {k && (
+          <div className="ml-auto text-sm text-text-muted text-right leading-tight">
+            <div>
+              <b className="text-emerald-700">{k.cuadrados}</b> cuadrados ·{" "}
+              <b className="text-amber-700">{k.posSinSettlement}</b> sin settlement ·{" "}
+              <b className="text-rose-700">{k.settlementSinPos}</b> sin POS
+            </div>
+            <div className="text-xs">Neto cuadrado: ${formatMoney(BigInt(k.totalNeto))}</div>
+          </div>
+        )}
       </div>
 
-      {/* KPIs */}
-      {k && (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-6">
-          <Kpi label="Cuadrados" value={String(k.cuadrados)} tone="ok" />
-          <Kpi label="POS sin settlement" value={String(k.posSinSettlement)} tone="warn" />
-          <Kpi label="Settlement sin POS" value={String(k.settlementSinPos)} tone="bad" />
-          <Kpi label="Total bruto" value={`$${formatMoney(BigInt(k.totalBruto))}`} />
-          <Kpi label="Comisión TBK" value={`$${formatMoney(BigInt(k.totalComision))}`} />
-          <Kpi label="Neto abonado" value={`$${formatMoney(BigInt(k.totalNeto))}`} />
+      {banner && (
+        <div
+          className={`rounded-lg px-3 py-2 text-sm ${
+            banner.kind === "ok"
+              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+              : "bg-rose-50 text-rose-800 border border-rose-200"
+          }`}
+        >
+          {banner.msg}
+          <button onClick={() => setBanner(null)} className="ml-2 underline">
+            cerrar
+          </button>
         </div>
       )}
 
@@ -231,17 +221,6 @@ export function CruceTransbankView() {
           Mostrando {data.rows.length} de {data.rowsTotal} filas.
         </p>
       )}
-    </div>
-  );
-}
-
-function Kpi({ label, value, tone }: { label: string; value: string; tone?: "ok" | "warn" | "bad" }) {
-  const toneCls =
-    tone === "ok" ? "text-emerald-700" : tone === "warn" ? "text-amber-700" : tone === "bad" ? "text-rose-700" : "text-text";
-  return (
-    <div className="rounded-lg border border-border-soft bg-bg-elevated px-3 py-2">
-      <div className="text-[11px] uppercase tracking-wide text-text-muted">{label}</div>
-      <div className={`text-lg font-semibold ${toneCls}`}>{value}</div>
     </div>
   );
 }

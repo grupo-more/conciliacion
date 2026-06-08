@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ImportModal } from "./ImportModal";
 import { TransbankImportModal } from "./TransbankImportModal";
+import { TransbankSalesView } from "./TransbankSalesView";
 import { ReassignModal } from "./ReassignModal";
 import { DuplicatesModal } from "./DuplicatesModal";
 import type {
@@ -17,6 +18,8 @@ import { formatDate, formatMoney } from "@/lib/format";
 
 /** Sentinel para "Vista general" (todas las cuentas). */
 const ALL_ACCOUNTS = "__all__";
+/** Sentinel para la vista de Abonos Transbank (settlement importado). */
+const TRANSBANK_VIEW = "__transbank__";
 
 export function CartolasView() {
   const router = useRouter();
@@ -45,6 +48,7 @@ export function CartolasView() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const isGlobalView = selectedAccountId === ALL_ACCOUNTS;
+  const isTransbankView = selectedAccountId === TRANSBANK_VIEW;
   const selectedAccount = useMemo(
     () =>
       isGlobalView
@@ -65,7 +69,7 @@ export function CartolasView() {
   }
 
   async function loadMovements() {
-    if (selectedAccountId === null) return;
+    if (selectedAccountId === null || selectedAccountId === TRANSBANK_VIEW) return;
     setLoading(true);
     const params = new URLSearchParams({
       limit: "200",
@@ -235,6 +239,27 @@ export function CartolasView() {
             </div>
           </button>
 
+          {/* Abonos Transbank (settlement importado) */}
+          <button
+            onClick={() => setSelectedAccountId(TRANSBANK_VIEW)}
+            className={`w-full text-left rounded-md px-2 py-2 text-sm transition-all duration-200 mb-3 ${
+              isTransbankView
+                ? "bg-sky-500/10 border border-sky-400/40 text-sky-700 shadow-sm"
+                : "border border-transparent hover:bg-bg-elevated text-text-muted hover:text-text"
+            }`}
+          >
+            <div className="font-semibold flex items-center gap-1.5">
+              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="5" width="20" height="14" rx="2" />
+                <line x1="2" y1="10" x2="22" y2="10" />
+              </svg>
+              Abonos Transbank
+            </div>
+            <div className="text-xs text-text-muted mt-0.5 ml-5">
+              Liquidaciones importadas (.xls)
+            </div>
+          </button>
+
           <div className="text-xs text-text-muted mb-2 px-2">Cuentas</div>
           <div className="space-y-3">
             {groupedAccounts.map(({ bankName, accounts: bankAccs }) => (
@@ -282,7 +307,10 @@ export function CartolasView() {
           </div>
         </aside>
 
-        {/* Main: filtros + tabla */}
+        {/* Main: vista de Abonos Transbank, o filtros + tabla de cartola */}
+        {isTransbankView ? (
+          <TransbankSalesView />
+        ) : (
         <div className="space-y-3 min-w-0">
           {/* Filtros */}
           <div className="card flex flex-wrap gap-3 items-end">
@@ -546,6 +574,7 @@ export function CartolasView() {
             />
           )}
         </div>
+        )}
       </div>
 
       {importOpen && (
