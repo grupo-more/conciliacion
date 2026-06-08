@@ -91,7 +91,7 @@ export function TransbankSalesView() {
           <thead className="bg-bg-soft text-xs uppercase text-text-muted tracking-wider border-b border-border-soft">
             <tr>
               <th className="px-3 py-2 text-left">Fecha</th>
-              <th className="px-3 py-2 text-left">Local / Sucursal</th>
+              <th className="px-3 py-2 text-left">Sucursal</th>
               <th className="px-3 py-2 text-left">Medio</th>
               <th className="px-3 py-2 text-left">Boleta</th>
               <th className="px-3 py-2 text-right">Bruto</th>
@@ -109,7 +109,10 @@ export function TransbankSalesView() {
             {!loading && data?.sales.map((s) => (
               <tr key={s.id} className="border-t border-border-soft/40 hover:bg-bg-elevated/40">
                 <td className="px-3 py-2 whitespace-nowrap">{formatDate(s.fechaVenta)}</td>
-                <td className="px-3 py-2 max-w-[260px] truncate" title={s.nombreLocal}>{s.nombreLocal}</td>
+                <td className="px-3 py-2 max-w-[260px]">
+                  <div className="truncate font-medium" title={s.nombreLocal}>{sucursalDeLocal(s.nombreLocal)}</div>
+                  <div className="text-xs text-text-muted truncate">{s.nombreLocal}</div>
+                </td>
                 <td className="px-3 py-2 whitespace-nowrap">{s.medioPago}</td>
                 <td className="px-3 py-2 font-mono text-xs">{s.numeroBoleta ?? "—"}</td>
                 <td className="px-3 py-2 text-right font-mono whitespace-nowrap">${formatMoney(BigInt(s.montoVenta))}</td>
@@ -125,4 +128,19 @@ export function TransbankSalesView() {
       )}
     </div>
   );
+}
+
+/**
+ * Extrae la sucursal del "Nombre local" del abono. Formatos vistos:
+ *   "MORE EXCHANGE, SUECIA 13"                         -> "SUECIA"
+ *   "More Exchange Parque Arau, AVENIDA KENNEDY 5413"  -> "Parque Arau"
+ *   "MORE EXCHANGE, AVENIDA EL BOSQUE NORTE 091"        -> "AVENIDA EL BOSQUE NORTE"
+ */
+function sucursalDeLocal(nombreLocal: string): string {
+  if (!nombreLocal) return "—";
+  let s = nombreLocal.replace(/^\s*more\s+exchange/i, "").trim();
+  if (s.startsWith(",")) s = s.slice(1).trim();
+  else if (s.includes(",")) s = s.split(",")[0].trim();
+  s = s.replace(/\s+\d+$/, "").trim(); // quitar número de calle final
+  return s || nombreLocal;
 }
