@@ -7,9 +7,9 @@ import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
  * GET /api/consolidados/egresos-terceros?from=YYYY-MM-DD&to=YYYY-MM-DD
  *   &accountId=<uuid>&q=<search>&quality=con_rut|solo_nombre|sin_info
  *
- * Complemento exacto de /api/consolidados/egresos-internos: lista los OUT del
- * rango que NO matchean ninguna entidad interna registrada. La union de ambas
- * vistas == todos los OUT del rango (sin solapamiento).
+ * Lista los OUT del rango que NO matchean ninguna entidad interna registrada
+ * (egresos a terceros). El lado interno de los OUT vive ahora en la tab
+ * "Traspasos internos" (cruce OUT↔IN espejo); juntos == todos los OUT del rango.
  *
  * Cada fila trae un "quality" derivado de los datos de contraparte que vinieron
  * en la cartola:
