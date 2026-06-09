@@ -7,6 +7,7 @@ import {
   hasCrossAccountIdentity,
 } from "@/lib/consolidados/match";
 import { extractEmbeddedReference } from "@/lib/cartolas/dedup";
+import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
 
 /**
  * GET /api/consolidados/[id]
@@ -102,6 +103,8 @@ export async function GET(
           accountId: { in: Array.from(searchIds) },
           postDate: { gte: lower, lte: upper },
           consolidadoLinks: { none: {} },
+          // Cuentas de uso parcial: no se ofrecen como candidatas.
+          account: { isNot: usoParcialAccountWhere },
         },
         include: { account: true },
         orderBy: { postDate: "asc" },

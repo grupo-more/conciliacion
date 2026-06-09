@@ -5,6 +5,7 @@ import type { Prisma } from "@prisma/client";
 import { getDifMenorSettings } from "@/lib/dif-menor/detect";
 import { parseGlosa } from "@/lib/consolidados/glosa";
 import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
+import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
 
 /** Ventana de fechas para considerar dos tesorerías parte del mismo
  *  depósito agrupado. Match estricto: misma semana. */
@@ -70,6 +71,9 @@ export async function GET(req: Request) {
     direction: "IN",
     postDate: { gte: since, lte: until },
     ...(accountId ? { accountId } : {}),
+    // Cuentas de uso parcial: no quedan disponibles para matchear acá (solo
+    // importan sus traspasos internos).
+    account: { isNot: usoParcialAccountWhere },
     ...(onlyUnmatched ? { consolidadoLinks: { none: {} } } : {}),
     NOT: [
       {
@@ -160,9 +164,9 @@ export async function GET(req: Request) {
     take: 1000,
   });
 
-  // Catalogo de cuentas para filtros
+  // Catalogo de cuentas para filtros (sin las de uso parcial: no se matchean acá)
   const accounts = await prisma.bankAccount.findMany({
-    where: { active: true },
+    where: { active: true, NOT: usoParcialAccountWhere },
     select: {
       id: true,
       bankCode: true,

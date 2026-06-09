@@ -34,6 +34,7 @@
 import { prisma } from "@/lib/db";
 import { normalizeRut } from "@/lib/cartolas/normalize";
 import { parseGlosa } from "@/lib/consolidados/glosa";
+import { isUsoParcialAccount } from "@/lib/cuentas/uso-parcial";
 import type {
   BankAccount,
   BankAccountAlias,
@@ -642,6 +643,9 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
   const bmsByAccountOUT = new Map<string, BMWithAccount[]>();
   for (const bm of allBms) {
     if (manualBmIds.has(bm.id)) continue;
+    // Cuentas de uso parcial: fuera del pool de candidatos del motor (solo sus
+    // traspasos internos importan, y esos no van por el motor).
+    if (isUsoParcialAccount(bm.account)) continue;
     const target = bm.direction === "OUT" ? bmsByAccountOUT : bmsByAccountIN;
     const arr = target.get(bm.accountId) ?? [];
     arr.push(bm);
