@@ -445,9 +445,15 @@ function Row({
               onUndo();
             }}
             className="text-[11px] text-rose-700 hover:underline whitespace-nowrap"
-            title="Deshacer match (pide confirmación)"
+            title={
+              status === "SUGGESTED" || status === "REVIEW"
+                ? "Descartar sugerencia (pide confirmación)"
+                : "Deshacer match (pide confirmación)"
+            }
           >
-            Deshacer
+            {status === "SUGGESTED" || status === "REVIEW"
+              ? "Descartar"
+              : "Deshacer"}
           </button>
         ) : (
           <span className="text-text-dim">—</span>
@@ -473,6 +479,9 @@ function UndoConfirmModal({
   const status = (row.consolidado?.status ?? "UNPROCESSED") as ConsolidadoStatus;
   const isAuto = status === "AUTO_MATCHED";
   const linkCount = row.consolidado?.links.length ?? 0;
+  // SUGGESTED/REVIEW son propuestas sin vincular: "deshacer" aquí es descartar
+  // la sugerencia (pasa a NO_MATCH), no romper un match existente.
+  const isProposal = linkCount === 0;
 
   return (
     <div className="modal-backdrop" onClick={onCancel}>
@@ -481,13 +490,23 @@ function UndoConfirmModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-lg font-semibold tracking-tight mb-2">
-          Deshacer este match?
+          {isProposal ? "Descartar esta sugerencia?" : "Deshacer este match?"}
         </h2>
         <p className="text-sm text-text-muted mb-4">
-          La conciliación volverá a estado <strong>NO_MATCH</strong> y se
-          perderán los {linkCount} vínculo{linkCount === 1 ? "" : "s"} con las
-          cartolas. Esta acción se puede rehacer matcheando de nuevo, pero
-          confirmá los datos antes:
+          {isProposal ? (
+            <>
+              Es una propuesta <strong>sin vincular</strong>. Pasará a{" "}
+              <strong>NO_MATCH</strong> (descartada) y dejará de sugerirse. Podés
+              revertirlo corriendo "Re-evaluar todo". Confirmá los datos antes:
+            </>
+          ) : (
+            <>
+              La conciliación volverá a estado <strong>NO_MATCH</strong> y se
+              perderán los {linkCount} vínculo{linkCount === 1 ? "" : "s"} con las
+              cartolas. Esta acción se puede rehacer matcheando de nuevo, pero
+              confirmá los datos antes:
+            </>
+          )}
         </p>
 
         <div className="rounded-md border border-border-soft bg-bg-soft p-3 text-sm space-y-1 mb-3">
@@ -545,7 +564,13 @@ function UndoConfirmModal({
             disabled={loading}
             className="btn-primary bg-rose-600 hover:bg-rose-700"
           >
-            {loading ? "Deshaciendo…" : "Sí, deshacer"}
+            {loading
+              ? isProposal
+                ? "Descartando…"
+                : "Deshaciendo…"
+              : isProposal
+              ? "Sí, descartar"
+              : "Sí, deshacer"}
           </button>
         </div>
       </div>

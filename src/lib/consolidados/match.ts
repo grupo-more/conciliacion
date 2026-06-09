@@ -785,13 +785,20 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
                 },
               });
 
-              await tx.consolidadoLink.createMany({
-                data: cand.bms.map((bm) => ({
-                  consolidadoId: consolidado.id,
-                  bankMovementId: bm.id,
-                })),
-                skipDuplicates: true,
-              });
+              // Solo AUTO_MATCHED se cuadra solo (crea los vinculos). SUGGESTED
+              // y REVIEW quedan como PROPUESTA sin vincular: el status y score
+              // marcan que hay un match probable, pero el usuario decide en el
+              // detalle si lo cuadra ("Vincular") o lo descarta. El modal
+              // recalcula los candidatos en vivo para estados abiertos.
+              if (cand.status === "AUTO_MATCHED") {
+                await tx.consolidadoLink.createMany({
+                  data: cand.bms.map((bm) => ({
+                    consolidadoId: consolidado.id,
+                    bankMovementId: bm.id,
+                  })),
+                  skipDuplicates: true,
+                });
+              }
 
               switch (cand.status) {
                 case "AUTO_MATCHED":
