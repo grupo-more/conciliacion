@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
+import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
 
 /**
  * GET /api/consolidados/egresos-terceros?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -39,6 +40,8 @@ export async function GET(req: Request) {
       direction: "OUT",
       postDate: { gte: from, lt: to },
       ...(accountId ? { accountId } : {}),
+      // Cuentas de uso parcial: fuera de scope (solo importan sus traspasos).
+      account: { isNot: usoParcialAccountWhere },
     },
     include: {
       account: {

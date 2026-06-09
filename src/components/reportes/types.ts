@@ -62,7 +62,11 @@ export interface BancoResponse {
   resumen: {
     count: number;
     monto: string;
-    resueltos: { transbank: AmountCell; traspasos: AmountCell };
+    resueltos: {
+      transbank: AmountCell;
+      traspasos: AmountCell;
+      noRelevante: AmountCell;
+    };
     porDireccion: Record<string, AmountCell>;
     porTag: Record<BankTag, AmountCell>;
     porAging: Record<AgingBucket, AmountCell>;

@@ -6,6 +6,7 @@ import {
   inferRubroByAccount,
 } from "@/lib/dif-menor/detect";
 import { transbankPrismaWhere } from "@/lib/transbank/detect";
+import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
 
 /**
  * GET /api/consolidados/dif-menor?from=YYYY-MM-DD&to=YYYY-MM-DD&accountId=
@@ -41,6 +42,8 @@ export async function GET(req: Request) {
       amount: { gt: 0n, lte: BigInt(settings.threshold) },
       postDate: { gte: from, lt: to },
       ...(accountId ? { accountId } : {}),
+      // Cuentas de uso parcial: fuera de scope.
+      account: { isNot: usoParcialAccountWhere },
       // Excluir Transbank por consistencia (aunque nunca son < threshold).
       NOT: [
         {
@@ -142,6 +145,7 @@ export async function GET(req: Request) {
       direction: "IN",
       amount: { gt: 0n, lte: BigInt(settings.threshold) },
       postDate: { gte: from, lt: to },
+      account: { isNot: usoParcialAccountWhere },
       NOT: [{ AND: transbankPrismaWhere.AND }],
     },
     select: { accountId: true },

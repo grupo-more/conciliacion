@@ -231,10 +231,11 @@ export function BancoSinConciliarView({
 
       {data &&
         (data.resumen.resueltos.transbank.count > 0 ||
-          data.resumen.resueltos.traspasos.count > 0) && (
+          data.resumen.resueltos.traspasos.count > 0 ||
+          data.resumen.resueltos.noRelevante.count > 0) && (
           <div className="rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 px-3 py-2 text-xs space-y-0.5">
             <div className="font-semibold">
-              Excluidos por estar resueltos en otra tab:
+              Excluidos de la brecha:
             </div>
             {data.resumen.resueltos.transbank.count > 0 && (
               <div>
@@ -251,6 +252,15 @@ export function BancoSinConciliarView({
                 traspaso interno (
                 {formatMoney(BigInt(data.resumen.resueltos.traspasos.monto))}) →{" "}
                 <strong>Traspasos internos</strong>
+              </div>
+            )}
+            {data.resumen.resueltos.noRelevante.count > 0 && (
+              <div>
+                ✓ {data.resumen.resueltos.noRelevante.count} movimiento
+                {data.resumen.resueltos.noRelevante.count === 1 ? "" : "s"} de
+                cuentas de uso parcial (
+                {formatMoney(BigInt(data.resumen.resueltos.noRelevante.monto))}) →{" "}
+                no relevantes
               </div>
             )}
           </div>

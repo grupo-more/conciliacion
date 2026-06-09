@@ -48,6 +48,9 @@ export interface MovementDTO {
    *  excluyendo Transbank). Tiene su propio asiento en el tab "Dif menor a 100"
    *  de Consolidados. Mutuamente excluyente con transbank. */
   difMenor: boolean;
+  /** True si la cuenta es de "uso parcial": solo sus traspasos internos importan
+   *  (viven en Traspasos internos). El resto NO cuenta como sin conciliar. */
+  noRelevante: boolean;
 }
 
 export interface CartolaSummary {

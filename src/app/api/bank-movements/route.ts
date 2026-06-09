@@ -1,9 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { isTransbank } from "@/lib/transbank/detect";
 import { getDifMenorSettings, isDifMenor } from "@/lib/dif-menor/detect";
+import {
+  isUsoParcialAccount,
+  usoParcialAccountWhere,
+  USO_PARCIAL_SQL,
+} from "@/lib/cuentas/uso-parcial";
 
 /**
  * GET /api/bank-movements
@@ -90,6 +95,8 @@ export async function GET(req: Request) {
         ],
       },
     ];
+    // Cuentas de uso parcial: sus movimientos no son "sin conciliar".
+    where.account = { isNot: usoParcialAccountWhere };
   }
 
   const [rows, total] = await Promise.all([
@@ -315,6 +322,7 @@ export async function GET(req: Request) {
           FROM "BankMovement" bm
           JOIN "BankAccount" ba ON ba.id = bm.account_id
           WHERE ba.account_number NOT LIKE '_UNASSIGNED_%'
+            AND NOT (${Prisma.raw(USO_PARCIAL_SQL)})
         `;
     const a = accountAggs[0];
     const inTotal = Number(a?.in_n ?? 0);
@@ -325,10 +333,27 @@ export async function GET(req: Request) {
     const inRecSum = a?.in_rec_sum ?? 0n;
     const inTbkSum = a?.in_tbk_sum ?? 0n;
     const inDifSum = a?.in_dif_sum ?? 0n;
+
+    // Si la cuenta seleccionada es de uso parcial, NADA cuenta como pendiente
+    // (sus movimientos relevantes viven en Traspasos internos; el resto es no
+    // relevante). El global ya excluye estas cuentas en el SQL.
+    let selectedUsoParcial = false;
+    if (accountId) {
+      const acc = await prisma.bankAccount.findUnique({
+        where: { id: accountId },
+        select: { bankCode: true, accountNumber: true, displayNumber: true },
+      });
+      selectedUsoParcial = acc ? isUsoParcialAccount(acc) : false;
+    }
+
     // Pendientes "Sin matchear" = IN sin conciliar y que NO son Transbank ni
     // dif menor. (Esos tienen su propio asiento contable en Consolidados.)
-    const inPendingCount = inTotal - inRecCount - inTbkCount - inDifCount;
-    const inPendingSum = inSum - inRecSum - inTbkSum - inDifSum;
+    const inPendingCount = selectedUsoParcial
+      ? 0
+      : inTotal - inRecCount - inTbkCount - inDifCount;
+    const inPendingSum = selectedUsoParcial
+      ? 0n
+      : inSum - inRecSum - inTbkSum - inDifSum;
     summary = {
       total: inTotal + Number(a?.out_n ?? 0),
       inTotal,
@@ -375,6 +400,7 @@ export async function GET(req: Request) {
         consolidado,
         transbank: isTransbank(m),
         difMenor: !isTransbank(m) && isDifMenor(m, difThreshold),
+        noRelevante: isUsoParcialAccount(m.account),
       };
     }),
     summary,

@@ -391,6 +391,9 @@ export function CartolasView() {
                 <span className="inline-flex items-center gap-1">
                   <span className="inline-block w-1 h-3 bg-text-muted/30 rounded-sm" /> Egreso (no aplica)
                 </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-1 h-3 bg-text-muted/20 rounded-sm" /> No relevante
+                </span>
               </div>
             </div>
             {summary && summary.inPending > 0 && !isGlobalView && (
@@ -634,6 +637,20 @@ interface RowStatus {
 }
 
 function computeRowStatus(m: MovementDTO): RowStatus {
+  // Cuenta de uso parcial: solo sus traspasos internos importan (viven en
+  // Traspasos internos). Todo lo demás es "No relevante" — no cuenta como
+  // sin conciliar en ningún lado.
+  if (m.noRelevante) {
+    return {
+      label: "No relevante",
+      title:
+        "Cuenta de uso parcial: solo sus traspasos internos son relevantes (ver Consolidados → Traspasos internos). El resto no se concilia.",
+      borderCls: "w-[3px] bg-text-muted/20",
+      badgeCls: "border-border-soft bg-bg-soft text-text-muted",
+      rowBg: "",
+    };
+  }
+
   // Egresos: no aplica conciliación
   if (m.direction === "OUT") {
     return {

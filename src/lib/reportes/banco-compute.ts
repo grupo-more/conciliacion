@@ -14,6 +14,7 @@
 import { prisma } from "@/lib/db";
 import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
 import { isTransbank } from "@/lib/transbank/detect";
+import { isUsoParcialAccount } from "@/lib/cuentas/uso-parcial";
 import { matchMirror, type BankMovementForMatch } from "@/lib/internos/match";
 import {
   agingBucket,
@@ -117,6 +118,8 @@ export async function computeBancoSinConciliar(
   let resTransbankMonto = 0n;
   let resTraspasoCount = 0;
   let resTraspasoMonto = 0n;
+  let noRelevanteCount = 0;
+  let noRelevanteMonto = 0n;
   const porDireccion = mkAmountMap(["IN", "OUT"]);
   const porTag = mkAmountMap<BankTag>([
     "interno",
@@ -129,6 +132,14 @@ export async function computeBancoSinConciliar(
 
   for (const bm of all) {
     const abs = bm.amount < 0n ? -bm.amount : bm.amount;
+
+    // 0) Cuenta de uso parcial: solo sus traspasos importan (viven en Traspasos
+    // internos). TODO lo demas es "no relevante" → fuera de la brecha.
+    if (isUsoParcialAccount(bm.account)) {
+      noRelevanteCount++;
+      noRelevanteMonto += abs;
+      continue;
+    }
 
     // 1) Conciliado por el motor (link AUTO/MANUAL) → fuera de la brecha.
     const linkedOk = bm.consolidadoLinks.some(
@@ -212,6 +223,7 @@ export async function computeBancoSinConciliar(
       resueltos: {
         transbank: { count: resTransbankCount, monto: resTransbankMonto.toString() },
         traspasos: { count: resTraspasoCount, monto: resTraspasoMonto.toString() },
+        noRelevante: { count: noRelevanteCount, monto: noRelevanteMonto.toString() },
       },
       porDireccion: dumpAmountMap(porDireccion),
       porTag: dumpAmountMap(porTag),
