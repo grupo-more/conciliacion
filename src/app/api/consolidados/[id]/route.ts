@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import {
   resolveCandidateAccounts,
   scoreCandidate,
+  hasCrossAccountIdentity,
 } from "@/lib/consolidados/match";
 import { extractEmbeddedReference } from "@/lib/cartolas/dedup";
 
@@ -68,18 +69,37 @@ export async function GET(
     | null = null;
 
   if (!t.consolidado || openStates.includes(t.consolidado.status)) {
-    const accounts = await resolveCandidateAccounts(t.banco);
-    const accountIds = new Set(accounts.map((a) => a.id));
-    if (accountIds.size > 0) {
+    const aliasAccounts = await resolveCandidateAccounts(t.banco);
+    const aliasIds = new Set(aliasAccounts.map((a) => a.id));
+
+    // Alineado con el motor: la direccion depende del tipo de operacion
+    // (egreso -> OUT, ingreso -> IN) y, si la API marco excepcion (deposito a
+    // otro banco), se amplia la busqueda a TODAS las cuentas activas. Los
+    // candidatos en cuentas distintas del alias pasan por el mismo gating de
+    // identidad (RUT/nombre o RUT en glosa) para no proponer coincidencias de
+    // monto entre bancos distintos.
+    const isEgreso = t.tipoOperacion === "EGRESO" || t.monto < 0n;
+    const direction = isEgreso ? "OUT" : "IN";
+
+    const searchAccounts = t.esExcepcion
+      ? await prisma.bankAccount.findMany({ where: { active: true } })
+      : aliasAccounts;
+    const searchIds = new Set(
+      searchAccounts
+        .filter((a) => !a.accountNumber.startsWith("_UNASSIGNED_"))
+        .map((a) => a.id)
+    );
+
+    if (searchIds.size > 0) {
       const dayMs = 24 * 60 * 60 * 1000;
       const lower = new Date(t.fecha.getTime() - 7 * dayMs);
       const upper = new Date(t.fecha.getTime() + 7 * dayMs);
 
-      const bms = await prisma.bankMovement.findMany({
+      const rawBms = await prisma.bankMovement.findMany({
         where: {
-          direction: "IN",
+          direction,
           amount: t.monto,
-          accountId: { in: Array.from(accountIds) },
+          accountId: { in: Array.from(searchIds) },
           postDate: { gte: lower, lte: upper },
           consolidadoLinks: { none: {} },
         },
@@ -87,6 +107,11 @@ export async function GET(
         orderBy: { postDate: "asc" },
         take: 20,
       });
+
+      // Cross-cuenta solo con identidad firme; cuenta del alias pasa directo.
+      const bms = rawBms.filter(
+        (bm) => aliasIds.has(bm.accountId) || hasCrossAccountIdentity(t, bm)
+      );
 
       // PROTECCION DEFENSIVA: si en BD hay BankMovements duplicados (mismo
       // movimiento real cargado desde dos cartolas), agruparlos visualmente

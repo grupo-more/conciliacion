@@ -651,7 +651,12 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
   // 2) Clasificar Tesorerias y generar candidatos
   const allCandidates: CandidateBase[] = [];
   const outOfScopeTids = new Set<string>();
-  const reviewExceptionTids = new Set<string>(); // esExcepcion=true
+  // esExcepcion=true: la API indica que el deposito entro a un banco distinto
+  // del asociado a la sucursal. NO se saltea el scoring: se generan candidatos
+  // con la busqueda cross-banco activada (ya pasa allRealAccounts) y se capa el
+  // status a SUGGESTED (nunca AUTO) para que se confirme manualmente. Si no
+  // aparece candidato, cae a REVIEW (sigue marcada para atencion).
+  const exceptionTids = new Set<string>();
   // Tesorerias con glosa "DEP (N) ..." → split inverso. NO se auto-scorea
   // contra cartolas porque su monto es solo una porción del depósito real,
   // y un EXACT/SPLIT contra un BM completo sería un falso positivo.
@@ -668,18 +673,16 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
       continue;
     }
 
-    // esExcepcion=true => REVIEW automatico, sin candidatos
-    if (t.esExcepcion) {
-      reviewExceptionTids.add(t.id);
-      continue;
-    }
-
-    // Glosa multipart "DEP (N) ..." => REVIEW para link manual.
-    // No corre scoring porque el monto del TM es parcial.
+    // Glosa multipart "DEP (N) ..." => REVIEW para link manual. Tiene prioridad
+    // incluso sobre la excepcion: el monto del TM sigue siendo parcial, asi que
+    // no corre scoring.
     if (parseGlosa(t.glosa).isMultiPart) {
       multiPartTids.add(t.id);
       continue;
     }
+
+    const isException = t.esExcepcion;
+    if (isException) exceptionTids.add(t.id);
 
     // Egreso -> conciliar contra salidas (OUT). Ingreso -> entradas (IN).
     // Confiamos en tipoOperacion; el signo del monto es respaldo defensivo.
@@ -690,6 +693,17 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
     // banco) para recuperar depositos que entraron a una cuenta distinta de la
     // asignada. El gating de identidad evita falsos positivos.
     const cands = generateCandidates(t, aliasAccount, allRealAccounts, bmsByAccount);
+
+    // Excepcion API: marcar todos sus candidatos como excepcion y capar a
+    // SUGGESTED. Asi el motor propone el abono que entro al otro banco, pero
+    // exige confirmacion humana antes de conciliar.
+    if (isException) {
+      for (const c of cands) {
+        c.isException = true;
+        if (c.status === "AUTO_MATCHED") c.status = "SUGGESTED";
+      }
+    }
+
     allCandidates.push(...cands);
   }
 
@@ -731,22 +745,6 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
               continue;
             }
 
-            // Caso 2: esExcepcion=true => REVIEW
-            if (reviewExceptionTids.has(t.id)) {
-              const aliasAccount = aliasMap.get(t.banco!)!;
-              await tx.consolidado.create({
-                data: {
-                  tesoreriaMovementId: t.id,
-                  status: "REVIEW",
-                  matchType: null,
-                  resolvedAccountId: aliasAccount.id,
-                  notes: "Marcado como excepción por la API (esExcepcion=true).",
-                },
-              });
-              summary.review++;
-              continue;
-            }
-
             // Caso 2b: glosa multipart "DEP (N) ..." => REVIEW manual.
             if (multiPartTids.has(t.id)) {
               const aliasAccount = aliasMap.get(t.banco!)!;
@@ -768,7 +766,9 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
             const cand = assignedByTid.get(t.id);
             if (cand) {
               const aliasAccount = aliasMap.get(t.banco!)!;
-              const notes = cand.isException
+              const notes = exceptionTids.has(t.id)
+                ? `⚠ Excepción API: la sucursal tiene "${t.banco}" asociado pero el depósito entró a otra cuenta/banco. Match cross-banco sugerido — confirmar.`
+                : cand.isException
                 ? `⚠ Excepción de banco: la API asignó "${t.banco}" pero el match real está en otra cuenta del mismo banco. Verificar.`
                 : null;
 
@@ -809,8 +809,23 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
               continue;
             }
 
-            // Caso 4: sin asignacion => NO_MATCH
+            // Caso 4: sin asignacion. Excepcion API sin candidato => REVIEW
+            // (sigue marcada para atencion manual). Resto => NO_MATCH.
             const aliasAccount = aliasMap.get(t.banco!)!;
+            if (exceptionTids.has(t.id)) {
+              await tx.consolidado.create({
+                data: {
+                  tesoreriaMovementId: t.id,
+                  status: "REVIEW",
+                  matchType: null,
+                  resolvedAccountId: aliasAccount.id,
+                  notes:
+                    "Excepción API (esExcepcion=true): depósito a otro banco. Sin candidato automático — vincular manualmente.",
+                },
+              });
+              summary.review++;
+              continue;
+            }
             await tx.consolidado.create({
               data: {
                 tesoreriaMovementId: t.id,
@@ -839,10 +854,6 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
         summary.outOfScope++;
         continue;
       }
-      if (reviewExceptionTids.has(t.id)) {
-        summary.review++;
-        continue;
-      }
       if (multiPartTids.has(t.id)) {
         summary.review++;
         continue;
@@ -862,6 +873,9 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
         }
         if (cand.bms.length > 1) summary.splits++;
         if (cand.isException) summary.exceptions++;
+      } else if (exceptionTids.has(t.id)) {
+        // Excepcion API sin candidato => REVIEW
+        summary.review++;
       } else {
         summary.noMatch++;
       }
@@ -897,4 +911,18 @@ export function scoreCandidate(
 ): { score: number; factors: ScoreFactor[] } {
   const { score, factors } = scoreOnePair(t, bm);
   return { score, factors };
+}
+
+/**
+ * Gating de identidad para candidatos cross-cuenta (mismo gate que usa el
+ * motor en el candidato tipo 3). True si hay match firme de nombre/RUT del
+ * cliente o RUT/nombre embebido en la glosa (CLIENTE GENERICO). Se usa en el
+ * detalle para no proponer abonos de otra cuenta por mera coincidencia de
+ * monto entre bancos distintos.
+ */
+export function hasCrossAccountIdentity(
+  t: TesoreriaMovement,
+  bm: BankMovement
+): boolean {
+  return hasStrongNameOrRutMatch(t, bm) || glosaIdentityMatch(t, bm);
 }
