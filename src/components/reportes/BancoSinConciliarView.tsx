@@ -229,6 +229,33 @@ export function BancoSinConciliarView({
         </>
       )}
 
+      {data &&
+        (data.resumen.resueltos.transbank.count > 0 ||
+          data.resumen.resueltos.traspasos.count > 0) && (
+          <div className="rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 px-3 py-2 text-xs space-y-0.5">
+            <div className="font-semibold">
+              Excluidos por estar resueltos en otra tab:
+            </div>
+            {data.resumen.resueltos.transbank.count > 0 && (
+              <div>
+                ✓ {data.resumen.resueltos.transbank.count} abono
+                {data.resumen.resueltos.transbank.count === 1 ? "" : "s"} Transbank
+                ({formatMoney(BigInt(data.resumen.resueltos.transbank.monto))}) →{" "}
+                <strong>Abono Transbank</strong>
+              </div>
+            )}
+            {data.resumen.resueltos.traspasos.count > 0 && (
+              <div>
+                ✓ {data.resumen.resueltos.traspasos.count} movimiento
+                {data.resumen.resueltos.traspasos.count === 1 ? "" : "s"} de
+                traspaso interno (
+                {formatMoney(BigInt(data.resumen.resueltos.traspasos.monto))}) →{" "}
+                <strong>Traspasos internos</strong>
+              </div>
+            )}
+          </div>
+        )}
+
       {data?.truncated && (
         <div className="rounded-md border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-xs">
           ⚠ Se muestran las primeras 5.000 filas. Acotá el rango para ver el resto.

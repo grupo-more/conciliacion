@@ -2,17 +2,17 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseRange, CONCILIADO_STATUSES } from "@/lib/reportes/classify";
+import { computeBancoSinConciliar } from "@/lib/reportes/banco-compute";
 
 /**
  * GET /api/reportes/overview?from=YYYY-MM-DD&to=YYYY-MM-DD
  *
  * Resumen cruzado de la brecha de conciliacion en el rango: cuanto hay sin
- * conciliar por cada lado (banco vs Dynatech). Usa agregados (groupBy) — NO
- * trae filas — para alimentar la franja de resumen del modulo Reportes.
+ * conciliar por cada lado (banco vs Dynatech), para la franja del modulo.
  *
  * Sin conciliar:
- *   - Banco: BankMovement sin ningun ConsolidadoLink a un Consolidado
- *     AUTO_MATCHED/MANUAL.
+ *   - Banco: brecha real (excluye motor + Abono Transbank + pares de Traspasos
+ *     internos) — mismo computo que el detalle, via computeBancoSinConciliar.
  *   - Dynatech: TesoreriaMovement cuyo Consolidado no es AUTO_MATCHED/MANUAL
  *     (incluye los que no tienen Consolidado).
  */
@@ -30,20 +30,9 @@ export async function GET(req: Request) {
 
   const conciliado = [...CONCILIADO_STATUSES];
 
-  const [bancoByDir, dynByTipo] = await Promise.all([
-    prisma.bankMovement.groupBy({
-      by: ["direction"],
-      where: {
-        postDate: { gte: from, lt: to },
-        NOT: {
-          consolidadoLinks: {
-            some: { consolidado: { status: { in: conciliado } } },
-          },
-        },
-      },
-      _count: { _all: true },
-      _sum: { amount: true },
-    }),
+  const [bancoResult, dynByTipo] = await Promise.all([
+    // Mismo computo que el detalle (consistencia franja ↔ tab).
+    computeBancoSinConciliar(from, to),
     prisma.tesoreriaMovement.groupBy({
       by: ["tipoOperacion"],
       where: {
@@ -55,18 +44,12 @@ export async function GET(req: Request) {
     }),
   ]);
 
-  // Banco: IN positivo, OUT negativo → monto absoluto.
-  let bancoCount = 0;
-  let bancoMontoAbs = 0n;
-  const banco = { in: { count: 0, monto: "0" }, out: { count: 0, monto: "0" } };
-  for (const g of bancoByDir) {
-    const c = g._count._all;
-    const s = g._sum.amount ?? 0n;
-    bancoCount += c;
-    bancoMontoAbs += s < 0n ? -s : s;
-    if (g.direction === "IN") banco.in = { count: c, monto: (s < 0n ? -s : s).toString() };
-    else if (g.direction === "OUT") banco.out = { count: c, monto: (s < 0n ? -s : s).toString() };
-  }
+  const banco = {
+    in: bancoResult.resumen.porDireccion.IN ?? { count: 0, monto: "0" },
+    out: bancoResult.resumen.porDireccion.OUT ?? { count: 0, monto: "0" },
+  };
+  const bancoCount = bancoResult.resumen.count;
+  const bancoMontoAbs = BigInt(bancoResult.resumen.monto);
 
   // Dynatech: INGRESO positivo, EGRESO negativo → monto absoluto.
   let dynCount = 0;
