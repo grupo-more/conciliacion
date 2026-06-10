@@ -144,6 +144,15 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
     }
   }
 
+  // Búsqueda en tiempo real: re-busca al tipear (debounce) o al cambiar "Monto
+  // exacto", sin tener que apretar "Buscar". Solo mientras el panel está abierto.
+  useEffect(() => {
+    if (!searchOpen) return;
+    const h = setTimeout(() => void runSearch(), 300);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQ, searchExact, searchOpen]);
+
   // Selector de rubro banco para el asiento (override). Se muestra antes de
   // vincular; cross-banco viene pre-elegido con el sugerido de la cuenta real.
   function renderRubroSelect() {
@@ -596,10 +605,7 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
             {canLink && (
               <div className="mt-5">
                 <button
-                  onClick={() => {
-                    setSearchOpen((v) => !v);
-                    if (!searchOpen && searchResults.length === 0) void runSearch();
-                  }}
+                  onClick={() => setSearchOpen((v) => !v)}
                   className="text-sm font-semibold text-brand hover:underline"
                 >
                   {searchOpen ? "▾" : "▸"} Buscar contraparte manualmente
@@ -611,8 +617,8 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                         type="text"
                         value={searchQ}
                         onChange={(e) => setSearchQ(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && runSearch()}
                         placeholder="Glosa / contraparte / RUT…"
+                        autoFocus
                         className="flex-1 min-w-[180px] rounded-md border border-border-soft px-3 py-1.5 text-sm"
                       />
                       <label className="flex items-center gap-1 text-xs text-text-muted">
@@ -623,13 +629,9 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                         />
                         Monto exacto
                       </label>
-                      <button
-                        onClick={() => runSearch()}
-                        disabled={searching}
-                        className="rounded-md bg-brand text-white text-xs font-semibold px-3 py-1.5 hover:opacity-90 disabled:opacity-50"
-                      >
-                        {searching ? "Buscando…" : "Buscar"}
-                      </button>
+                      <span className="text-xs text-text-muted w-16">
+                        {searching ? "Buscando…" : `${searchResults.length} result.`}
+                      </span>
                     </div>
 
                     {searchResults.length === 0 && !searching && (

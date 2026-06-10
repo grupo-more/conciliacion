@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -67,6 +67,18 @@ export function EgresoTerceroDetail({
       setLoading(false);
     }
   }
+  // Búsqueda en tiempo real al tipear (debounce), sin apretar "Buscar".
+  const firstRef = useRef(true);
+  useEffect(() => {
+    if (firstRef.current) {
+      firstRef.current = false;
+      return;
+    }
+    const h = setTimeout(() => void load(q), 300);
+    return () => clearTimeout(h);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -191,13 +203,12 @@ export function EgresoTerceroDetail({
                   type="text"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && load(q)}
                   placeholder="Buscar gasto operativo por glosa…"
                   className="flex-1 rounded-md border border-border-soft px-3 py-1.5 text-sm"
                 />
-                <button onClick={() => load(q)} disabled={loading} className="btn-ghost text-sm">
-                  Buscar
-                </button>
+                <span className="text-xs text-text-muted w-16">
+                  {loading ? "Buscando…" : `${data.search.length} result.`}
+                </span>
               </div>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {data.search.map((c) => (
