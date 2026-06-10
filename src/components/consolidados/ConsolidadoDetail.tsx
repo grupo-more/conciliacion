@@ -21,6 +21,9 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
+  // Rubro banco para el asiento (override). Cross-banco: pre-elige el sugerido
+  // de la cuenta real; si no, el rubroBanco que vino de la API.
+  const [overrideRubro, setOverrideRubro] = useState<number | null>(null);
   // Buscador manual de contraparte (para movimientos sin candidato).
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState("");
@@ -53,6 +56,7 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
       const d: DetailResponse = await res.json();
       setData(d);
       setNotesDraft(d.consolidado?.notes ?? "");
+      setOverrideRubro(d.proposal?.suggestedRubro ?? d.tesoreria.rubroBanco ?? null);
     } finally {
       setLoading(false);
     }
@@ -89,10 +93,20 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
     if (bankMovementIds.length === 0) return;
     setActing(true);
     try {
+      const body: {
+        tesoreriaId: string;
+        bankMovementIds: string[];
+        overrideRubroBanco?: number;
+      } = { tesoreriaId, bankMovementIds };
+      // Solo mandamos override si el operador eligió un rubro distinto al que
+      // vino de la API (típico en cross-banco: el asiento va al banco real).
+      if (overrideRubro != null && overrideRubro !== data?.tesoreria.rubroBanco) {
+        body.overrideRubroBanco = overrideRubro;
+      }
       const res = await fetch("/api/consolidados/manual-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tesoreriaId, bankMovementIds }),
+        body: JSON.stringify(body),
       });
       const j = await res.json().catch(() => null);
       if (res.ok) {
@@ -128,6 +142,45 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
     } finally {
       setSearching(false);
     }
+  }
+
+  // Selector de rubro banco para el asiento (override). Se muestra antes de
+  // vincular; cross-banco viene pre-elegido con el sugerido de la cuenta real.
+  function renderRubroSelect() {
+    if (!data) return null;
+    const tmRubro = data.tesoreria.rubroBanco;
+    const suggested = data.proposal?.suggestedRubro ?? null;
+    const isCross = suggested != null && suggested !== tmRubro;
+    return (
+      <div className="rounded-md border border-border-soft bg-white p-2 text-xs mb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-text-muted">Rubro banco (asiento):</span>
+          <select
+            value={overrideRubro ?? ""}
+            onChange={(e) =>
+              setOverrideRubro(e.target.value ? Number(e.target.value) : null)
+            }
+            className="rounded-md border border-border-soft px-2 py-1 text-xs"
+          >
+            {data.bankRubros.map((r) => (
+              <option key={r.rubro} value={r.rubro}>
+                {r.rubro} · {r.name}
+              </option>
+            ))}
+          </select>
+          {suggested != null && overrideRubro === suggested && (
+            <span className="text-emerald-700">✓ sugerido para la cuenta real</span>
+          )}
+        </div>
+        {isCross && (
+          <div className="text-amber-700 mt-1">
+            ⚠ La API mandó rubro {tmRubro ?? "—"} (banco que se tipeó), pero la
+            cuenta real sugiere <strong>{suggested}</strong>. El asiento se
+            contabilizará en el rubro elegido arriba.
+          </div>
+        )}
+      </div>
+    );
   }
 
   const status: ConsolidadoStatus = (data?.consolidado?.status ??
@@ -394,6 +447,7 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                       </div>
                     </div>
                   ))}
+                  {canLink && renderRubroSelect()}
                   <div className="flex items-center justify-between pt-1">
                     <div className="text-xs text-text-muted">
                       Total propuesto:{" "}
@@ -581,6 +635,8 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                     {searchResults.length === 0 && !searching && (
                       <div className="text-xs text-text-muted">Sin resultados. Ajustá la búsqueda (probá destildar "Monto exacto").</div>
                     )}
+
+                    {searchResults.length > 0 && renderRubroSelect()}
 
                     <div className="space-y-2 max-h-72 overflow-y-auto">
                       {searchResults.map((r) => {

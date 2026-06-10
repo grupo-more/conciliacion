@@ -115,11 +115,13 @@ export interface ProposalDTO {
   isSplit: boolean;
   totalAmount: string;
   score: number | null;
+  suggestedRubro: number | null;
   movements: ProposalMovement[];
 }
 
 export interface DetailResponse {
   proposal: ProposalDTO | null;
+  bankRubros: Array<{ rubro: number; name: string }>;
   tesoreria: {
     id: string;
     externalId: string;

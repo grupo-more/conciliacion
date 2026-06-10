@@ -6,6 +6,7 @@ import {
   scoreCandidate,
   hasCrossAccountIdentity,
 } from "@/lib/consolidados/match";
+import { suggestRubroForAccounts } from "@/lib/consolidados/rubro-suggest";
 import { extractEmbeddedReference } from "@/lib/cartolas/dedup";
 import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
 
@@ -180,6 +181,7 @@ export async function GET(
     isSplit: boolean;
     totalAmount: string;
     score: number | null;
+    suggestedRubro: number | null;
     movements: Array<{
       bankMovementId: string;
       postDate: string;
@@ -227,6 +229,7 @@ export async function GET(
         isSplit: ordered.length > 1,
         totalAmount: total.toString(),
         score: t.consolidado?.score ?? null,
+        suggestedRubro: null,
         movements: ordered.map((bm) => {
           const { score, factors } = scoreCandidate(t, bm);
           return {
@@ -258,8 +261,26 @@ export async function GET(
     }
   }
 
+  // Rubro banco sugerido para la cuenta real del match (para el override del
+  // asiento cuando es cross-banco). Y el catálogo de rubros banco para el
+  // selector de confirmación en el detalle.
+  if (proposal && proposal.movements.length > 0) {
+    const sugg = await suggestRubroForAccounts(
+      proposal.movements.map((m) => m.account.id),
+    );
+    proposal.suggestedRubro = sugg.get(proposal.movements[0].account.id) ?? null;
+  }
+  const bankRubros = (
+    await prisma.rubroLabel.findMany({
+      where: { isDifference: false },
+      select: { rubro: true, name: true },
+      orderBy: { rubro: "asc" },
+    })
+  ).map((r) => ({ rubro: r.rubro, name: r.name }));
+
   return NextResponse.json({
     proposal,
+    bankRubros,
     tesoreria: {
       id: t.id,
       externalId: t.externalId.toString(),
