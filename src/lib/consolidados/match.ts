@@ -35,6 +35,7 @@ import { prisma } from "@/lib/db";
 import { normalizeRut } from "@/lib/cartolas/normalize";
 import { parseGlosa } from "@/lib/consolidados/glosa";
 import { isUsoParcialAccount } from "@/lib/cuentas/uso-parcial";
+import { matchGlosaRoute } from "@/lib/consolidados/glosa-routing";
 import type {
   BankAccount,
   BankAccountAlias,
@@ -371,7 +372,8 @@ function generateCandidates(
   t: TesoreriaMovement,
   aliasAccount: BankAccount,
   otherAccounts: BankAccount[],
-  bmsByAccount: Map<string, BMWithAccount[]>
+  bmsByAccount: Map<string, BMWithAccount[]>,
+  opts: { identityMarker?: string } = {}
 ): CandidateBase[] {
   const candidates: CandidateBase[] = [];
   const dayMs = 24 * 60 * 60 * 1000;
@@ -380,7 +382,16 @@ function generateCandidates(
   const upperT = new Date(t.fecha.getTime() + DATE_WINDOW_DAYS * dayMs);
 
   // === 1) 1:1 en cuenta del alias ===
-  const aliasBms = bmsByAccount.get(aliasAccount.id) ?? [];
+  // identityMarker (ruteo por glosa): restringe los candidatos de la cuenta a
+  // los movimientos cuya contraparte/descripción contenga el marcador, para no
+  // agarrar cualquier movimiento del mismo monto en la cuenta.
+  let aliasBms = bmsByAccount.get(aliasAccount.id) ?? [];
+  if (opts.identityMarker) {
+    const mk = opts.identityMarker;
+    aliasBms = aliasBms.filter((bm) =>
+      `${bm.counterpartyName ?? ""} ${bm.description ?? ""}`.toUpperCase().includes(mk)
+    );
+  }
   for (const bm of aliasBms) {
     if (bm.amount !== t.monto) continue;
     if (bm.postDate < lowerT || bm.postDate > upperT) continue;
@@ -689,6 +700,10 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
   // prioridad sobre cualquier otra clasificacion (un anulado no se concilia
   // aunque tuviera alias o fuera multipart/excepcion).
   const anuladoTids = new Set<string>();
+  // Cuenta resuelta por TM (alias normal o ruteo por glosa). Se usa también en
+  // la persistencia para no re-resolver vía aliasMap.get(t.banco) (que falla
+  // cuando banco=null y la cuenta vino por ruteo).
+  const aliasAccountByTid = new Map<string, BankAccount>();
 
   const processable = allTesorerias.filter((t) => !manualTesoreriaIds.has(t.id));
   summary.processed = processable.length;
@@ -700,8 +715,21 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
       continue;
     }
 
-    // Sin alias => OUT_OF_SCOPE
-    const aliasAccount = t.banco ? aliasMap.get(t.banco) : undefined;
+    // Resolver cuenta: alias normal por banco, o ruteo por glosa cuando banco
+    // viene null/sin alias (ej. liquidaciones CRYPTOMKT que entran a Santander
+    // MG SPA). El ruteo restringe los candidatos a la contraparte del marcador.
+    let aliasAccount = t.banco ? aliasMap.get(t.banco) : undefined;
+    let identityMarker: string | undefined;
+    if (!aliasAccount) {
+      const route = matchGlosaRoute(t.glosa);
+      if (route) {
+        const routed = aliasMap.get(route.viaAlias);
+        if (routed) {
+          aliasAccount = routed;
+          identityMarker = route.counterpartyMarker;
+        }
+      }
+    }
     if (!aliasAccount) {
       outOfScopeTids.add(t.id);
       continue;
@@ -712,8 +740,11 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
     // no corre scoring.
     if (parseGlosa(t.glosa).isMultiPart) {
       multiPartTids.add(t.id);
+      aliasAccountByTid.set(t.id, aliasAccount);
       continue;
     }
+
+    aliasAccountByTid.set(t.id, aliasAccount);
 
     const isException = t.esExcepcion;
     if (isException) exceptionTids.add(t.id);
@@ -725,8 +756,11 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
 
     // Cross-cuenta: pasamos TODAS las cuentas reales (no solo las del mismo
     // banco) para recuperar depositos que entraron a una cuenta distinta de la
-    // asignada. El gating de identidad evita falsos positivos.
-    const cands = generateCandidates(t, aliasAccount, allRealAccounts, bmsByAccount);
+    // asignada. El gating de identidad evita falsos positivos. identityMarker
+    // (ruteo por glosa) restringe los candidatos de la cuenta a la contraparte.
+    const cands = generateCandidates(t, aliasAccount, allRealAccounts, bmsByAccount, {
+      identityMarker,
+    });
 
     // Excepcion API: marcar todos sus candidatos como excepcion y capar a
     // SUGGESTED. Asi el motor propone el abono que entro al otro banco, pero
@@ -803,7 +837,7 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
 
             // Caso 2b: glosa multipart "DEP (N) ..." => REVIEW manual.
             if (multiPartTids.has(t.id)) {
-              const aliasAccount = aliasMap.get(t.banco!)!;
+              const aliasAccount = aliasAccountByTid.get(t.id)!;
               await tx.consolidado.create({
                 data: {
                   tesoreriaMovementId: t.id,
@@ -821,7 +855,7 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
             // Caso 3: con candidato asignado
             const cand = assignedByTid.get(t.id);
             if (cand) {
-              const aliasAccount = aliasMap.get(t.banco!)!;
+              const aliasAccount = aliasAccountByTid.get(t.id)!;
               const notes = exceptionTids.has(t.id)
                 ? `⚠ Excepción API: la sucursal tiene "${t.banco}" asociado pero el depósito entró a otra cuenta/banco. Match cross-banco sugerido — confirmar.`
                 : cand.isException
@@ -881,7 +915,7 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
 
             // Caso 4: sin asignacion. Excepcion API sin candidato => REVIEW
             // (sigue marcada para atencion manual). Resto => NO_MATCH.
-            const aliasAccount = aliasMap.get(t.banco!)!;
+            const aliasAccount = aliasAccountByTid.get(t.id)!;
             if (exceptionTids.has(t.id)) {
               await tx.consolidado.create({
                 data: {
