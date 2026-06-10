@@ -65,6 +65,8 @@ export interface BancoResponse {
     resueltos: {
       transbank: AmountCell;
       traspasos: AmountCell;
+      egresos: AmountCell;
+      difMenor: AmountCell;
       noRelevante: AmountCell;
     };
     porDireccion: Record<string, AmountCell>;

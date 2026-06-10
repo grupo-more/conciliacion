@@ -14,6 +14,7 @@
 import { prisma } from "@/lib/db";
 import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
 import { isTransbank } from "@/lib/transbank/detect";
+import { getDifMenorSettings, isDifMenor } from "@/lib/dif-menor/detect";
 import { isUsoParcialAccount } from "@/lib/cuentas/uso-parcial";
 import { matchMirror, type BankMovementForMatch } from "@/lib/internos/match";
 import {
@@ -58,6 +59,7 @@ export async function computeBancoSinConciliar(
   const entidades = await loadEntidadesInternas(prisma);
   const now = new Date();
   const conciliado = new Set<string>(CONCILIADO_STATUSES);
+  const { threshold: difThreshold } = await getDifMenorSettings();
 
   // Traemos TODO el rango (sin filtros de fila) para: (a) correr matchMirror
   // sobre el universo completo, (b) clasificar de forma estable.
@@ -77,6 +79,10 @@ export async function computeBancoSinConciliar(
       },
       consolidadoLinks: {
         select: { consolidado: { select: { status: true } } },
+      },
+      // Conciliación contra gasto operativo (Egresos a terceros).
+      egresoConciliacionLinks: {
+        select: { conciliacion: { select: { status: true } } },
       },
     },
     orderBy: [{ postDate: "desc" }, { createdAt: "desc" }],
@@ -118,6 +124,10 @@ export async function computeBancoSinConciliar(
   let resTransbankMonto = 0n;
   let resTraspasoCount = 0;
   let resTraspasoMonto = 0n;
+  let resEgresoCount = 0;
+  let resEgresoMonto = 0n;
+  let resDifMenorCount = 0;
+  let resDifMenorMonto = 0n;
   let noRelevanteCount = 0;
   let noRelevanteMonto = 0n;
   const porDireccion = mkAmountMap(["IN", "OUT"]);
@@ -161,7 +171,24 @@ export async function computeBancoSinConciliar(
       continue;
     }
 
-    // 4) Brecha real. Clasificar y aplicar filtros de fila.
+    // 4) Egreso a tercero conciliado (OUT ↔ gasto operativo) → resuelto en su tab.
+    const linkedEgreso = bm.egresoConciliacionLinks.some(
+      (l) => l.conciliacion && conciliado.has(l.conciliacion.status),
+    );
+    if (linkedEgreso) {
+      resEgresoCount++;
+      resEgresoMonto += abs;
+      continue;
+    }
+
+    // 5) Dif menor (IN ≤ umbral) → tiene asiento propio en "Dif menor".
+    if (isDifMenor(bm, difThreshold)) {
+      resDifMenorCount++;
+      resDifMenorMonto += abs;
+      continue;
+    }
+
+    // 6) Brecha real. Clasificar y aplicar filtros de fila.
     const esInterno = detectInterno(bm, entidades) !== null;
     const tag = bankTag(esInterno, bm.description, bm.counterpartyName);
 
@@ -223,6 +250,8 @@ export async function computeBancoSinConciliar(
       resueltos: {
         transbank: { count: resTransbankCount, monto: resTransbankMonto.toString() },
         traspasos: { count: resTraspasoCount, monto: resTraspasoMonto.toString() },
+        egresos: { count: resEgresoCount, monto: resEgresoMonto.toString() },
+        difMenor: { count: resDifMenorCount, monto: resDifMenorMonto.toString() },
         noRelevante: { count: noRelevanteCount, monto: noRelevanteMonto.toString() },
       },
       porDireccion: dumpAmountMap(porDireccion),
