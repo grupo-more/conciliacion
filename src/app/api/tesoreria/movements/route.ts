@@ -33,8 +33,8 @@ export async function GET(req: Request) {
   const rubroBancoRaw = url.searchParams.get("rubroBanco");
   const rubroSucursalRaw = url.searchParams.get("rubroSucursal");
   const excepcionRaw = url.searchParams.get("excepcion");
-  // anulado: ausente/"0" => ocultar anulados (default); "1" => solo anulados;
-  // "all" => incluir todos.
+  // anulado: ausente/"all" => mostrar todos (default, es la vista general);
+  // "1" => solo anulados; "0" => ocultar anulados.
   const anuladoRaw = url.searchParams.get("anulado");
   const since = url.searchParams.get("since");
   const until = url.searchParams.get("until");
@@ -72,7 +72,8 @@ export async function GET(req: Request) {
   else if (excepcionRaw === "0") where.esExcepcion = false;
 
   if (anuladoRaw === "1") where.estadoActual = "ANU";
-  else if (anuladoRaw !== "all") where.estadoActual = { not: "ANU" };
+  else if (anuladoRaw === "0") where.estadoActual = { not: "ANU" };
+  // default: sin filtro (se muestran todos, anulados incluidos).
 
   if (since || until) {
     where.fecha = {};
@@ -186,6 +187,8 @@ function serialize(m: Awaited<ReturnType<typeof prisma.tesoreriaMovement.findFir
     fecha: m.fecha.toISOString(),
     fechaCarga: m.fechaCarga?.toISOString() ?? null,
     esExcepcion: m.esExcepcion,
+    estadoActual: m.estadoActual,
+    anulado: m.anulado,
     items: m.items,
     syncedAt: m.syncedAt.toISOString(),
   };

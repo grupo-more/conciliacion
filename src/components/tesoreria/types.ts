@@ -20,6 +20,8 @@ export interface TesoreriaMovementDTO {
   fecha: string;
   fechaCarga: string | null;
   esExcepcion: boolean;
+  estadoActual: string | null;
+  anulado: boolean;
   items: unknown[];
   syncedAt: string;
 }

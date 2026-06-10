@@ -42,6 +42,7 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
   const [rubroBanco, setRubroBanco] = useState("");
   const [rubroSucursal, setRubroSucursal] = useState("");
   const [excepcion, setExcepcion] = useState<"" | "1" | "0">("");
+  const [anulado, setAnulado] = useState<"" | "1" | "0">("");
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
   const [search, setSearch] = useState("");
@@ -61,6 +62,7 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
     if (rubroBanco) p.set("rubroBanco", rubroBanco);
     if (rubroSucursal) p.set("rubroSucursal", rubroSucursal);
     if (excepcion) p.set("excepcion", excepcion);
+    if (anulado) p.set("anulado", anulado);
     if (since) p.set("since", since);
     if (until) p.set("until", until);
     if (search) p.set("q", search);
@@ -165,6 +167,7 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
     rubroBanco,
     rubroSucursal,
     excepcion,
+    anulado,
     since,
     until,
     tab,
@@ -403,6 +406,18 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
           </select>
         </div>
         <div>
+          <label className="label">Anulado</label>
+          <select
+            className="input"
+            value={anulado}
+            onChange={(e) => setAnulado(e.target.value as "" | "1" | "0")}
+          >
+            <option value="">Todos</option>
+            <option value="1">Solo anulados</option>
+            <option value="0">Sin anulados</option>
+          </select>
+        </div>
+        <div>
           <label className="label">Desde</label>
           <input type="date" className="input" value={since} onChange={(e) => setSince(e.target.value)} />
         </div>
@@ -445,13 +460,18 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
               {!loading &&
                 movements.map((m) => {
                   const monto = Number(m.monto);
+                  const anulado = m.estadoActual === "ANU";
                   return (
                     <tr
                       key={m.id}
                       onClick={() => setSelected(m)}
                       className={
                         "border-t border-border-soft/40 cursor-pointer table-row-hover " +
-                        (m.esExcepcion ? "bg-warn/5 hover:bg-warn/10" : "hover:bg-bg-elevated/40")
+                        (anulado
+                          ? "bg-rose-500/5 hover:bg-rose-500/10 text-text-muted"
+                          : m.esExcepcion
+                          ? "bg-warn/5 hover:bg-warn/10"
+                          : "hover:bg-bg-elevated/40")
                       }
                     >
                       <td className="px-3 py-2 whitespace-nowrap">{formatDateTime(m.fecha)}</td>
@@ -482,20 +502,38 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
                           )}
                       </td>
                       <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
-                        {formatMoney(monto)}
+                        <span className={anulado ? "line-through" : ""}>
+                          {formatMoney(monto)}
+                        </span>
                       </td>
                       <td className="px-3 py-2 max-w-md truncate" title={m.glosa}>
                         {m.glosa || <span className="text-text-dim">—</span>}
                       </td>
-                      <td className="px-3 py-2 text-center">
-                        {m.esExcepcion ? (
+                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                        {anulado && (
                           <span
-                            className="inline-block rounded-full bg-warn/15 text-warn text-[10px] font-semibold px-2 py-0.5"
+                            className="inline-block rounded-full bg-rose-500/15 text-rose-600 text-[10px] font-semibold px-2 py-0.5"
+                            title={
+                              m.anulado
+                                ? "Anulado (CAJ→ANU)"
+                                : "Documento anulado en origen"
+                            }
+                          >
+                            ANULADO
+                          </span>
+                        )}
+                        {m.esExcepcion && (
+                          <span
+                            className={
+                              "inline-block rounded-full bg-warn/15 text-warn text-[10px] font-semibold px-2 py-0.5" +
+                              (anulado ? " ml-1" : "")
+                            }
                             title="Excepción detectada"
                           >
                             EXC
                           </span>
-                        ) : (
+                        )}
+                        {!anulado && !m.esExcepcion && (
                           <span className="text-text-dim text-xs">—</span>
                         )}
                       </td>

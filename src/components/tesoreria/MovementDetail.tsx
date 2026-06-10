@@ -50,6 +50,16 @@ export function MovementDetail({
           </button>
         </div>
 
+        {m.estadoActual === "ANU" && (
+          <div className="mb-3 rounded-md border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-600">
+            ⚠ Movimiento anulado{" "}
+            {m.anulado
+              ? "(se anuló después de existir como válido: CAJ→ANU)."
+              : "en origen."}{" "}
+            Queda fuera de conciliación.
+          </div>
+        )}
+
         {m.esExcepcion && (
           <div className="mb-3 rounded-md border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-warn">
             ⚠ Marcado como excepción.
