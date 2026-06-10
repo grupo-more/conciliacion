@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { formatDate, formatMoney } from "@/lib/format";
 import { ConciliacionBadge } from "./ConciliacionBadge";
+import { EgresoTerceroDetail } from "./EgresoTerceroDetail";
 
 type Quality = "con_rut" | "solo_nombre" | "sin_info";
 
@@ -23,6 +24,14 @@ interface EgresoTerceroRow {
     status: string;
     matchType: string | null;
     tesoreriaExternalId: string;
+  } | null;
+  egresoConciliacion: {
+    status: string;
+    score: number | null;
+    egresoExternalId: string;
+    egresoGlosa: string;
+    egresoMonto: string;
+    rubroNombre: string | null;
   } | null;
 }
 
@@ -68,6 +77,7 @@ export function EgresosTercerosView() {
 
   const [data, setData] = useState<EgresosTercerosResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState<EgresoTerceroRow | null>(null);
 
   useEffect(() => {
     const h = setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -267,7 +277,8 @@ export function EgresosTercerosView() {
                 {data!.rows.map((r) => (
                   <tr
                     key={r.id}
-                    className="border-t border-border-soft/60 hover:bg-bg-soft/40"
+                    onClick={() => setSelected(r)}
+                    className="border-t border-border-soft/60 hover:bg-bg-soft/40 cursor-pointer"
                   >
                     <td className="px-3 py-2 whitespace-nowrap">
                       {formatDate(r.fecha)}
@@ -311,7 +322,15 @@ export function EgresosTercerosView() {
                       {r.description ?? ""}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">
-                      <ConciliacionBadge conciliacion={r.conciliacion} />
+                      {r.egresoConciliacion ? (
+                        <EgresoBadge eg={r.egresoConciliacion} />
+                      ) : r.conciliacion ? (
+                        <ConciliacionBadge conciliacion={r.conciliacion} />
+                      ) : (
+                        <span className="inline-block rounded-full border border-border-soft bg-bg-soft px-2 py-0.5 text-[11px] font-semibold text-text-muted">
+                          Sin conciliar
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -331,7 +350,44 @@ export function EgresosTercerosView() {
           </div>
         )}
       </div>
+
+      {selected && (
+        <EgresoTerceroDetail
+          bankMovementId={selected.id}
+          onClose={() => setSelected(null)}
+          onChanged={load}
+        />
+      )}
     </div>
+  );
+}
+
+function EgresoBadge({
+  eg,
+}: {
+  eg: NonNullable<EgresoTerceroRow["egresoConciliacion"]>;
+}) {
+  const cls =
+    eg.status === "AUTO_MATCHED" || eg.status === "MANUAL"
+      ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+      : eg.status === "SUGGESTED"
+        ? "bg-amber-100 text-amber-800 border-amber-200"
+        : "bg-zinc-100 text-zinc-700 border-zinc-200";
+  const label =
+    eg.status === "AUTO_MATCHED"
+      ? "Gasto auto"
+      : eg.status === "MANUAL"
+        ? "Gasto manual"
+        : eg.status === "SUGGESTED"
+          ? "Gasto sugerido"
+          : eg.status;
+  return (
+    <span
+      className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold ${cls}`}
+      title={`${eg.rubroNombre ? `[${eg.rubroNombre}] ` : ""}${eg.egresoGlosa}`}
+    >
+      {label}
+    </span>
   );
 }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { runConsolidados } from "@/lib/consolidados/match";
+import { runEgresosTerceros } from "@/lib/egresos/match-terceros";
 
 /**
  * POST /api/consolidados/run
@@ -25,5 +26,8 @@ export async function POST(req: Request) {
   const preserveManual = body?.preserveManual !== false; // default true
 
   const result = await runConsolidados({ dryRun, preserveManual });
-  return NextResponse.json(result);
+  // Además, conciliar egresos a terceros (OUT banco ↔ EgresoMovement). Corre
+  // después porque excluye del pool los OUT ya conciliados contra Tesorería.
+  const egresos = await runEgresosTerceros({ dryRun, preserveManual });
+  return NextResponse.json({ ...result, egresos });
 }

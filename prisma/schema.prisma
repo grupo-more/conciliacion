@@ -112,6 +112,7 @@ model BankMovement {
   createdAt DateTime @default(now()) @map("created_at")
 
   consolidadoLinks    ConsolidadoLink[]
+  egresoConciliacionLinks EgresoConciliacionLink[]
 
   @@unique([accountId, dedupKey])
   @@index([accountId, postDate])
@@ -477,7 +478,44 @@ model EgresoMovement {
   rawJson        Json     @map("raw_json")
   syncedAt       DateTime @default(now()) @map("synced_at")
 
+  conciliacion   EgresoConciliacion?
+
   @@index([sucursalId, fecha])
   @@index([rubroId])
   @@index([fecha])
+}
+
+// Conciliación de un egreso operativo (EgresoMovement) contra movimiento(s) de
+// banco OUT a terceros. Espejo de Consolidado/ConsolidadoLink pero del lado
+// egresos. status: AUTO_MATCHED | SUGGESTED | MANUAL | NO_MATCH.
+model EgresoConciliacion {
+  id               String   @id @default(uuid())
+  egresoMovementId String   @unique @map("egreso_movement_id")
+  egresoMovement   EgresoMovement @relation(fields: [egresoMovementId], references: [id], onDelete: Cascade)
+
+  status     String
+  matchType  String?  @map("match_type")
+  score      Int?
+  // bankMovementIds propuestos por el motor en SUGGESTED (no vinculados).
+  proposalJson Json?  @map("proposal_json")
+  notes      String?  @db.Text
+
+  matchedAt DateTime @default(now()) @map("matched_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  links EgresoConciliacionLink[]
+
+  @@index([status])
+}
+
+model EgresoConciliacionLink {
+  id             String @id @default(uuid())
+  conciliacionId String @map("conciliacion_id")
+  conciliacion   EgresoConciliacion @relation(fields: [conciliacionId], references: [id], onDelete: Cascade)
+  bankMovementId String @map("bank_movement_id")
+  bankMovement   BankMovement @relation(fields: [bankMovementId], references: [id], onDelete: Cascade)
+
+  @@unique([conciliacionId, bankMovementId])
+  @@index([bankMovementId])
 }

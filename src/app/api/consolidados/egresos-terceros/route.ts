@@ -35,6 +35,23 @@ export async function GET(req: Request) {
 
   const entidades = await loadEntidadesInternas(prisma);
 
+  // Propuestas SUGGESTED del motor de egresos: no crean link, pero apuntan a
+  // movimiento(s) de banco vía proposalJson. Las indexamos por bankMovementId
+  // para badgear el OUT como "sugerido" aunque no esté vinculado.
+  const suggested = await prisma.egresoConciliacion.findMany({
+    where: { status: "SUGGESTED" },
+    select: {
+      score: true,
+      proposalJson: true,
+      egresoMovement: { select: { externalId: true, glosa: true, monto: true, rubroNombre: true } },
+    },
+  });
+  const suggByBm = new Map<string, (typeof suggested)[number]>();
+  for (const s of suggested) {
+    const ids = (s.proposalJson as { bankMovementIds?: string[] } | null)?.bankMovementIds ?? [];
+    for (const id of ids) if (!suggByBm.has(id)) suggByBm.set(id, s);
+  }
+
   const movements = await prisma.bankMovement.findMany({
     where: {
       direction: "OUT",
@@ -55,7 +72,7 @@ export async function GET(req: Request) {
           alias: true,
         },
       },
-      // Estado de conciliacion contra el egreso de Dynatech, si existe.
+      // Estado de conciliacion contra el egreso de Dynatech (Tesorería), si existe.
       consolidadoLinks: {
         select: {
           consolidado: {
@@ -63,6 +80,21 @@ export async function GET(req: Request) {
               status: true,
               matchType: true,
               tesoreriaMovement: { select: { externalId: true } },
+            },
+          },
+        },
+        take: 1,
+      },
+      // Conciliacion contra gasto operativo (EgresoMovement), si existe.
+      egresoConciliacionLinks: {
+        select: {
+          conciliacion: {
+            select: {
+              status: true,
+              score: true,
+              egresoMovement: {
+                select: { externalId: true, glosa: true, monto: true, rubroNombre: true },
+              },
             },
           },
         },
@@ -124,6 +156,28 @@ export async function GET(req: Request) {
         }
       : null;
 
+    const eConc = bm.egresoConciliacionLinks[0]?.conciliacion ?? null;
+    const sugg = !eConc ? suggByBm.get(bm.id) : null;
+    const egresoConciliacion = eConc
+      ? {
+          status: eConc.status,
+          score: eConc.score,
+          egresoExternalId: eConc.egresoMovement.externalId.toString(),
+          egresoGlosa: eConc.egresoMovement.glosa,
+          egresoMonto: eConc.egresoMovement.monto.toString(),
+          rubroNombre: eConc.egresoMovement.rubroNombre,
+        }
+      : sugg
+        ? {
+            status: "SUGGESTED",
+            score: sugg.score,
+            egresoExternalId: sugg.egresoMovement.externalId.toString(),
+            egresoGlosa: sugg.egresoMovement.glosa,
+            egresoMonto: sugg.egresoMovement.monto.toString(),
+            rubroNombre: sugg.egresoMovement.rubroNombre,
+          }
+        : null;
+
     rows.push({
       id: bm.id,
       fecha: bm.postDate.toISOString(),
@@ -137,6 +191,7 @@ export async function GET(req: Request) {
       description: bm.description,
       quality: rowQuality,
       conciliacion,
+      egresoConciliacion,
     });
   }
 
@@ -197,6 +252,14 @@ interface EgresoTerceroRow {
     status: string;
     matchType: string | null;
     tesoreriaExternalId: string;
+  } | null;
+  egresoConciliacion: {
+    status: string;
+    score: number | null;
+    egresoExternalId: string;
+    egresoGlosa: string;
+    egresoMonto: string;
+    rubroNombre: string | null;
   } | null;
 }
 
