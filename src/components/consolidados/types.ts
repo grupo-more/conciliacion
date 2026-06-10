@@ -5,6 +5,7 @@ export type ConsolidadoStatus =
   | "REVIEW"
   | "NO_MATCH"
   | "OUT_OF_SCOPE"
+  | "ANULADO"
   | "UNPROCESSED";
 
 export interface AccountInfo {
@@ -49,6 +50,8 @@ export interface ConsolidadoRow {
   bancoSucursal: string | null;
   bancoDetectado: string | null;
   esExcepcion: boolean;
+  estadoActual?: string | null;
+  anulado?: boolean;
   glosa: string;
   folio: string;
   clienteName: string | null;
@@ -162,6 +165,7 @@ export interface RunResult {
   review: number;
   noMatch: number;
   outOfScope: number;
+  anulados: number;
   errors: number;
   ms: number;
 }
@@ -173,6 +177,7 @@ export const STATUS_LABELS: Record<ConsolidadoStatus, string> = {
   REVIEW: "Revisar",
   NO_MATCH: "Sin match",
   OUT_OF_SCOPE: "Fuera de scope",
+  ANULADO: "Anulado",
   UNPROCESSED: "Sin procesar",
 };
 
@@ -183,6 +188,7 @@ export const STATUS_ORDER: ConsolidadoStatus[] = [
   "REVIEW",
   "NO_MATCH",
   "OUT_OF_SCOPE",
+  "ANULADO",
   "UNPROCESSED",
 ];
 
@@ -193,5 +199,6 @@ export const STATUS_COLORS: Record<ConsolidadoStatus, string> = {
   REVIEW: "bg-orange-100 text-orange-800 border-orange-200",
   NO_MATCH: "bg-rose-100 text-rose-800 border-rose-200",
   OUT_OF_SCOPE: "bg-zinc-200 text-zinc-700 border-zinc-300",
+  ANULADO: "bg-purple-100 text-purple-800 border-purple-200",
   UNPROCESSED: "bg-sky-100 text-sky-800 border-sky-200",
 };

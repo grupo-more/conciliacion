@@ -35,6 +35,19 @@ const itemSchema = z.object({
   monto: z.number(),
 });
 
+// Estado del documento en origen (campo nuevo de la API, jun-2026). CAJ =
+// cajeado (valido), ANU = anulado. `anulado`=true marca la transicion CAJ->ANU
+// (se anulo despues de existir como valido); un doc que nace ANU trae
+// anulado=false. Todo opcional para robustez con payloads viejos.
+const estadoSchema = z
+  .object({
+    original: z.string().optional().nullable(),
+    actual: z.string().optional().nullable(),
+    anulado: z.boolean().optional().nullable(),
+  })
+  .optional()
+  .nullable();
+
 const rowSchema = z.object({
   // El payload viene anidado en `contexto`
   contexto: z.object({
@@ -45,6 +58,7 @@ const rowSchema = z.object({
     }),
     cajero: cajeroSchema,
     cliente: clienteSchema,
+    estado: estadoSchema,
   }),
   // documento es nullable a nivel root
   documento: z
@@ -250,6 +264,9 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
       fecha: parseTesoreriaDate(r.fecha),
       fechaCarga: r.fechaCarga ? parseTesoreriaDate(r.fechaCarga) : null,
       esExcepcion: r.esExcepcion ?? false,
+      estadoOriginal: r.contexto.estado?.original?.trim().toUpperCase() || null,
+      estadoActual: r.contexto.estado?.actual?.trim().toUpperCase() || null,
+      anulado: r.contexto.estado?.anulado ?? false,
       items: r.items as unknown as object,
       rawJson: r as unknown as object,
     };

@@ -33,6 +33,9 @@ export async function GET(req: Request) {
   const rubroBancoRaw = url.searchParams.get("rubroBanco");
   const rubroSucursalRaw = url.searchParams.get("rubroSucursal");
   const excepcionRaw = url.searchParams.get("excepcion");
+  // anulado: ausente/"0" => ocultar anulados (default); "1" => solo anulados;
+  // "all" => incluir todos.
+  const anuladoRaw = url.searchParams.get("anulado");
   const since = url.searchParams.get("since");
   const until = url.searchParams.get("until");
   const search = url.searchParams.get("q");
@@ -67,6 +70,9 @@ export async function GET(req: Request) {
   }
   if (excepcionRaw === "1") where.esExcepcion = true;
   else if (excepcionRaw === "0") where.esExcepcion = false;
+
+  if (anuladoRaw === "1") where.estadoActual = "ANU";
+  else if (anuladoRaw !== "all") where.estadoActual = { not: "ANU" };
 
   if (since || until) {
     where.fecha = {};

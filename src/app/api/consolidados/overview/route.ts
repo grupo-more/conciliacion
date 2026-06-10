@@ -51,15 +51,18 @@ export async function GET(req: Request) {
     REVIEW: 0,
     NO_MATCH: 0,
     OUT_OF_SCOPE: 0,
+    ANULADO: 0,
     UNPROCESSED: 0,
   };
   for (const c of countsRaw) counts[c.status] = c._count._all;
 
-  // Tesoreria sin Consolidado (no procesado) — también lo contamos
+  // Tesoreria sin Consolidado (no procesado) — también lo contamos. Los
+  // anulados no cuentan como pendiente aunque aún no tengan Consolidado.
   const unprocessed = await prisma.tesoreriaMovement.count({
     where: {
       fecha: { gte: range.start, lt: range.end },
       consolidado: null,
+      estadoActual: { not: "ANU" },
       ...(banco ? { banco: { contains: banco, mode: "insensitive" as const } } : {}),
     },
   });
@@ -147,6 +150,8 @@ export async function GET(req: Request) {
     bancoSucursal: t.bancoSucursal,
     bancoDetectado: t.bancoDetectado,
     esExcepcion: t.esExcepcion,
+    estadoActual: t.estadoActual,
+    anulado: t.anulado,
     glosa: t.glosa,
     folio: t.folio.toString(),
     clienteName: t.clienteName,

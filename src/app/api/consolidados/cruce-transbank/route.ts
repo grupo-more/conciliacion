@@ -27,7 +27,8 @@ export async function GET(req: Request) {
 
   const [posAll, settAll] = await Promise.all([
     prisma.tbkTesoreria.findMany({
-      where: { fecha: { gte: from, lt: to } },
+      // Ventas POS anuladas en origen quedan fuera del cruce.
+      where: { fecha: { gte: from, lt: to }, estadoActual: { not: "ANU" } },
       orderBy: { fecha: "desc" },
     }),
     prisma.transbankSale.findMany({

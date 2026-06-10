@@ -24,6 +24,16 @@ const recordSchema = z.object({
       .object({ id: z.string().optional().nullable(), nombre: z.string().optional().nullable() })
       .optional()
       .nullable(),
+    // Estado del documento en origen (jun-2026). CAJ = valido, ANU = anulado.
+    // anulado=true => transicion CAJ->ANU. Ver src/lib/tesoreria/sync.ts.
+    estado: z
+      .object({
+        original: z.string().optional().nullable(),
+        actual: z.string().optional().nullable(),
+        anulado: z.boolean().optional().nullable(),
+      })
+      .optional()
+      .nullable(),
   }),
   glosa: z.string().optional().default(""),
   fecha: z.string(),
@@ -154,6 +164,9 @@ export async function runTbkTesoreriaSync(): Promise<TbkSyncResult> {
           tipo: r.tipo ?? "TBK",
           clienteName: r.cliente?.nombre?.trim() || null,
           clienteRut: clienteDoc ? normalizeRut(clienteDoc) : null,
+          estadoOriginal: r.contexto.estado?.original?.trim().toUpperCase() || null,
+          estadoActual: r.contexto.estado?.actual?.trim().toUpperCase() || null,
+          anulado: r.contexto.estado?.anulado ?? false,
           fechaCarga: r.fechaCarga ? parseDate(r.fechaCarga) : null,
           rawJson: r as unknown as object,
         };

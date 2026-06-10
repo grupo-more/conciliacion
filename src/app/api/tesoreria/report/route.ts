@@ -255,7 +255,10 @@ function buildWhere(url: URL): Prisma.TesoreriaMovementWhereInput {
   const until = url.searchParams.get("until");
   const search = url.searchParams.get("q");
 
-  const where: Prisma.TesoreriaMovementWhereInput = {};
+  const where: Prisma.TesoreriaMovementWhereInput = {
+    // Anulados en origen no entran al reporte de flujos rubro/banco.
+    estadoActual: { not: "ANU" },
+  };
   if (sucursalId) {
     const n = parseInt(sucursalId, 10);
     if (!Number.isNaN(n)) where.sucursalId = n;

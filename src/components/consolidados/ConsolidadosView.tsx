@@ -234,6 +234,7 @@ export function ConsolidadosView() {
               {runResult.autoMatched} conciliados auto · {runResult.suggested} sugeridos ·{" "}
               {runResult.review} a revisar · {runResult.noMatch} sin match ·{" "}
               {runResult.outOfScope} fuera de scope
+              {runResult.anulados > 0 ? ` · ${runResult.anulados} anulados` : ""}
               {runResult.errors > 0 ? ` · ${runResult.errors} errores` : ""}
             </div>
           )}
@@ -424,6 +425,16 @@ function Row({
         >
           {STATUS_LABELS[status]}
         </span>
+        {/* Anulado en origen pero con status conciliado (MANUAL preservado):
+            alerta de que el lado banco quedó sin contraparte válida. */}
+        {row.estadoActual === "ANU" && status !== "ANULADO" && (
+          <span
+            className="ml-1 inline-block rounded-full bg-purple-100 text-purple-800 border border-purple-200 text-[10px] px-1.5 py-0.5 font-bold"
+            title="El movimiento de tesorería está anulado en origen"
+          >
+            ⚠ ANULADO
+          </span>
+        )}
       </td>
       <td className="px-3 py-2 text-right font-mono text-xs">
         {row.consolidado?.score ?? "—"}

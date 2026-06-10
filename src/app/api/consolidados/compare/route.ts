@@ -139,6 +139,8 @@ export async function GET(req: Request) {
   const tesoreriaWhere = {
     fecha: { gte: since, lte: until },
     tipoOperacion: "INGRESO",
+    // Anulados en origen no son candidatos para comparar/conciliar.
+    estadoActual: { not: "ANU" },
     ...(banco ? { banco } : {}),
     ...(onlyUnmatched
       ? {

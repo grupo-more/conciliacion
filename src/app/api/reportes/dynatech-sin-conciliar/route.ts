@@ -42,6 +42,8 @@ export async function GET(req: Request) {
   const movements = await prisma.tesoreriaMovement.findMany({
     where: {
       fecha: { gte: from, lt: to },
+      // Anulados en origen quedan fuera de "sin conciliar".
+      estadoActual: { not: "ANU" },
       ...(bancoFilter ? { banco: bancoFilter } : {}),
       ...(tipoFilter === "INGRESO" || tipoFilter === "EGRESO"
         ? { tipoOperacion: tipoFilter }

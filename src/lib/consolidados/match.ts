@@ -124,6 +124,7 @@ export interface RunSummary {
   review: number;
   noMatch: number;
   outOfScope: number;
+  anulados: number; // movimientos anulados en origen (estadoActual=ANU)
   splits: number;
   exceptions: number; // matches con account mismatch
   errors: number;
@@ -587,6 +588,7 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
     review: 0,
     noMatch: 0,
     outOfScope: 0,
+    anulados: 0,
     splits: 0,
     exceptions: 0,
     errors: 0,
@@ -594,25 +596,42 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
   };
 
   // 1) Cargar todo lo necesario
-  const [aliases, allAccounts, allBms, allTesorerias, manualConsolidados] =
-    await Promise.all([
-      prisma.bankAccountAlias.findMany({ include: { account: true } }),
-      prisma.bankAccount.findMany({ where: { active: true } }),
-      prisma.bankMovement.findMany({
-        // IN para conciliar ingresos, OUT para egresos. Se rutea por cuenta +
-        // direccion mas abajo segun tipoOperacion de cada Tesoreria.
-        where: { direction: { in: ["IN", "OUT"] } },
-        include: { account: true },
-        orderBy: { postDate: "asc" },
-      }),
-      prisma.tesoreriaMovement.findMany({ orderBy: { fecha: "asc" } }),
-      preserveManual
-        ? prisma.consolidado.findMany({
-            where: { status: "MANUAL" },
-            include: { links: true },
-          })
-        : Promise.resolve([]),
-    ]);
+  const [
+    aliases,
+    allAccounts,
+    allBms,
+    allTesorerias,
+    manualConsolidados,
+    previouslyLinked,
+  ] = await Promise.all([
+    prisma.bankAccountAlias.findMany({ include: { account: true } }),
+    prisma.bankAccount.findMany({ where: { active: true } }),
+    prisma.bankMovement.findMany({
+      // IN para conciliar ingresos, OUT para egresos. Se rutea por cuenta +
+      // direccion mas abajo segun tipoOperacion de cada Tesoreria.
+      where: { direction: { in: ["IN", "OUT"] } },
+      include: { account: true },
+      orderBy: { postDate: "asc" },
+    }),
+    prisma.tesoreriaMovement.findMany({ orderBy: { fecha: "asc" } }),
+    preserveManual
+      ? prisma.consolidado.findMany({
+          where: { status: "MANUAL" },
+          include: { links: true },
+        })
+      : Promise.resolve([]),
+    // Snapshot pre-wipe: movimientos que YA estaban conciliados con link real
+    // (AUTO_MATCHED o MANUAL). Siguen vivos en BD hasta el wipe de esta corrida.
+    // Se usa para alertar si un movimiento ahora anulado estaba conciliado.
+    prisma.consolidado.findMany({
+      where: { status: { in: ["AUTO_MATCHED", "MANUAL"] } },
+      select: { tesoreriaMovementId: true },
+    }),
+  ]);
+
+  const previouslyLinkedTids = new Set(
+    previouslyLinked.map((c) => c.tesoreriaMovementId)
+  );
 
   // Indices
   const aliasMap = new Map<string, BankAccount>();
@@ -665,11 +684,22 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
   // contra cartolas porque su monto es solo una porción del depósito real,
   // y un EXACT/SPLIT contra un BM completo sería un falso positivo.
   const multiPartTids = new Set<string>();
+  // Movimientos anulados en origen (estadoActual=ANU): fuera del motor. No
+  // generan candidatos ni links; se persisten como status ANULADO. Tiene
+  // prioridad sobre cualquier otra clasificacion (un anulado no se concilia
+  // aunque tuviera alias o fuera multipart/excepcion).
+  const anuladoTids = new Set<string>();
 
   const processable = allTesorerias.filter((t) => !manualTesoreriaIds.has(t.id));
   summary.processed = processable.length;
 
   for (const t of processable) {
+    // Anulado => fuera de conciliacion (antes que nada).
+    if (t.estadoActual === "ANU") {
+      anuladoTids.add(t.id);
+      continue;
+    }
+
     // Sin alias => OUT_OF_SCOPE
     const aliasAccount = t.banco ? aliasMap.get(t.banco) : undefined;
     if (!aliasAccount) {
@@ -733,6 +763,28 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
 
           // Crear Consolidados nuevos
           for (const t of processable) {
+            // Caso 0: ANULADO. El movimiento esta anulado en origen. Se excluye
+            // de conciliacion; se alerta si se anulo DESPUES de existir como
+            // valido (anulado=true) y especialmente si ya estaba conciliado.
+            if (anuladoTids.has(t.id)) {
+              const notes =
+                t.anulado && previouslyLinkedTids.has(t.id)
+                  ? "⚠ ANULADO tras conciliar: el movimiento se anuló (CAJ→ANU) pero ya estaba conciliado. Revisar el abono bancario asociado."
+                  : t.anulado
+                  ? "Movimiento anulado (CAJ→ANU). Excluido de conciliación."
+                  : "Documento anulado en origen. Fuera de conciliación.";
+              await tx.consolidado.create({
+                data: {
+                  tesoreriaMovementId: t.id,
+                  status: "ANULADO",
+                  matchType: null,
+                  notes,
+                },
+              });
+              summary.anulados++;
+              continue;
+            }
+
             // Caso 1: OUT_OF_SCOPE
             if (outOfScopeTids.has(t.id)) {
               await tx.consolidado.create({
@@ -861,6 +913,10 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
   } else {
     // Dry run: contar lo que se haria sin escribir
     for (const t of processable) {
+      if (anuladoTids.has(t.id)) {
+        summary.anulados++;
+        continue;
+      }
       if (outOfScopeTids.has(t.id)) {
         summary.outOfScope++;
         continue;

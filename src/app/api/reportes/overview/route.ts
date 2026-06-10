@@ -37,6 +37,7 @@ export async function GET(req: Request) {
       by: ["tipoOperacion"],
       where: {
         fecha: { gte: from, lt: to },
+        estadoActual: { not: "ANU" },
         NOT: { consolidado: { status: { in: conciliado } } },
       },
       _count: { _all: true },

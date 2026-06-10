@@ -182,6 +182,7 @@ async function countVentasByStatus(start: Date, end: Date): Promise<VentasCounts
     FROM "TesoreriaMovement" t
     LEFT JOIN "Consolidado" c ON c.tesoreria_movement_id = t.id
     WHERE t.fecha >= ${start} AND t.fecha < ${end}
+      AND t.estado_actual IS DISTINCT FROM 'ANU'
       AND EXISTS (
         SELECT 1 FROM jsonb_array_elements(t.items) AS item
         WHERE (item->>'nombre') ILIKE 'Venta%'
