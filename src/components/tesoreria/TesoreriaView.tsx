@@ -13,7 +13,10 @@ import type {
 } from "./types";
 import { formatDateTime, formatMoney } from "@/lib/format";
 
-const SYNC_INTERVAL_MS = 30_000;
+// Refresco suave: relee de la BD (rápido, sin tocar la API externa). La
+// sincronización con Dynatech la hace el scheduler del servidor en segundo
+// plano (src/lib/sync/scheduler.ts), desacoplada de la navegación.
+const SOFT_REFRESH_MS = 20_000;
 
 type Tab = "list" | "report";
 
@@ -76,15 +79,19 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
     setStatus(data);
   }
 
-  async function loadMovements() {
-    setLoading(true);
+  // silent=true → refresco en segundo plano: no muestra spinner ni vacía la
+  // tabla; solo intercambia los datos cuando llegan (no interrumpe el flujo).
+  async function loadMovements(silent = false) {
+    if (!silent) setLoading(true);
     const params = buildParams();
     params.set("limit", "5000");
     try {
       const res = await fetch(`/api/tesoreria/movements?${params}`);
       if (!res.ok) {
-        setMovements([]);
-        setTotal(0);
+        if (!silent) {
+          setMovements([]);
+          setTotal(0);
+        }
         return;
       }
       const data: MovementsResponse = await res.json();
@@ -92,24 +99,24 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
       setTotal(data.total);
       setFacets(data.facets);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
-  async function loadReport() {
-    setLoadingReport(true);
+  async function loadReport(silent = false) {
+    if (!silent) setLoadingReport(true);
     const params = buildParams();
     params.set("groupBy", groupBy);
     try {
       const res = await fetch(`/api/tesoreria/report?${params}`);
       if (!res.ok) {
-        setReport(null);
+        if (!silent) setReport(null);
         return;
       }
       const data: ReportResponse = await res.json();
       setReport(data);
     } finally {
-      setLoadingReport(false);
+      if (!silent) setLoadingReport(false);
     }
   }
 
@@ -144,17 +151,27 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
     }
   }
 
-  // Carga inicial + auto-sync
+  // Carga inicial. El sync con la API externa ya NO se dispara acá: lo corre
+  // el scheduler del servidor en segundo plano. Solo cargamos de la BD.
   useEffect(() => {
     loadStatus();
     loadMovements();
-    doSync(false);
-    intervalRef.current = setInterval(() => doSync(false), SYNC_INTERVAL_MS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refresco suave periódico desde la BD (sin spinner, sin API externa). Se
+  // re-suscribe cuando cambian filtros/tab para usar siempre el query actual.
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      if (tab === "list") loadMovements(true);
+      else loadReport(true);
+      loadStatus();
+    }, SOFT_REFRESH_MS);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [tab, sucursalId, cajero, banco, rubroBanco, rubroSucursal, excepcion, anulado, since, until, search, groupBy]);
 
   useEffect(() => {
     if (tab === "list") loadMovements();

@@ -38,8 +38,8 @@ export function EgresoMovView() {
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
   const PAGE_SIZE = 500;
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
       if (from) p.set("since", from);
@@ -48,9 +48,10 @@ export function EgresoMovView() {
       if (rubroId) p.set("rubroId", rubroId);
       if (q) p.set("q", q);
       const res = await fetch(`/api/egresos/movements?${p}`);
-      setData(res.ok ? await res.json() : null);
+      if (res.ok) setData(await res.json());
+      else if (!silent) setData(null);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
@@ -58,7 +59,9 @@ export function EgresoMovView() {
 
   useEffect(() => {
     const t = setTimeout(load, 250);
-    return () => clearTimeout(t);
+    // Refresco suave desde la BD (el sync lo hace el scheduler del server).
+    const id = setInterval(() => load(true), 20_000);
+    return () => { clearTimeout(t); clearInterval(id); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to, sucursalId, rubroId, q, page]);
 

@@ -57,21 +57,25 @@ export function CruceTransbankView() {
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function load() {
-    setLoading(true);
+  async function load(silent = false) {
+    if (!silent) setLoading(true);
     try {
       const p = new URLSearchParams({ from, to });
       if (sucursalId) p.set("sucursalId", sucursalId);
       if (estado) p.set("estado", estado);
       const res = await fetch(`/api/consolidados/cruce-transbank?${p}`);
-      setData(res.ok ? await res.json() : null);
+      if (res.ok) setData(await res.json());
+      else if (!silent) setData(null);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => {
     load();
+    // Refresco suave desde la BD (el sync POS lo hace el scheduler del server).
+    const id = setInterval(() => load(true), 20_000);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to, sucursalId, estado]);
 

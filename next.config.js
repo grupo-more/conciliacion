@@ -50,6 +50,9 @@ const nextConfig = {
   // worker file si vive al lado de la libreria.
   experimental: {
     serverComponentsExternalPackages: ["pdf-parse", "pdfjs-dist"],
+    // Habilita src/instrumentation.ts (hook register() al arrancar el server).
+    // Lo usamos para el scheduler de sincronizacion en segundo plano.
+    instrumentationHook: true,
   },
   async headers() {
     return [
