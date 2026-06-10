@@ -23,10 +23,28 @@ interface Preview {
   error?: string;
 }
 
+type FileItem = {
+  id: string;
+  file: File;
+  status:
+    | "previewing"
+    | "previewed"
+    | "preview_error"
+    | "importing"
+    | "imported"
+    | "import_error";
+  preview?: Preview;
+  error?: string;
+  inserted?: { rowsInserted: number };
+};
+
+let __seq = 0;
+const nextId = () => `tbk${++__seq}`;
+
 /**
- * Modal para subir el reporte de Transbank "Abonos por dia" (.xls). Va a
- * /api/transbank/import (NO al importador de cartolas bancarias). Flujo:
- * seleccionar archivo -> preview (dryRun) -> confirmar.
+ * Modal para subir el/los reporte(s) de Transbank "Abonos por dia" (.xls). Va a
+ * /api/transbank/import (NO al importador de cartolas bancarias). Soporta carga
+ * masiva: seleccionar varios -> preview (dryRun) por archivo -> importar todos.
  */
 export function TransbankImportModal({
   onClose,
@@ -36,58 +54,104 @@ export function TransbankImportModal({
   onImported: () => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<Preview | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ rowsInserted: number } | null>(null);
+  const [items, setItems] = useState<FileItem[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [finished, setFinished] = useState(false);
 
-  async function runPreview(f: File) {
-    setLoading(true);
-    setError(null);
-    setPreview(null);
-    setDone(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", f);
-      const res = await fetch("/api/transbank/import?dryRun=1", { method: "POST", body: fd });
-      const j = await res.json();
-      if (!res.ok) setError(j.error || "No se pudo leer el archivo.");
-      else setPreview(j);
-    } catch {
-      setError("Error de red al leer el archivo.");
-    } finally {
-      setLoading(false);
-    }
+  function addFiles(files: FileList | File[]) {
+    const arr = Array.from(files);
+    if (arr.length === 0) return;
+    const newItems: FileItem[] = arr.map((f) => ({
+      id: nextId(),
+      file: f,
+      status: "previewing",
+    }));
+    setItems((prev) => [...prev, ...newItems]);
+    setFinished(false);
+    for (const it of newItems) void previewFor(it.id, it.file);
   }
 
-  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] ?? null;
-    setFile(f);
-    if (f) runPreview(f);
-  }
-
-  async function confirmImport() {
-    if (!file) return;
-    setLoading(true);
-    setError(null);
+  async function previewFor(id: string, file: File) {
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const res = await fetch("/api/transbank/import", { method: "POST", body: fd });
+      const res = await fetch("/api/transbank/import?dryRun=1", { method: "POST", body: fd });
       const j = await res.json();
       if (!res.ok) {
-        setError(j.error || "Error al importar.");
-      } else {
-        setDone({ rowsInserted: j.inserted?.rowsInserted ?? 0 });
-        onImported();
+        setItems((prev) =>
+          prev.map((it) =>
+            it.id === id
+              ? { ...it, status: "preview_error", error: j.error || "No se pudo leer el archivo." }
+              : it,
+          ),
+        );
+        return;
       }
+      setItems((prev) =>
+        prev.map((it) => (it.id === id ? { ...it, status: "previewed", preview: j } : it)),
+      );
     } catch {
-      setError("Error de red al importar.");
-    } finally {
-      setLoading(false);
+      setItems((prev) =>
+        prev.map((it) =>
+          it.id === id ? { ...it, status: "preview_error", error: "Error de red al leer el archivo." } : it,
+        ),
+      );
     }
   }
+
+  function removeItem(id: string) {
+    setItems((prev) => prev.filter((it) => it.id !== id));
+  }
+
+  async function importAll() {
+    const importable = items.filter(
+      (it) => it.status === "previewed" && it.preview && !it.preview.alreadyImported && it.preview.totals.toInsert > 0,
+    );
+    if (importable.length === 0) return;
+    setImporting(true);
+    let anyInserted = false;
+
+    for (const it of importable) {
+      setItems((prev) => prev.map((x) => (x.id === it.id ? { ...x, status: "importing" } : x)));
+      try {
+        const fd = new FormData();
+        fd.append("file", it.file);
+        const res = await fetch("/api/transbank/import", { method: "POST", body: fd });
+        const j = await res.json();
+        if (!res.ok) {
+          setItems((prev) =>
+            prev.map((x) =>
+              x.id === it.id ? { ...x, status: "import_error", error: j.error || "Error al importar." } : x,
+            ),
+          );
+          continue;
+        }
+        const rowsInserted = j.inserted?.rowsInserted ?? 0;
+        if (rowsInserted > 0) anyInserted = true;
+        setItems((prev) =>
+          prev.map((x) => (x.id === it.id ? { ...x, status: "imported", inserted: { rowsInserted } } : x)),
+        );
+      } catch {
+        setItems((prev) =>
+          prev.map((x) =>
+            x.id === it.id ? { ...x, status: "import_error", error: "Error de red al importar." } : x,
+          ),
+        );
+      }
+    }
+
+    setImporting(false);
+    setFinished(true);
+    if (anyInserted) onImported();
+  }
+
+  const previewing = items.filter((it) => it.status === "previewing").length;
+  const importableItems = items.filter(
+    (it) => it.status === "previewed" && it.preview && !it.preview.alreadyImported && it.preview.totals.toInsert > 0,
+  );
+  const totalToInsert = importableItems.reduce((acc, it) => acc + (it.preview?.totals.toInsert ?? 0), 0);
+  const totalInserted = items.reduce((acc, it) => acc + (it.inserted?.rowsInserted ?? 0), 0);
+  const importedCount = items.filter((it) => it.status === "imported").length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -96,8 +160,8 @@ export function TransbankImportModal({
           <div>
             <h2 className="text-lg font-semibold">Subir abonos Transbank</h2>
             <p className="text-sm text-text-muted mt-0.5">
-              Reporte "Abonos por día" de Transbank (.xls). Se cruza luego en
-              Consolidados → Cruce Transbank.
+              Reporte "Abonos por día" de Transbank (.xls). Podés seleccionar varios. Se cruza
+              luego en Consolidados → Cruce Transbank.
             </p>
           </div>
           <button onClick={onClose} className="text-text-muted hover:text-text">✕</button>
@@ -107,104 +171,128 @@ export function TransbankImportModal({
           ref={fileRef}
           type="file"
           accept=".xls,.xlsx"
-          onChange={onPick}
+          multiple
+          onChange={(e) => {
+            if (e.target.files) addFiles(e.target.files);
+            e.target.value = "";
+          }}
           className="hidden"
         />
 
-        <div className="mt-4">
-          <button onClick={() => fileRef.current?.click()} className="btn-ghost" disabled={loading}>
-            {file ? `Archivo: ${file.name}` : "Seleccionar archivo .xls"}
+        <div className="mt-4 flex items-center gap-3">
+          <button onClick={() => fileRef.current?.click()} className="btn-ghost" disabled={importing}>
+            {items.length === 0 ? "Seleccionar archivos .xls" : "+ Agregar más"}
           </button>
+          {items.length > 0 && (
+            <span className="text-sm text-text-muted">
+              {items.length} archivo{items.length === 1 ? "" : "s"}
+              {previewing > 0 && ` · analizando ${previewing}…`}
+            </span>
+          )}
         </div>
 
-        {loading && <p className="mt-3 text-sm text-text-muted">Procesando…</p>}
-        {error && (
-          <div className="mt-3 rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-sm text-rose-800">
-            {error}
-          </div>
-        )}
-
-        {done && (
+        {finished && (
           <div className="mt-3 rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm text-emerald-800">
-            ✓ Importado: {done.rowsInserted} venta{done.rowsInserted === 1 ? "" : "s"} nueva
-            {done.rowsInserted === 1 ? "" : "s"}.
+            ✓ Importado: {totalInserted} venta{totalInserted === 1 ? "" : "s"} nueva
+            {totalInserted === 1 ? "" : "s"} en {importedCount} archivo{importedCount === 1 ? "" : "s"}.
             <button onClick={onClose} className="ml-2 underline">cerrar</button>
           </div>
         )}
 
-        {preview && !done && (
-          <div className="mt-4 space-y-3">
-            <div className="text-sm text-text-muted">
-              Empresa RUT: <b>{preview.empresaRut ?? "—"}</b> · Cuenta abono:{" "}
-              <b>{preview.cuentaAbono ?? "—"}</b>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
-              <Stat label="Filas" value={preview.totals.fileRows} />
-              <Stat label="A insertar" value={preview.totals.toInsert} tone="ok" />
-              <Stat label="Duplicados" value={preview.totals.duplicates} />
-              <Stat label="Errores" value={preview.totals.parseErrors} tone={preview.totals.parseErrors ? "bad" : undefined} />
-            </div>
-            {preview.alreadyImported && (
-              <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
-                Este archivo ya fue importado el {formatDate(preview.alreadyImported.importedAt)}. No se reinsertará.
-              </div>
-            )}
+        {items.length > 0 && (
+          <div className="mt-4 space-y-2">
+            {items.map((it) => (
+              <FileRow
+                key={it.id}
+                item={it}
+                onRemove={!importing && !finished ? () => removeItem(it.id) : undefined}
+              />
+            ))}
+          </div>
+        )}
 
-            <div className="rounded-lg border border-border-soft overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-bg-soft text-text-muted uppercase tracking-wider">
-                  <tr>
-                    <th className="px-2 py-1.5 text-left">Fecha</th>
-                    <th className="px-2 py-1.5 text-left">Local</th>
-                    <th className="px-2 py-1.5 text-left">Medio</th>
-                    <th className="px-2 py-1.5 text-right">Bruto</th>
-                    <th className="px-2 py-1.5 text-right">Comisión</th>
-                    <th className="px-2 py-1.5 text-right">Neto</th>
-                    <th className="px-2 py-1.5 text-left">Boleta</th>
-                    <th className="px-2 py-1.5 text-left">Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {preview.sampleSales.map((s, i) => (
-                    <tr key={i} className="border-t border-border-soft/50">
-                      <td className="px-2 py-1 whitespace-nowrap">{formatDate(s.fechaVenta)}</td>
-                      <td className="px-2 py-1 max-w-[200px] truncate" title={s.nombreLocal}>
-                        {s.nombreLocal}
-                        {s.sucursalId == null && (
-                          <span className="ml-1 text-amber-600" title="Sucursal sin resolver (no afecta el cruce)">⚠</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-1">{s.medioPago}</td>
-                      <td className="px-2 py-1 text-right font-mono">${formatMoney(BigInt(s.montoVenta))}</td>
-                      <td className="px-2 py-1 text-right font-mono text-text-muted">${formatMoney(BigInt(s.comision))}</td>
-                      <td className="px-2 py-1 text-right font-mono">${formatMoney(BigInt(s.totalAbono))}</td>
-                      <td className="px-2 py-1 font-mono">{s.numeroBoleta ?? "—"}</td>
-                      <td className="px-2 py-1">
-                        <span className={s.status === "NEW" ? "text-emerald-700" : "text-text-muted"}>
-                          {s.status === "NEW" ? "Nuevo" : "Dup"}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <button onClick={onClose} className="btn-ghost">Cancelar</button>
-              <button
-                onClick={confirmImport}
-                disabled={loading || preview.totals.toInsert === 0}
-                className="btn-primary"
-              >
-                {preview.totals.toInsert === 0 ? "Nada por importar" : `Importar ${preview.totals.toInsert} ventas`}
-              </button>
-            </div>
+        {items.length > 0 && !finished && (
+          <div className="mt-4 flex justify-end gap-2 border-t border-border-soft pt-3">
+            <button onClick={onClose} className="btn-ghost">Cancelar</button>
+            <button
+              onClick={importAll}
+              disabled={importing || previewing > 0 || importableItems.length === 0}
+              className="btn-primary"
+            >
+              {importing
+                ? "Importando…"
+                : importableItems.length === 0
+                ? "Nada por importar"
+                : `Importar ${importableItems.length} archivo${importableItems.length === 1 ? "" : "s"} (${totalToInsert} ventas)`}
+            </button>
           </div>
         )}
       </div>
     </div>
   );
+}
+
+function FileRow({ item, onRemove }: { item: FileItem; onRemove?: () => void }) {
+  const { file, status, preview, error, inserted } = item;
+  return (
+    <div className="rounded-lg border border-border-soft bg-bg-soft/40 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium truncate" title={file.name}>{file.name}</div>
+          <StatusLine item={item} />
+        </div>
+        {onRemove && (
+          <button onClick={onRemove} className="text-text-muted hover:text-text text-xs shrink-0" title="Quitar">
+            ✕
+          </button>
+        )}
+      </div>
+
+      {status === "preview_error" && error && <div className="mt-1 text-xs text-rose-700">{error}</div>}
+      {status === "import_error" && error && <div className="mt-1 text-xs text-rose-700">{error}</div>}
+
+      {preview && !preview.alreadyImported && (
+        <div className="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+          <Stat label="Filas" value={preview.totals.fileRows} />
+          <Stat label={status === "imported" ? "Insertadas" : "A insertar"} value={status === "imported" ? (inserted?.rowsInserted ?? 0) : preview.totals.toInsert} tone="ok" />
+          <Stat label="Duplicados" value={preview.totals.duplicates} />
+          <Stat label="Errores" value={preview.totals.parseErrors} tone={preview.totals.parseErrors ? "bad" : undefined} />
+        </div>
+      )}
+      {preview?.alreadyImported && (
+        <div className="mt-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+          Ya importado el {formatDate(preview.alreadyImported.importedAt)}. No se reinsertará.
+        </div>
+      )}
+      {preview && (preview.empresaRut || preview.cuentaAbono) && (
+        <div className="mt-1 text-xs text-text-muted">
+          Empresa RUT: <b>{preview.empresaRut ?? "—"}</b> · Cuenta abono: <b>{preview.cuentaAbono ?? "—"}</b>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatusLine({ item }: { item: FileItem }) {
+  switch (item.status) {
+    case "previewing":
+      return <div className="text-xs text-text-muted">Analizando…</div>;
+    case "preview_error":
+      return <div className="text-xs text-rose-700">No se pudo procesar</div>;
+    case "importing":
+      return <div className="text-xs text-text-muted">Importando…</div>;
+    case "imported":
+      return <div className="text-xs text-emerald-700">✓ Importado · {item.inserted?.rowsInserted ?? 0} ventas</div>;
+    case "import_error":
+      return <div className="text-xs text-rose-700">Falló la importación</div>;
+    case "previewed": {
+      const p = item.preview;
+      if (!p) return null;
+      if (p.alreadyImported) return null;
+      if (p.totals.toInsert === 0) return <div className="text-xs text-text-muted">Sin ventas nuevas (todo duplicado)</div>;
+      return <div className="text-xs text-text-muted">{p.totals.toInsert} a insertar</div>;
+    }
+  }
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "ok" | "bad" }) {
