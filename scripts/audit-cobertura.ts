@@ -75,29 +75,34 @@ async function main() {
     chan[k] = chan[k] ?? { count: 0, monto: 0n };
     chan[k].count++; chan[k].monto += m;
   };
-  const conflicts: string[] = [];
+  const conflictsReal: string[] = [];
+  let expectedOverlap = 0; // uso-parcial ∩ traspaso (esperado, no es bug)
 
   for (const b of bms) {
     const m = abs(b.amount);
     // Qué canales aplican (para detectar solapamiento).
     const hits: string[] = [];
-    if (isUsoParcialAccount(b.account)) hits.push("no_relevante");
     if (b.consolidadoLinks.some((l) => l.consolidado && CONCILIADO.has(l.consolidado.status))) hits.push("motor");
     if (isTransbank(b)) hits.push("transbank");
     if (paired.has(b.id)) hits.push("traspaso");
+    if (isUsoParcialAccount(b.account)) hits.push("no_relevante");
     if (b.egresoConciliacionLinks.some((l) => l.conciliacion && CONCILIADO.has(l.conciliacion.status))) hits.push("egreso");
     if (isDifMenor(b, dif.threshold)) hits.push("dif_menor");
 
     if (hits.length > 1) {
-      conflicts.push(`  [${hits.join(" + ")}] ${b.postDate.toISOString().slice(0, 10)} ${b.direction} ${b.amount} ${b.account.bankName} "${(b.description || "").slice(0, 30)}"`);
+      const set = new Set(hits);
+      const isExpected = set.size === 2 && set.has("no_relevante") && set.has("traspaso");
+      if (isExpected) expectedOverlap++;
+      else conflictsReal.push(`  [${hits.join(" + ")}] ${b.postDate.toISOString().slice(0, 10)} ${b.direction} ${b.amount} ${b.account.bankName} "${(b.description || "").slice(0, 30)}"`);
     }
 
-    // Atribución con la MISMA prioridad que banco-compute.
+    // Atribución con la MISMA prioridad que banco-compute (traspaso antes que
+    // no_relevante: los traspasos de la cuenta de uso parcial SON relevantes).
     const channel =
-      hits.includes("no_relevante") ? "no_relevante"
-      : hits.includes("motor") ? "motor"
+      hits.includes("motor") ? "motor"
       : hits.includes("transbank") ? "transbank"
       : hits.includes("traspaso") ? "traspaso"
+      : hits.includes("no_relevante") ? "no_relevante"
       : hits.includes("egreso") ? "egreso"
       : hits.includes("dif_menor") ? "dif_menor"
       : "BRECHA";
@@ -117,9 +122,11 @@ async function main() {
   }
   console.log(`  ${"TOTAL".padEnd(13)} ${String(sum).padStart(5)}  ${sum === total ? "✓ cuadra" : `✗ DESCUADRE (esperado ${total})`}`);
 
-  console.log(`\n--- CONFLICTOS (movimiento en >1 canal): ${conflicts.length} ---`);
-  if (conflicts.length === 0) console.log("  ✓ ninguno (sin doble conteo)");
-  else conflicts.slice(0, 40).forEach((c) => console.log(c));
+  console.log(`\n--- SOLAPES ESPERADOS (uso parcial ∩ traspaso): ${expectedOverlap} ---`);
+  console.log("  (traspasos de la cuenta de uso parcial; cuentan como traspaso, ok)");
+  console.log(`\n--- CONFLICTOS REALES (solape no esperado): ${conflictsReal.length} ---`);
+  if (conflictsReal.length === 0) console.log("  ✓ ninguno (sin doble conteo)");
+  else conflictsReal.slice(0, 40).forEach((c) => console.log(c));
 
   // TESORERÍA
   const tms = await prisma.tesoreriaMovement.findMany({

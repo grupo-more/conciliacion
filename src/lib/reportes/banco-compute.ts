@@ -143,14 +143,6 @@ export async function computeBancoSinConciliar(
   for (const bm of all) {
     const abs = bm.amount < 0n ? -bm.amount : bm.amount;
 
-    // 0) Cuenta de uso parcial: solo sus traspasos importan (viven en Traspasos
-    // internos). TODO lo demas es "no relevante" → fuera de la brecha.
-    if (isUsoParcialAccount(bm.account)) {
-      noRelevanteCount++;
-      noRelevanteMonto += abs;
-      continue;
-    }
-
     // 1) Conciliado por el motor (link AUTO/MANUAL) → fuera de la brecha.
     const linkedOk = bm.consolidadoLinks.some(
       (l) => l.consolidado && conciliado.has(l.consolidado.status),
@@ -164,14 +156,25 @@ export async function computeBancoSinConciliar(
       continue;
     }
 
-    // 3) Par de traspaso interno → resuelto en Traspasos internos.
+    // 3) Par de traspaso interno → resuelto en Traspasos internos. Se chequea
+    // ANTES de uso parcial: en la cuenta de uso parcial (MORE CAPITAL) los
+    // traspasos SON lo relevante, así que cuentan como traspaso, no como "no
+    // relevante". El resto de esa cuenta cae en el paso siguiente.
     if (pairedIds.has(bm.id)) {
       resTraspasoCount++;
       resTraspasoMonto += abs;
       continue;
     }
 
-    // 4) Egreso a tercero conciliado (OUT ↔ gasto operativo) → resuelto en su tab.
+    // 4) Cuenta de uso parcial: el resto (no-traspaso) es "no relevante" →
+    // fuera de la brecha.
+    if (isUsoParcialAccount(bm.account)) {
+      noRelevanteCount++;
+      noRelevanteMonto += abs;
+      continue;
+    }
+
+    // 5) Egreso a tercero conciliado (OUT ↔ gasto operativo) → resuelto en su tab.
     const linkedEgreso = bm.egresoConciliacionLinks.some(
       (l) => l.conciliacion && conciliado.has(l.conciliacion.status),
     );
@@ -181,14 +184,14 @@ export async function computeBancoSinConciliar(
       continue;
     }
 
-    // 5) Dif menor (IN ≤ umbral) → tiene asiento propio en "Dif menor".
+    // 6) Dif menor (IN ≤ umbral) → tiene asiento propio en "Dif menor".
     if (isDifMenor(bm, difThreshold)) {
       resDifMenorCount++;
       resDifMenorMonto += abs;
       continue;
     }
 
-    // 6) Brecha real. Clasificar y aplicar filtros de fila.
+    // 7) Brecha real. Clasificar y aplicar filtros de fila.
     const esInterno = detectInterno(bm, entidades) !== null;
     const tag = bankTag(esInterno, bm.description, bm.counterpartyName);
 
