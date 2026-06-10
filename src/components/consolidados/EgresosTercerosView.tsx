@@ -5,6 +5,7 @@ import * as XLSX from "xlsx";
 import { formatDate, formatMoney } from "@/lib/format";
 import { ConciliacionBadge } from "./ConciliacionBadge";
 import { EgresoTerceroDetail } from "./EgresoTerceroDetail";
+import { EgresosTercerosAsiento } from "./EgresosTercerosAsiento";
 
 type Quality = "con_rut" | "solo_nombre" | "sin_info";
 
@@ -78,6 +79,7 @@ export function EgresosTercerosView() {
   const [data, setData] = useState<EgresosTercerosResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<EgresoTerceroRow | null>(null);
+  const [mode, setMode] = useState<"pendientes" | "conciliados">("pendientes");
 
   useEffect(() => {
     const h = setTimeout(() => setDebouncedSearch(search.trim()), 250);
@@ -168,6 +170,22 @@ export function EgresosTercerosView() {
 
   return (
     <div className="space-y-4">
+      {/* Toggle Pendientes / Conciliados (asiento) */}
+      <div className="inline-flex rounded-md border border-border-soft overflow-hidden text-sm">
+        <button
+          onClick={() => setMode("pendientes")}
+          className={`px-3 py-1.5 font-semibold ${mode === "pendientes" ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
+        >
+          Pendientes
+        </button>
+        <button
+          onClick={() => setMode("conciliados")}
+          className={`px-3 py-1.5 font-semibold ${mode === "conciliados" ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
+        >
+          Conciliados (asiento)
+        </button>
+      </div>
+
       {/* Filtros */}
       <div className="flex flex-wrap gap-2 items-center">
         <label className="flex items-center gap-1 text-sm">
@@ -200,6 +218,8 @@ export function EgresosTercerosView() {
             </option>
           ))}
         </select>
+        {mode === "pendientes" && (
+        <>
         <select
           value={quality}
           onChange={(e) => setQuality(e.target.value as Quality | "")}
@@ -244,9 +264,14 @@ export function EgresosTercerosView() {
         >
           Descargar Excel
         </button>
+        </>
+        )}
       </div>
 
-      {/* Tabla */}
+      {mode === "conciliados" ? (
+        <EgresosTercerosAsiento from={from} to={to} accountId={accountId} />
+      ) : (
+      /* Tabla */
       <div className="rounded-lg border border-border-soft bg-white overflow-hidden">
         {loading && (
           <div className="text-center py-8 text-sm text-text-muted">
@@ -350,6 +375,7 @@ export function EgresosTercerosView() {
           </div>
         )}
       </div>
+      )}
 
       {selected && (
         <EgresoTerceroDetail
