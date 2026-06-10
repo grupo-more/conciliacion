@@ -171,7 +171,95 @@ export async function GET(
     }
   }
 
+  // Propuesta persistida por el motor (SUGGESTED/REVIEW): los BankMovements que
+  // dieron el score. Se hidratan SIEMPRE (no dependen del recálculo en vivo),
+  // así el detalle muestra contra qué apunta el match aunque sea un split o el
+  // candidato ya no aparezca en la búsqueda en vivo.
+  let proposal: {
+    bankMovementIds: string[];
+    isSplit: boolean;
+    totalAmount: string;
+    score: number | null;
+    movements: Array<{
+      bankMovementId: string;
+      postDate: string;
+      amount: string;
+      description: string | null;
+      counterpartyName: string | null;
+      counterpartyRut: string | null;
+      score: number;
+      factors: Array<{ key: string; label: string; weight: number }>;
+      account: {
+        id: string;
+        bankName: string;
+        accountNumber: string;
+        displayNumber: string | null;
+        holderName: string;
+      };
+      linkedElsewhere: boolean;
+    }>;
+  } | null = null;
+
+  const rawProposal = t.consolidado?.proposalJson as
+    | { bankMovementIds?: unknown }
+    | null
+    | undefined;
+  const proposalIds = Array.isArray(rawProposal?.bankMovementIds)
+    ? (rawProposal!.bankMovementIds as string[])
+    : [];
+
+  if (proposalIds.length > 0) {
+    const pbms = await prisma.bankMovement.findMany({
+      where: { id: { in: proposalIds } },
+      include: {
+        account: true,
+        consolidadoLinks: { select: { consolidadoId: true } },
+      },
+    });
+    const byId = new Map(pbms.map((b) => [b.id, b]));
+    const ordered = proposalIds
+      .map((id) => byId.get(id))
+      .filter((b): b is (typeof pbms)[number] => !!b);
+    if (ordered.length > 0) {
+      const total = ordered.reduce((acc, b) => acc + b.amount, 0n);
+      proposal = {
+        bankMovementIds: ordered.map((b) => b.id),
+        isSplit: ordered.length > 1,
+        totalAmount: total.toString(),
+        score: t.consolidado?.score ?? null,
+        movements: ordered.map((bm) => {
+          const { score, factors } = scoreCandidate(t, bm);
+          return {
+            bankMovementId: bm.id,
+            postDate: bm.postDate.toISOString(),
+            amount: bm.amount.toString(),
+            description: bm.description,
+            counterpartyName: bm.counterpartyName,
+            counterpartyRut: bm.counterpartyRut,
+            score,
+            factors: factors.map((f) => ({
+              key: f.key as string,
+              label: f.label,
+              weight: f.weight,
+            })),
+            account: {
+              id: bm.account.id,
+              bankName: bm.account.bankName,
+              accountNumber: bm.account.accountNumber,
+              displayNumber: bm.account.displayNumber,
+              holderName: bm.account.holderName,
+            },
+            linkedElsewhere: bm.consolidadoLinks.some(
+              (l) => l.consolidadoId !== t.consolidado?.id,
+            ),
+          };
+        }),
+      };
+    }
+  }
+
   return NextResponse.json({
+    proposal,
     tesoreria: {
       id: t.id,
       externalId: t.externalId.toString(),

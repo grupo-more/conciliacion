@@ -838,6 +838,13 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
                     ? cand.bms[0].accountId
                     : aliasAccount.id,
                   notes,
+                  // SUGGESTED/REVIEW no vinculan, pero guardamos contra qué
+                  // movimiento(s) de banco apuntan para mostrarlo en el detalle
+                  // (incluye splits). AUTO no lo necesita: ya crea los links.
+                  proposalJson:
+                    cand.status === "AUTO_MATCHED"
+                      ? undefined
+                      : { bankMovementIds: cand.bms.map((bm) => bm.id) },
                 },
               });
 

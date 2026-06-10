@@ -299,6 +299,14 @@ model Consolidado {
   outOfScopeReason String? @db.Text @map("out_of_scope_reason")
   notes            String? @db.Text
 
+  // Candidato(s) que el motor PROPUSO para este match pero NO vinculó
+  // (SUGGESTED / REVIEW con candidato). Persistimos los bankMovementId que
+  // dieron el score, para mostrar SIEMPRE "contra qué apunta" en el detalle
+  // (incluye splits), sin depender de un recálculo en vivo. Forma:
+  // { "bankMovementIds": ["..."] }. Null para AUTO (que sí tiene links) y
+  // para REVIEW sin candidato (excepción/multipart).
+  proposalJson     Json?   @map("proposal_json")
+
   matchedAt DateTime @default(now()) @map("matched_at")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

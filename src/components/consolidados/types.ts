@@ -91,7 +91,35 @@ export interface CandidateDTO {
   duplicateCount?: number;
 }
 
+export interface ProposalMovement {
+  bankMovementId: string;
+  postDate: string;
+  amount: string;
+  description: string | null;
+  counterpartyName: string | null;
+  counterpartyRut: string | null;
+  score: number;
+  factors: Array<{ key: string; label: string; weight: number }>;
+  account: {
+    id: string;
+    bankName: string;
+    accountNumber: string;
+    displayNumber: string | null;
+    holderName: string;
+  };
+  linkedElsewhere: boolean;
+}
+
+export interface ProposalDTO {
+  bankMovementIds: string[];
+  isSplit: boolean;
+  totalAmount: string;
+  score: number | null;
+  movements: ProposalMovement[];
+}
+
 export interface DetailResponse {
+  proposal: ProposalDTO | null;
   tesoreria: {
     id: string;
     externalId: string;

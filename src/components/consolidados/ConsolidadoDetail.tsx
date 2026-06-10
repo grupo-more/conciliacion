@@ -21,6 +21,24 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
+  // Buscador manual de contraparte (para movimientos sin candidato).
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [searchExact, setSearchExact] = useState(true);
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<
+    Array<{
+      id: string;
+      postDate: string;
+      amount: string;
+      direction: string;
+      description: string | null;
+      counterpartyName: string | null;
+      counterpartyRut: string | null;
+      account: { bankName: string; holderName: string; displayNumber: string | null; accountNumber: string };
+      consolidado: { id: string; status: string } | null;
+    }>
+  >([]);
   // Necesario para createPortal: document no existe durante SSR de Next.
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -65,8 +83,65 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
     }
   }
 
+  // Vincula manualmente N movimientos de banco a esta tesorería (→ MANUAL).
+  // Sirve tanto para la propuesta del motor (1 o split) como para el buscador.
+  async function linkBankMovements(bankMovementIds: string[]) {
+    if (bankMovementIds.length === 0) return;
+    setActing(true);
+    try {
+      const res = await fetch("/api/consolidados/manual-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tesoreriaId, bankMovementIds }),
+      });
+      const j = await res.json().catch(() => null);
+      if (res.ok) {
+        await load();
+        onChanged();
+      } else {
+        alert(j?.error ?? j?.message ?? "No se pudo vincular");
+      }
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function runSearch() {
+    if (!data) return;
+    setSearching(true);
+    try {
+      const monto = BigInt(data.tesoreria.monto);
+      const direction = monto < 0n ? "OUT" : "IN";
+      const p = new URLSearchParams({ direction, limit: "50" });
+      if (searchQ.trim()) p.set("q", searchQ.trim());
+      if (searchExact) {
+        p.set("minAmount", monto.toString());
+        p.set("maxAmount", monto.toString());
+      }
+      const res = await fetch(`/api/bank-movements?${p}`);
+      if (res.ok) {
+        const j = await res.json();
+        setSearchResults(j.movements ?? []);
+      } else {
+        setSearchResults([]);
+      }
+    } finally {
+      setSearching(false);
+    }
+  }
+
   const status: ConsolidadoStatus = (data?.consolidado?.status ??
     "UNPROCESSED") as ConsolidadoStatus;
+
+  // Candidatos en vivo, sin repetir los que ya están en la propuesta del motor.
+  const proposalIdSet = new Set(data?.proposal?.bankMovementIds ?? []);
+  const otherCandidates = (data?.candidates ?? []).filter(
+    (c) => !proposalIdSet.has(c.bankMovementId),
+  );
+  // ¿Tiene sentido ofrecer vincular? (no para los ya conciliados ni anulados)
+  const canLink = !["AUTO_MATCHED", "MANUAL", "ANULADO"].includes(status);
+  const proposalLinkedElsewhere =
+    data?.proposal?.movements.some((m) => m.linkedElsewhere) ?? false;
 
   if (!mounted) return null;
 
@@ -262,14 +337,94 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
               </div>
             )}
 
-            {/* Candidatos */}
-            {data.candidates && data.candidates.length > 0 && (
+            {/* Sugerencia del motor (propuesta persistida, incluye splits) */}
+            {data.proposal && data.proposal.movements.length > 0 && (
               <div className="mt-5">
                 <h3 className="text-sm font-bold text-brand mb-2">
-                  Candidatos bancarios ({data.candidates.length})
+                  Sugerencia del motor
+                  {data.proposal.isSplit
+                    ? ` · split de ${data.proposal.movements.length} movimientos`
+                    : ""}
+                </h3>
+                <div className="rounded-md border border-brand/40 bg-brand/5 p-3 text-sm space-y-3">
+                  {data.proposal.movements.map((m) => (
+                    <div key={m.bankMovementId} className="border-b border-brand/10 pb-2 last:border-0 last:pb-0">
+                      <div className="flex justify-between items-start gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-semibold">
+                            {m.account.bankName} {m.account.holderName}{" "}
+                            <span className="text-xs text-text-muted font-normal">
+                              · {formatDate(m.postDate)}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-text-muted font-mono mt-0.5">
+                            {m.account.displayNumber || m.account.accountNumber}
+                          </div>
+                          <div className="text-xs text-text-muted mt-0.5 break-words">
+                            {m.description}
+                          </div>
+                          {m.counterpartyName && (
+                            <div className="text-xs mt-1">
+                              <span className="font-semibold">Contraparte:</span>{" "}
+                              {m.counterpartyName}
+                              {m.counterpartyRut && ` (${m.counterpartyRut})`}
+                            </div>
+                          )}
+                          {m.factors.length > 0 && (
+                            <div className="text-xs text-text-muted mt-2 flex flex-wrap gap-x-3 gap-y-0.5">
+                              {m.factors.map((f, i) => (
+                                <span key={i}>
+                                  <span className={f.weight >= 0 ? "text-emerald-700 font-semibold" : "text-rose-700 font-semibold"}>
+                                    {f.weight > 0 ? "+" : ""}{f.weight}
+                                  </span>{" "}
+                                  {f.label}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {m.linkedElsewhere && (
+                            <div className="text-xs text-warn mt-1">
+                              ⚠ Este movimiento ya está vinculado a otro consolidado. Desvinculalo allá antes.
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right font-mono font-bold whitespace-nowrap">
+                          {formatMoney(BigInt(m.amount))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="text-xs text-text-muted">
+                      Total propuesto:{" "}
+                      <strong className="font-mono">{formatMoney(BigInt(data.proposal.totalAmount))}</strong>
+                      {data.proposal.score != null && <> · Score {data.proposal.score}</>}
+                    </div>
+                    {canLink && (
+                      <button
+                        onClick={() => linkBankMovements(data.proposal!.bankMovementIds)}
+                        disabled={acting || proposalLinkedElsewhere}
+                        className="rounded-md bg-brand text-white text-xs font-semibold px-3 py-1.5 hover:opacity-90 disabled:opacity-50"
+                        title={proposalLinkedElsewhere ? "Hay un movimiento ya vinculado a otro consolidado" : undefined}
+                      >
+                        {data.proposal.isSplit
+                          ? `Vincular split (${data.proposal.movements.length})`
+                          : "Vincular"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Candidatos en vivo (alternativas) */}
+            {otherCandidates.length > 0 && (
+              <div className="mt-5">
+                <h3 className="text-sm font-bold text-brand mb-2">
+                  {data.proposal ? "Otros candidatos" : "Candidatos bancarios"} ({otherCandidates.length})
                 </h3>
                 <div className="space-y-2">
-                  {data.candidates.map((c) => {
+                  {otherCandidates.map((c) => {
                     const isLinked = data.consolidado?.links.some(
                       (l) => l.bankMovementId === c.bankMovementId
                     );
@@ -370,14 +525,106 @@ export function ConsolidadoDetail({ tesoreriaId, onClose, onChanged }: Props) {
                 {data.consolidado.outOfScopeReason ?? "Sin razón especificada"}
               </div>
             )}
-            {data.consolidado?.status === "NO_MATCH" &&
-              (!data.candidates || data.candidates.length === 0) && (
-                <div className="mt-5 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm">
-                  Sin candidatos en la cuenta bancaria resuelta dentro de la ventana ±7 días.
-                  Si la cartola correspondiente no se ha cargado todavía, súbela y vuelve a
-                  procesar.
-                </div>
-              )}
+            {/* Sin propuesta del motor ni candidatos en vivo → explicar por qué
+                y ofrecer el buscador manual. Cubre REVIEW (excepción/multipart),
+                SUGGESTED cuyo candidato ya no aplica, y NO_MATCH. */}
+            {canLink && !data.proposal && otherCandidates.length === 0 && (
+              <div className="mt-5 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                El motor no encontró una contraparte automática (monto exacto en
+                ±7 días en la cuenta resuelta). Suele pasar con depósitos a otro
+                banco (excepción), pagos divididos (split) o cartola aún no
+                cargada. Buscá el movimiento de banco manualmente abajo y
+                vinculalo, o subí la cartola y volvé a "Re-evaluar todo".
+              </div>
+            )}
+
+            {/* Buscador manual de contraparte */}
+            {canLink && (
+              <div className="mt-5">
+                <button
+                  onClick={() => {
+                    setSearchOpen((v) => !v);
+                    if (!searchOpen && searchResults.length === 0) void runSearch();
+                  }}
+                  className="text-sm font-semibold text-brand hover:underline"
+                >
+                  {searchOpen ? "▾" : "▸"} Buscar contraparte manualmente
+                </button>
+                {searchOpen && (
+                  <div className="mt-2 rounded-md border border-border-soft bg-bg-soft/40 p-3 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        type="text"
+                        value={searchQ}
+                        onChange={(e) => setSearchQ(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && runSearch()}
+                        placeholder="Glosa / contraparte / RUT…"
+                        className="flex-1 min-w-[180px] rounded-md border border-border-soft px-3 py-1.5 text-sm"
+                      />
+                      <label className="flex items-center gap-1 text-xs text-text-muted">
+                        <input
+                          type="checkbox"
+                          checked={searchExact}
+                          onChange={(e) => setSearchExact(e.target.checked)}
+                        />
+                        Monto exacto
+                      </label>
+                      <button
+                        onClick={() => runSearch()}
+                        disabled={searching}
+                        className="rounded-md bg-brand text-white text-xs font-semibold px-3 py-1.5 hover:opacity-90 disabled:opacity-50"
+                      >
+                        {searching ? "Buscando…" : "Buscar"}
+                      </button>
+                    </div>
+
+                    {searchResults.length === 0 && !searching && (
+                      <div className="text-xs text-text-muted">Sin resultados. Ajustá la búsqueda (probá destildar "Monto exacto").</div>
+                    )}
+
+                    <div className="space-y-2 max-h-72 overflow-y-auto">
+                      {searchResults.map((r) => {
+                        const linked = !!r.consolidado;
+                        return (
+                          <div key={r.id} className="rounded-md border border-border-soft bg-white p-2 text-sm flex justify-between items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold">
+                                {r.account.bankName} {r.account.holderName}{" "}
+                                <span className="text-xs text-text-muted font-normal">· {formatDate(r.postDate)} · {r.direction}</span>
+                              </div>
+                              <div className="text-[11px] text-text-muted font-mono">
+                                {r.account.displayNumber || r.account.accountNumber}
+                              </div>
+                              <div className="text-xs text-text-muted break-words">{r.description}</div>
+                              {r.counterpartyName && (
+                                <div className="text-xs mt-0.5">
+                                  <span className="font-semibold">Contraparte:</span> {r.counterpartyName}
+                                  {r.counterpartyRut && ` (${r.counterpartyRut})`}
+                                </div>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="font-mono font-bold whitespace-nowrap">{formatMoney(BigInt(r.amount))}</div>
+                              {linked ? (
+                                <div className="text-[11px] text-text-muted mt-1">ya vinculado</div>
+                              ) : (
+                                <button
+                                  onClick={() => linkBankMovements([r.id])}
+                                  disabled={acting}
+                                  className="mt-1 rounded-md bg-brand text-white text-xs font-semibold px-3 py-1 hover:opacity-90 disabled:opacity-50"
+                                >
+                                  Vincular
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Notas */}
             <div className="mt-5">
