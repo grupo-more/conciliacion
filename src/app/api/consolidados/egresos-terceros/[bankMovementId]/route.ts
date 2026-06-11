@@ -37,6 +37,11 @@ export async function GET(
         },
         take: 1,
       },
+      // Conciliación contra Tesorería (módulo principal), si ya existe.
+      consolidadoLinks: {
+        include: { consolidado: { include: { tesoreriaMovement: true } } },
+        take: 1,
+      },
     },
   });
   if (!bm) return NextResponse.json({ error: "Movimiento no encontrado" }, { status: 404 });
@@ -49,6 +54,21 @@ export async function GET(
   // Egreso actualmente vinculado a este BM (si lo hay).
   const linkedEgreso = bm.egresoConciliacionLinks[0]?.conciliacion?.egresoMovement ?? null;
   const linkedStatus = bm.egresoConciliacionLinks[0]?.conciliacion?.status ?? null;
+
+  // Tesorería ya conciliada contra este BM (módulo principal), si existe.
+  const cLink = bm.consolidadoLinks[0]?.consolidado ?? null;
+  const linkedTesoreria =
+    cLink && (cLink.status === "AUTO_MATCHED" || cLink.status === "MANUAL")
+      ? {
+          tesoreriaId: cLink.tesoreriaMovement.id,
+          externalId: cLink.tesoreriaMovement.externalId.toString(),
+          fecha: cLink.tesoreriaMovement.fecha.toISOString(),
+          monto: cLink.tesoreriaMovement.monto.toString(),
+          glosa: cLink.tesoreriaMovement.glosa,
+          banco: cLink.tesoreriaMovement.banco,
+          status: cLink.status,
+        }
+      : null;
 
   // Candidatos: egresos del mismo monto (cualquier signo) en ±7d, que NO estén
   // ya vinculados a OTRO movimiento de banco.
@@ -115,6 +135,59 @@ export async function GET(
       });
   }
 
+  // Candidatos de la OTRA fuente: movimientos de Tesorería (caja) del mismo
+  // monto (signo incluido, para que el match cuadre sin ajuste) en ±7d que NO
+  // estén ya conciliados a otra cuenta. Cubre el "porsiacaso busca en la otra
+  // API": pagos cross-banco que el motor principal dejó en SUGGESTED porque
+  // Tesorería trae un banco pero la plata salió por otro. Permite resolverlos
+  // sin salir de la tab. Sólo aplica si el BM no está ya conciliado.
+  let tesoreriaCandidates: Array<{
+    tesoreriaId: string;
+    externalId: string;
+    fecha: string;
+    monto: string;
+    glosa: string;
+    banco: string | null;
+    bancoDetectado: string | null;
+    clienteName: string | null;
+    consolidadoStatus: string | null;
+    proposedForThis: boolean;
+  }> = [];
+  if (!linkedEgreso && !linkedTesoreria) {
+    const tmsRaw = await prisma.tesoreriaMovement.findMany({
+      where: {
+        monto: bm.amount,
+        fecha: { gte: lower, lte: upper },
+        OR: [
+          { consolidado: null },
+          { consolidado: { status: { in: ["SUGGESTED", "REVIEW", "NO_MATCH", "OUT_OF_SCOPE"] } } },
+        ],
+      },
+      include: { consolidado: { select: { status: true, proposalJson: true } } },
+      orderBy: { fecha: "asc" },
+      take: 20,
+    });
+    tesoreriaCandidates = tmsRaw
+      .map((t) => {
+        const propIds =
+          (t.consolidado?.proposalJson as { bankMovementIds?: string[] } | null)?.bankMovementIds ?? [];
+        return {
+          tesoreriaId: t.id,
+          externalId: t.externalId.toString(),
+          fecha: t.fecha.toISOString(),
+          monto: t.monto.toString(),
+          glosa: t.glosa,
+          banco: t.banco,
+          bancoDetectado: t.bancoDetectado,
+          clienteName: t.clienteName,
+          consolidadoStatus: t.consolidado?.status ?? null,
+          proposedForThis: propIds.includes(bmId),
+        };
+      })
+      // El que el motor ya propuso para este OUT, primero.
+      .sort((a, b) => Number(b.proposedForThis) - Number(a.proposedForThis));
+  }
+
   return NextResponse.json({
     bankMovement: {
       id: bm.id,
@@ -141,7 +214,9 @@ export async function GET(
           status: linkedStatus,
         }
       : null,
+    linkedTesoreria,
     candidates,
     search,
+    tesoreriaCandidates,
   });
 }

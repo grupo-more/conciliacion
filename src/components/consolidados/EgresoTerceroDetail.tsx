@@ -17,6 +17,19 @@ interface EgresoCand {
   alreadyLinkedHere: boolean;
 }
 
+interface TesoreriaCand {
+  tesoreriaId: string;
+  externalId: string;
+  fecha: string;
+  monto: string;
+  glosa: string;
+  banco: string | null;
+  bancoDetectado: string | null;
+  clienteName: string | null;
+  consolidadoStatus: string | null;
+  proposedForThis: boolean;
+}
+
 interface DetailResp {
   bankMovement: {
     id: string;
@@ -36,8 +49,18 @@ interface DetailResp {
     rubroNombre: string | null;
     status: string | null;
   } | null;
+  linkedTesoreria: {
+    tesoreriaId: string;
+    externalId: string;
+    fecha: string;
+    monto: string;
+    glosa: string;
+    banco: string | null;
+    status: string;
+  } | null;
   candidates: EgresoCand[];
   search: EgresoCand[];
+  tesoreriaCandidates: TesoreriaCand[];
 }
 
 /** Detalle de un OUT a terceros para conciliarlo contra un gasto operativo. */
@@ -97,6 +120,26 @@ export function EgresoTerceroDetail({
         await load(q);
         onChanged();
       } else alert(j?.error ?? "No se pudo vincular");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  // Vincula este OUT contra un movimiento de Tesorería (módulo principal),
+  // resolviendo el cruce cross-banco sin salir de la tab.
+  async function linkTesoreria(tesoreriaId: string) {
+    setActing(true);
+    try {
+      const res = await fetch("/api/consolidados/manual-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tesoreriaId, bankMovementIds: [bankMovementId] }),
+      });
+      const j = await res.json().catch(() => null);
+      if (res.ok) {
+        await load(q);
+        onChanged();
+      } else alert(j?.error ?? "No se pudo vincular con Tesorería");
     } finally {
       setActing(false);
     }
@@ -177,15 +220,36 @@ export function EgresoTerceroDetail({
               </div>
             )}
 
+            {/* Ya conciliado contra Tesorería (módulo principal) */}
+            {data.linkedTesoreria && (
+              <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm mb-4">
+                <div className="font-semibold text-emerald-800">
+                  Conciliado con Tesorería ({data.linkedTesoreria.status})
+                </div>
+                <div className="text-xs mt-0.5">
+                  #{data.linkedTesoreria.externalId} · {data.linkedTesoreria.banco ?? "—"} · {data.linkedTesoreria.glosa}
+                </div>
+                <div className="text-xs text-text-muted">
+                  {formatDate(data.linkedTesoreria.fecha)} · {formatMoney(BigInt(data.linkedTesoreria.monto))}
+                </div>
+                <div className="text-xs text-text-muted mt-1">
+                  Para desvincular, hacelo desde el módulo principal de Consolidados.
+                </div>
+              </div>
+            )}
+
             {/* Candidatos por monto */}
-            {!data.linked && (
+            {!data.linked && !data.linkedTesoreria && (
               <div className="mb-4">
                 <h3 className="text-sm font-bold text-brand mb-2">
                   Gastos operativos candidatos ({data.candidates.length})
                 </h3>
                 {data.candidates.length === 0 && (
                   <p className="text-xs text-text-muted">
-                    No hay gastos operativos del mismo monto en ±7 días. Buscá manualmente abajo.
+                    No hay gastos operativos del mismo monto en ±7 días.
+                    {data.tesoreriaCandidates.length > 0
+                      ? " Mirá los movimientos de Tesorería más abajo, o buscá un gasto manualmente."
+                      : " Buscá manualmente abajo."}
                   </p>
                 )}
                 <div className="space-y-2">
@@ -196,7 +260,30 @@ export function EgresoTerceroDetail({
               </div>
             )}
 
+            {/* Candidatos de la OTRA fuente: Tesorería (cross-banco) */}
+            {!data.linked && !data.linkedTesoreria && data.tesoreriaCandidates.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-bold text-brand mb-2">
+                  Movimiento de Tesorería · otra fuente ({data.tesoreriaCandidates.length})
+                </h3>
+                <p className="text-xs text-text-muted mb-2">
+                  Mismo monto en ±7 días desde caja. Útil para pagos cross-banco que quedaron sin cuadrar.
+                </p>
+                <div className="space-y-2">
+                  {data.tesoreriaCandidates.map((t) => (
+                    <TesoreriaRow
+                      key={t.tesoreriaId}
+                      t={t}
+                      acting={acting}
+                      onLink={() => linkTesoreria(t.tesoreriaId)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Búsqueda manual */}
+            {!data.linkedTesoreria && (
             <div className="mt-2">
               <div className="flex items-center gap-2 mb-2">
                 <input
@@ -216,11 +303,55 @@ export function EgresoTerceroDetail({
                 ))}
               </div>
             </div>
+            )}
           </>
         )}
       </div>
     </div>,
     document.body,
+  );
+}
+
+function TesoreriaRow({
+  t,
+  acting,
+  onLink,
+}: {
+  t: TesoreriaCand;
+  acting: boolean;
+  onLink: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-border-soft bg-white p-2 text-sm flex justify-between items-start gap-2">
+      <div className="flex-1 min-w-0">
+        <div className="font-medium truncate">
+          #{t.externalId} · {t.banco ?? t.bancoDetectado ?? "—"}
+          {t.proposedForThis && (
+            <span className="ml-2 inline-block rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800 align-middle">
+              Sugerido por el motor
+            </span>
+          )}
+        </div>
+        <div className="text-xs text-text-muted truncate" title={t.glosa}>
+          {t.glosa}
+        </div>
+        <div className="text-xs text-text-muted">
+          {formatDate(t.fecha)}
+          {t.clienteName ? ` · ${t.clienteName}` : ""}
+          {t.consolidadoStatus ? ` · ${t.consolidadoStatus}` : ""}
+        </div>
+      </div>
+      <div className="text-right shrink-0">
+        <div className="font-mono font-bold whitespace-nowrap">{formatMoney(BigInt(t.monto))}</div>
+        <button
+          onClick={onLink}
+          disabled={acting}
+          className="mt-1 rounded-md bg-brand text-white text-xs font-semibold px-3 py-1 hover:opacity-90 disabled:opacity-50"
+        >
+          Vincular
+        </button>
+      </div>
+    </div>
   );
 }
 

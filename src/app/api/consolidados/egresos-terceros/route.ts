@@ -157,7 +157,11 @@ export async function GET(req: Request) {
       : null;
 
     const eConc = bm.egresoConciliacionLinks[0]?.conciliacion ?? null;
-    const sugg = !eConc ? suggByBm.get(bm.id) : null;
+    // Si el OUT ya está conciliado (AUTO/MANUAL) contra Tesorería, una
+    // propuesta SUGGESTED de gasto no debe pisar ese estado en el badge.
+    const tesoreriaConfirmed =
+      cLink?.status === "AUTO_MATCHED" || cLink?.status === "MANUAL";
+    const sugg = !eConc && !tesoreriaConfirmed ? suggByBm.get(bm.id) : null;
     const egresoConciliacion = eConc
       ? {
           status: eConc.status,
