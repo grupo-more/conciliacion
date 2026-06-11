@@ -19,6 +19,7 @@ import { CruceTransbankView } from "./CruceTransbankView";
 import { DifMenorView } from "./DifMenorView";
 import { EgresosTercerosView } from "./EgresosTercerosView";
 import { TraspasosInternosView } from "./TraspasosInternosView";
+import { AsientosManualesView } from "./AsientosManualesView";
 
 type Period = "day" | "week" | "month";
 type Tab =
@@ -29,7 +30,8 @@ type Tab =
   | "cruce-transbank"
   | "egresos-terceros"
   | "traspasos-internos"
-  | "dif-menor";
+  | "dif-menor"
+  | "asientos-manuales";
 
 export function ConsolidadosView() {
   const [tab, setTab] = useState<Tab>("list");
@@ -211,6 +213,12 @@ export function ConsolidadosView() {
           >
             Dif menor a 100
           </TabButton>
+          <TabButton
+            active={tab === "asientos-manuales"}
+            onClick={() => setTab("asientos-manuales")}
+          >
+            Asientos manuales
+          </TabButton>
         </nav>
       </div>
 
@@ -222,6 +230,7 @@ export function ConsolidadosView() {
       {tab === "egresos-terceros" && <EgresosTercerosView />}
       {tab === "traspasos-internos" && <TraspasosInternosView />}
       {tab === "dif-menor" && <DifMenorView />}
+      {tab === "asientos-manuales" && <AsientosManualesView />}
 
       {tab === "list" && (
         <>

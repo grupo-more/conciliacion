@@ -6,8 +6,9 @@ import { RubrosTab } from "./RubrosTab";
 import { BankAliasesTab } from "./BankAliasesTab";
 import { DifMenorTab } from "./DifMenorTab";
 import { EntidadesInternasTab } from "./EntidadesInternasTab";
+import { SucursalesTab } from "./SucursalesTab";
 
-type Tab = "perfil" | "rubros" | "aliases" | "dif-menor" | "entidades-internas";
+type Tab = "perfil" | "rubros" | "aliases" | "dif-menor" | "entidades-internas" | "sucursales";
 
 interface Props {
   user: { email: string; name: string | null };
@@ -45,6 +46,9 @@ export function ConfiguracionView({ user }: Props) {
           >
             Entidades internas
           </TabButton>
+          <TabButton active={tab === "sucursales"} onClick={() => setTab("sucursales")}>
+            Sucursales
+          </TabButton>
         </nav>
       </div>
 
@@ -54,6 +58,7 @@ export function ConfiguracionView({ user }: Props) {
         {tab === "aliases" && <BankAliasesTab />}
         {tab === "dif-menor" && <DifMenorTab />}
         {tab === "entidades-internas" && <EntidadesInternasTab />}
+        {tab === "sucursales" && <SucursalesTab />}
       </div>
     </div>
   );

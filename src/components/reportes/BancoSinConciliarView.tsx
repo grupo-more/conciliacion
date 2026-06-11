@@ -234,6 +234,7 @@ export function BancoSinConciliarView({
           data.resumen.resueltos.traspasos.count > 0 ||
           data.resumen.resueltos.egresos.count > 0 ||
           data.resumen.resueltos.difMenor.count > 0 ||
+          data.resumen.resueltos.asientoManual.count > 0 ||
           data.resumen.resueltos.noRelevante.count > 0) && (
           <div className="rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 px-3 py-2 text-xs space-y-0.5">
             <div className="font-semibold">
@@ -271,6 +272,15 @@ export function BancoSinConciliarView({
                 diferencia menor (
                 {formatMoney(BigInt(data.resumen.resueltos.difMenor.monto))}) →{" "}
                 <strong>Dif menor a 100</strong>
+              </div>
+            )}
+            {data.resumen.resueltos.asientoManual.count > 0 && (
+              <div>
+                ✓ {data.resumen.resueltos.asientoManual.count} movimiento
+                {data.resumen.resueltos.asientoManual.count === 1 ? "" : "s"} con
+                asiento manual (
+                {formatMoney(BigInt(data.resumen.resueltos.asientoManual.monto))}) →{" "}
+                <strong>Asientos manuales</strong>
               </div>
             )}
             {data.resumen.resueltos.noRelevante.count > 0 && (

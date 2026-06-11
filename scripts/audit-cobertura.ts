@@ -50,6 +50,7 @@ async function main() {
         account: true,
         consolidadoLinks: { select: { consolidado: { select: { status: true } } } },
         egresoConciliacionLinks: { select: { conciliacion: { select: { status: true } } } },
+        asientoManual: { select: { estado: true } },
       },
     }),
   ]);
@@ -88,6 +89,7 @@ async function main() {
     if (isUsoParcialAccount(b.account)) hits.push("no_relevante");
     if (b.egresoConciliacionLinks.some((l) => l.conciliacion && CONCILIADO.has(l.conciliacion.status))) hits.push("egreso");
     if (isDifMenor(b, dif.threshold)) hits.push("dif_menor");
+    if (b.asientoManual?.estado === "GENERADO") hits.push("asiento_manual");
 
     if (hits.length > 1) {
       const set = new Set(hits);
@@ -105,6 +107,7 @@ async function main() {
       : hits.includes("no_relevante") ? "no_relevante"
       : hits.includes("egreso") ? "egreso"
       : hits.includes("dif_menor") ? "dif_menor"
+      : hits.includes("asiento_manual") ? "asiento_manual"
       : "BRECHA";
     add(channel, m);
   }
@@ -116,7 +119,7 @@ async function main() {
   console.log(`AUDITORÍA DE COBERTURA — ${rangeLabel}`);
   console.log("=".repeat(64));
   console.log(`\n--- BANCO (${total} movimientos) ---`);
-  for (const k of ["motor", "transbank", "traspaso", "egreso", "dif_menor", "no_relevante", "BRECHA"]) {
+  for (const k of ["motor", "transbank", "traspaso", "egreso", "dif_menor", "asiento_manual", "no_relevante", "BRECHA"]) {
     const c = chan[k] ?? { count: 0, monto: 0n };
     console.log(`  ${k.padEnd(13)} ${String(c.count).padStart(5)}  $${c.monto.toString()}`);
   }

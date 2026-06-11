@@ -113,6 +113,7 @@ model BankMovement {
 
   consolidadoLinks    ConsolidadoLink[]
   egresoConciliacionLinks EgresoConciliacionLink[]
+  asientoManual       AsientoManual?
 
   @@unique([accountId, dedupKey])
   @@index([accountId, postDate])
@@ -518,4 +519,89 @@ model EgresoConciliacionLink {
 
   @@unique([conciliacionId, bankMovementId])
   @@index([bankMovementId])
+}
+
+// ====================== Asientos manuales (sin contraparte) ======================
+//
+// Movimientos de cartola que NO tienen contraparte en el sistema (no vienen de
+// Dynatech). El operador genera un asiento contable a mano desde la tab
+// "Asientos manuales" de Consolidados. Dos tipos:
+//   - PROVEEDOR: el pago (neto del banco) + retención de honorarios opcional
+//     forman el BRUTO, que se reparte (DEBE) por sucursal según headcount.
+//       DEBE  = Σ líneas por sucursal  = montoBruto
+//       HABER = banco (montoNeto) + retención (montoRetencion → rubro retención)
+//   - CLIENTE: por ahora solo queda PENDIENTE (sin reparto).
+// Generar el asiento marca el BankMovement como resuelto (sale de la brecha).
+
+// Maestro de sucursales para el prorrateo (centro de costo). headcount = Nº de
+// personas, puede ser fraccionado (ej. 1.5). Editable en Configuración. `codigo`
+// es el sucursalId que ya trae Dynatech (207, 202…); null para las sin código.
+model Sucursal {
+  id        String   @id @default(uuid())
+  codigo    Int?     @unique
+  nombre    String
+  headcount Decimal  @default(0) @db.Decimal(6, 2)
+  active    Boolean  @default(true)
+  orden     Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  lineas AsientoManualLinea[]
+
+  @@index([active])
+}
+
+model AsientoManual {
+  id             String       @id @default(uuid())
+  bankMovementId String       @unique @map("bank_movement_id")
+  bankMovement   BankMovement @relation(fields: [bankMovementId], references: [id], onDelete: Cascade)
+
+  tipo   String // PROVEEDOR | CLIENTE
+  estado String @default("GENERADO") // GENERADO | PENDIENTE (cliente)
+
+  // Montos en CLP. montoNeto = monto del banco (HABER banco). montoBruto =
+  // neto + retención = total del DEBE (lo repartido por sucursal).
+  montoNeto      BigInt   @map("monto_neto")
+  retencionTasa  Decimal? @map("retencion_tasa") @db.Decimal(7, 4) // % aplicado (snapshot)
+  montoRetencion BigInt   @default(0) @map("monto_retencion") // HABER retención
+  retencionRubro Int?     @map("retencion_rubro")
+  montoBruto     BigInt   @map("monto_bruto")
+
+  glosa String? @db.Text
+  notas String? @db.Text
+
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  lineas AsientoManualLinea[]
+
+  @@index([tipo])
+  @@index([estado])
+}
+
+model AsientoManualLinea {
+  id        String        @id @default(uuid())
+  asientoId String        @map("asiento_id")
+  asiento   AsientoManual @relation(fields: [asientoId], references: [id], onDelete: Cascade)
+  sucursalId String       @map("sucursal_id")
+  sucursal   Sucursal     @relation(fields: [sucursalId], references: [id])
+
+  // Snapshot al momento del asiento (la config puede cambiar después).
+  sucursalNombre String  @map("sucursal_nombre")
+  personas       Decimal @db.Decimal(6, 2)
+  porcentaje     Decimal @db.Decimal(7, 4) // ej. 14.0400
+  monto          BigInt // DEBE de esta sucursal
+
+  @@index([asientoId])
+  @@index([sucursalId])
+}
+
+// Settings del módulo (un único row): tasa de retención de honorarios vigente
+// (editable, varía por año) y rubro destino de la retención (default 26).
+model AsientoManualSettings {
+  id             String   @id @default("default")
+  retencionTasa  Decimal  @default(0) @map("retencion_tasa") @db.Decimal(7, 4)
+  retencionRubro Int      @default(26) @map("retencion_rubro")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 }

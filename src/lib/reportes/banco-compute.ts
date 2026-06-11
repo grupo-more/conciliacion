@@ -84,6 +84,8 @@ export async function computeBancoSinConciliar(
       egresoConciliacionLinks: {
         select: { conciliacion: { select: { status: true } } },
       },
+      // Asiento manual generado (módulo "Asientos manuales").
+      asientoManual: { select: { estado: true } },
     },
     orderBy: [{ postDate: "desc" }, { createdAt: "desc" }],
     take: TAKE,
@@ -128,6 +130,8 @@ export async function computeBancoSinConciliar(
   let resEgresoMonto = 0n;
   let resDifMenorCount = 0;
   let resDifMenorMonto = 0n;
+  let resAsientoCount = 0;
+  let resAsientoMonto = 0n;
   let noRelevanteCount = 0;
   let noRelevanteMonto = 0n;
   const porDireccion = mkAmountMap(["IN", "OUT"]);
@@ -188,6 +192,13 @@ export async function computeBancoSinConciliar(
     if (isDifMenor(bm, difThreshold)) {
       resDifMenorCount++;
       resDifMenorMonto += abs;
+      continue;
+    }
+
+    // 7) Asiento manual GENERADO (módulo "Asientos manuales") → resuelto.
+    if (bm.asientoManual?.estado === "GENERADO") {
+      resAsientoCount++;
+      resAsientoMonto += abs;
       continue;
     }
 
@@ -255,6 +266,7 @@ export async function computeBancoSinConciliar(
         traspasos: { count: resTraspasoCount, monto: resTraspasoMonto.toString() },
         egresos: { count: resEgresoCount, monto: resEgresoMonto.toString() },
         difMenor: { count: resDifMenorCount, monto: resDifMenorMonto.toString() },
+        asientoManual: { count: resAsientoCount, monto: resAsientoMonto.toString() },
         noRelevante: { count: noRelevanteCount, monto: noRelevanteMonto.toString() },
       },
       porDireccion: dumpAmountMap(porDireccion),

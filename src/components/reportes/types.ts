@@ -67,6 +67,7 @@ export interface BancoResponse {
       traspasos: AmountCell;
       egresos: AmountCell;
       difMenor: AmountCell;
+      asientoManual: AmountCell;
       noRelevante: AmountCell;
     };
     porDireccion: Record<string, AmountCell>;
