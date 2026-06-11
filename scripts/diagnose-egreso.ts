@@ -135,16 +135,26 @@ async function main() {
   // ----- 3) TesoreriaMovement que calzan el monto (módulo principal) -----
   const tms = await prisma.tesoreriaMovement.findMany({
     where: { monto: { in: [target, -target] } },
-    include: { consolidado: { select: { status: true } } },
+    include: { consolidado: { select: { status: true, proposalJson: true } } },
     orderBy: { fecha: "asc" },
   });
+  const bmById = new Map(allBms.map((bm) => [bm.id, bm]));
   const tmsF = tms.filter((t) => matchesText(t.glosa) || matchesText(t.clienteName));
   console.log(`\n--- 3) TESORERÍA (TesoreriaMovement) con monto ${clp(target)} : ${tmsF.length} ---`);
   console.log("    (estos NO se concilian en egresos a terceros, sino en el módulo principal)");
   for (const t of tmsF) {
-    console.log(`\n  • ${d(t.fecha)}  #${t.externalId}  banco: ${t.banco ?? "—"} / detectado: ${t.bancoDetectado ?? "—"}`);
+    console.log(`\n  • ${d(t.fecha)}  #${t.externalId}  banco: ${t.banco ?? "—"} / detectado: ${t.bancoDetectado ?? "—"}  esExcepcion=${t.esExcepcion}`);
     console.log(`    cliente: ${t.clienteName ?? "—"}  glosa: ${t.glosa}`);
     console.log(`    estado conc.: ${t.consolidado?.status ?? "SIN PROCESAR"}`);
+    const propIds = (t.consolidado?.proposalJson as { bankMovementIds?: string[] } | null)?.bankMovementIds ?? [];
+    for (const id of propIds) {
+      const bm = bmById.get(id);
+      console.log(
+        bm
+          ? `    → propone OUT ${d(bm.postDate)} ${bm.account.bankName} ${bm.account.displayNumber ?? bm.account.accountNumber} ${clp(absBig(bm.amount))} "${bm.counterpartyName ?? bm.description ?? ""}"`
+          : `    → propone bankMovementId ${id} (fuera del universo cargado)`,
+      );
+    }
   }
   if (tmsF.length === 0) console.log("  (ninguno)");
 
