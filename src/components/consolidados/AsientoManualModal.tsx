@@ -253,7 +253,7 @@ export function AsientoManualModal({
                 <div className="rounded-md border border-border-soft p-3">
                   <label className="flex items-center gap-2 text-sm font-semibold">
                     <input type="checkbox" checked={useRet} onChange={(e) => setUseRet(e.target.checked)} />
-                    Retención de honorarios (se suma encima del neto)
+                    Retención de honorarios (el banco es líquido → se calcula el bruto)
                   </label>
                   {useRet && (
                     <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
@@ -292,9 +292,9 @@ export function AsientoManualModal({
                   )}
                 </div>
 
-                {/* Totales */}
+                {/* Totales: Líquido (banco) → Retención → Bruto (lo que reparte la tabla) */}
                 <div className="grid grid-cols-3 gap-2 text-sm">
-                  <Box label="Neto (banco)" value={formatMoney(montoNeto)} />
+                  <Box label="Líquido (banco)" value={formatMoney(montoNeto)} />
                   <Box label="Retención" value={formatMoney(montoRetencion)} />
                   <Box label="Bruto a repartir" value={formatMoney(montoBruto)} strong />
                 </div>
@@ -409,12 +409,12 @@ function GeneradoView({
       <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm">
         <div className="font-semibold text-emerald-800">Asiento generado · {asiento.tipo}</div>
         <div className="text-xs text-text-muted mt-0.5">
-          Neto {formatMoney(BigInt(asiento.montoNeto))}
+          Líquido {formatMoney(BigInt(asiento.montoNeto))}
           {BigInt(asiento.montoRetencion) > 0n && (
             <> · Retención {formatMoney(BigInt(asiento.montoRetencion))}
               {asiento.retencionTasa ? ` (${asiento.retencionTasa}%)` : ""} → rubro {asiento.retencionRubro}</>
           )}
-          {" · "}Bruto {formatMoney(BigInt(asiento.montoBruto))}
+          {" · "}<strong>Bruto {formatMoney(BigInt(asiento.montoBruto))}</strong> (lo repartido)
         </div>
       </div>
       <table className="w-full text-sm">

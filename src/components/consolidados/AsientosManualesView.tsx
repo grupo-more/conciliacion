@@ -187,9 +187,11 @@ export function AsientosManualesView() {
                     <div className="text-xs text-text-muted">{a.counterpartyName || a.glosa || ""}</div>
                   </div>
                   <div className="text-right text-sm">
-                    <div className="font-mono font-bold">{formatMoney(BigInt(a.montoBruto))}</div>
+                    <div className="font-mono font-bold" title="Bruto (lo que se reparte)">{formatMoney(BigInt(a.montoBruto))}</div>
                     {BigInt(a.montoRetencion) > 0n && (
-                      <div className="text-xs text-text-muted">ret. {formatMoney(BigInt(a.montoRetencion))} → r{a.retencionRubro}</div>
+                      <div className="text-xs text-text-muted">
+                        líq. {formatMoney(BigInt(a.montoNeto))} · ret. {formatMoney(BigInt(a.montoRetencion))} → r{a.retencionRubro}
+                      </div>
                     )}
                   </div>
                 </div>

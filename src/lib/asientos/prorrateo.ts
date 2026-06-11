@@ -75,20 +75,33 @@ export function prorratear(
 }
 
 /**
- * Retención de honorarios: se calcula sobre el monto neto del banco y se SUMA
- * encima para formar el bruto. retencion = round(neto * tasa%), bruto = neto +
- * retencion.
+ * Retención de honorarios. El monto del banco es el LÍQUIDO (lo que recibe el
+ * profesional), NO el bruto. La retención del SII es un % del BRUTO (boleta),
+ * así que el bruto se obtiene haciendo "grossing up":
+ *
+ *   bruto      = liquido / (1 - tasa)
+ *   retencion  = bruto - liquido   (= bruto * tasa)
+ *
+ * Ej: liquido 100.000 a 15.25% → bruto 117.994, retención 17.994 (coincide con
+ * la calculadora de boletas del SII). NO es liquido * (1 + tasa).
  */
 export function calcRetencion(
-  montoNeto: bigint,
+  montoLiquido: bigint,
   tasaPct: number,
 ): { montoRetencion: bigint; montoBruto: bigint } {
   if (!tasaPct || tasaPct <= 0) {
-    return { montoRetencion: 0n, montoBruto: montoNeto };
+    return { montoRetencion: 0n, montoBruto: montoLiquido };
   }
-  // round(neto * tasa / 100) con bigint: (neto * tasaBp + 5000) / 10000, donde
-  // tasaBp = tasa * 100 (puntos básicos *100 → 4 decimales de tasa).
-  const tasaScaled = BigInt(Math.round(tasaPct * 10000)); // tasa% ×10^4
-  const montoRetencion = (montoNeto * tasaScaled + 500000n) / 1000000n;
-  return { montoRetencion, montoBruto: montoNeto + montoRetencion };
+  // bruto = round(liquido / (1 - tasa/100)) con bigint, escala 2 decimales de %.
+  // 1 - tasa/100 = (100 - tasa)/100 → bruto = liquido * 100 / (100 - tasa).
+  // Escalamos ×100 (centésimas de %): denom = 10000 - tasa*100.
+  const tasaScaled = BigInt(Math.round(tasaPct * 100)); // tasa% en centésimas
+  const denom = 10000n - tasaScaled;
+  if (denom <= 0n) {
+    // tasa >= 100% no tiene sentido; no aplicar retención.
+    return { montoRetencion: 0n, montoBruto: montoLiquido };
+  }
+  const montoBruto = (montoLiquido * 10000n + denom / 2n) / denom; // redondeo
+  const montoRetencion = montoBruto - montoLiquido;
+  return { montoRetencion, montoBruto };
 }
