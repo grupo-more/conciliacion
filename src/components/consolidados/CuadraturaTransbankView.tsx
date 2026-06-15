@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -14,6 +14,15 @@ interface AsientoLinea {
   debe: string | null;
   haber: string | null;
 }
+interface Movimiento {
+  fecha: string | null;
+  opBoleta: string | null;
+  medioPago: string | null;
+  dynatech: string;
+  transbank: string;
+  comision: string;
+  diferencia: string;
+}
 interface SucursalAsiento {
   sucursalId: number;
   sucursalName: string | null;
@@ -24,6 +33,7 @@ interface SucursalAsiento {
   diferencia: string;
   count: number;
   lineas: AsientoLinea[];
+  movimientos: Movimiento[];
 }
 interface Consolidacion {
   lineas: AsientoLinea[];
@@ -297,12 +307,21 @@ function PreviewBlock({
 
 function AsientoTable({ asiento }: { asiento: Asiento }) {
   const t = asiento.totals;
+  const [open, setOpen] = useState<Set<number>>(new Set());
+  const toggle = (id: number) =>
+    setOpen((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   return (
     <div className="space-y-5">
       {/* Asiento por sucursal */}
       <div className="rounded-xl border border-border-soft overflow-hidden">
         <div className="bg-bg-soft px-3 py-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-          Asiento por sucursal
+          Asiento por sucursal <span className="normal-case font-normal">· clic en la sucursal para ver los movimientos</span>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -316,33 +335,52 @@ function AsientoTable({ asiento }: { asiento: Asiento }) {
               </tr>
             </thead>
             <tbody>
-              {asiento.sucursales.map((s) =>
-                s.lineas.map((l, idx) => (
-                  <tr
-                    key={`${s.sucursalId}-${idx}`}
-                    className={"text-sm " + (idx === 0 ? "border-t-2 border-border-soft/80 bg-white" : "bg-bg-soft/30")}
-                  >
-                    <td className="px-3 py-1.5 whitespace-nowrap">
-                      {idx === 0 ? (
-                        <span>
-                          {s.sucursalName ?? `#${s.sucursalId}`}
-                          {s.sucursalCodigo != null && (
-                            <span className="ml-1 text-xs text-text-muted font-mono">({s.sucursalCodigo})</span>
+              {asiento.sucursales.map((s) => {
+                const isOpen = open.has(s.sucursalId);
+                return (
+                  <Fragment key={s.sucursalId}>
+                    {s.lineas.map((l, idx) => (
+                      <tr
+                        key={`${s.sucursalId}-${idx}`}
+                        className={
+                          "text-sm " +
+                          (idx === 0 ? "border-t-2 border-border-soft/80 bg-white" : "bg-bg-soft/30")
+                        }
+                      >
+                        <td className="px-3 py-1.5 whitespace-nowrap">
+                          {idx === 0 && (
+                            <button
+                              onClick={() => toggle(s.sucursalId)}
+                              className="inline-flex items-center gap-1.5 font-semibold hover:text-brand"
+                              title="Ver movimientos que componen este asiento"
+                            >
+                              <span className="text-text-muted">{isOpen ? "▾" : "▸"}</span>
+                              {s.sucursalName ?? `#${s.sucursalId}`}
+                              {s.sucursalCodigo != null && (
+                                <span className="text-xs text-text-muted font-mono">({s.sucursalCodigo})</span>
+                              )}
+                              <span className="text-xs text-text-muted font-normal">· {s.count} mov</span>
+                            </button>
                           )}
-                        </span>
-                      ) : (
-                        ""
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5 whitespace-nowrap font-mono">{l.rubro}</td>
-                    <td className="px-3 py-1.5 whitespace-nowrap">
-                      <SideBadge side={l.side} /> {l.detalle}
-                    </td>
-                    <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap">{money(l.debe)}</td>
-                    <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap">{money(l.haber)}</td>
-                  </tr>
-                )),
-              )}
+                        </td>
+                        <td className="px-3 py-1.5 whitespace-nowrap font-mono">{l.rubro}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">
+                          <SideBadge side={l.side} /> {l.detalle}
+                        </td>
+                        <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap">{money(l.debe)}</td>
+                        <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap">{money(l.haber)}</td>
+                      </tr>
+                    ))}
+                    {isOpen && (
+                      <tr className="bg-sky-50/40">
+                        <td colSpan={5} className="px-3 py-2">
+                          <MovimientosDetalle movimientos={s.movimientos} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                );
+              })}
             </tbody>
             <tfoot className="bg-bg-soft">
               <tr className="border-t-2 border-border-soft">
@@ -407,6 +445,51 @@ function AsientoTable({ asiento }: { asiento: Asiento }) {
           </table>
         </div>
       </div>
+    </div>
+  );
+}
+
+function MovimientosDetalle({ movimientos }: { movimientos: Movimiento[] }) {
+  if (movimientos.length === 0)
+    return <div className="text-xs text-text-muted">Sin detalle de movimientos guardado.</div>;
+  return (
+    <div className="rounded-lg border border-sky-200 bg-white overflow-hidden">
+      <table className="w-full text-xs">
+        <thead className="bg-sky-50 text-[10px] uppercase tracking-wider text-text-muted">
+          <tr>
+            <th className="px-2 py-1.5 text-left">Fecha</th>
+            <th className="px-2 py-1.5 text-left">OP / Boleta</th>
+            <th className="px-2 py-1.5 text-left">Medio</th>
+            <th className="px-2 py-1.5 text-right">Dynatech (bruto)</th>
+            <th className="px-2 py-1.5 text-right">Transbank (neto)</th>
+            <th className="px-2 py-1.5 text-right">Comisión</th>
+            <th className="px-2 py-1.5 text-right">Diferencia</th>
+          </tr>
+        </thead>
+        <tbody>
+          {movimientos.map((m, i) => {
+            const dif = BigInt(m.diferencia);
+            return (
+              <tr key={i} className="border-t border-sky-100">
+                <td className="px-2 py-1 whitespace-nowrap">{m.fecha ? formatDate(m.fecha) : "—"}</td>
+                <td className="px-2 py-1 whitespace-nowrap font-mono">{m.opBoleta ?? "—"}</td>
+                <td className="px-2 py-1 whitespace-nowrap">{m.medioPago ?? "—"}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{money(m.dynatech)}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{money(m.transbank)}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-text-muted">{money(m.comision)}</td>
+                <td
+                  className={
+                    "px-2 py-1 text-right font-mono whitespace-nowrap " +
+                    (dif !== 0n ? "text-amber-700 font-semibold" : "text-text-dim")
+                  }
+                >
+                  {dif !== 0n ? money(m.diferencia) : "—"}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }

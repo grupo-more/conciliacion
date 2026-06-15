@@ -5,7 +5,7 @@ import type { CuadraturaItemInput } from "./asiento";
 export interface PendingPair extends CuadraturaItemInput {
   tbkTesoreriaId: string;
   transbankSaleId: string;
-  fecha: Date; // fecha del POS (Dynatech)
+  fechaPos: Date; // fecha del POS (Dynatech), para el rango/snapshot
 }
 
 /**
@@ -64,7 +64,11 @@ export async function getPendingPairs(
       montoDynatech: p.pos.monto < 0n ? -p.pos.monto : p.pos.monto,
       montoTransbank: p.sett.totalAbono,
       montoComision: comision,
-      fecha: p.pos.fecha,
+      // Detalle por movimiento (para el desglose y el snapshot al generar).
+      fecha: p.pos.fecha.toISOString(),
+      opBoleta: p.pos.opNumber ?? p.sett.numeroBoleta ?? null,
+      medioPago: p.sett.medioPago ?? null,
+      fechaPos: p.pos.fecha,
     });
   }
   return out;

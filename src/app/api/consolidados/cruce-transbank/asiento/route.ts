@@ -44,6 +44,9 @@ export async function GET(req: Request) {
       montoDynatech: i.montoDynatech,
       montoTransbank: i.montoTransbank,
       montoComision: i.montoComision,
+      fecha: i.fecha ? i.fecha.toISOString() : null,
+      opBoleta: i.opBoleta,
+      medioPago: i.medioPago,
     }));
     return NextResponse.json({
       cuadratura: serializeCuadratura(cuad, cuad.items.length),
@@ -80,6 +83,9 @@ export async function GET(req: Request) {
     montoDynatech: p.montoDynatech,
     montoTransbank: p.montoTransbank,
     montoComision: p.montoComision,
+    fecha: p.fecha,
+    opBoleta: p.opBoleta,
+    medioPago: p.medioPago,
   }));
 
   // Facets de sucursal: las presentes en los pendientes del rango (sin filtro).
@@ -163,6 +169,9 @@ export async function POST(req: Request) {
           sucursalId: p.sucursalId,
           sucursalName: p.sucursalName,
           sucursalCodigo: p.sucursalCodigo,
+          fecha: p.fechaPos,
+          opBoleta: p.opBoleta,
+          medioPago: p.medioPago,
           montoDynatech: p.montoDynatech,
           montoTransbank: p.montoTransbank,
           montoComision: p.montoComision,

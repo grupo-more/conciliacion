@@ -662,6 +662,11 @@ model CuadraturaTransbankItem {
   sucursalName   String? @map("sucursal_name")
   sucursalCodigo Int?    @map("sucursal_codigo")
 
+  // Snapshot del detalle por movimiento (para el desglose auditable).
+  fecha     DateTime? @map("fecha")
+  opBoleta  String?   @map("op_boleta")  // OP del POS / N° boleta del settlement
+  medioPago String?   @map("medio_pago") // Débito/Crédito/Prepago
+
   montoDynatech  BigInt @map("monto_dynatech")  // bruto POS
   montoTransbank BigInt @map("monto_transbank") // total abono (neto)
   montoComision  BigInt @map("monto_comision")  // comisión + IVA comisión

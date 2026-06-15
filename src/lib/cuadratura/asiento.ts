@@ -25,6 +25,20 @@ export interface CuadraturaItemInput {
   montoDynatech: bigint; // bruto POS
   montoTransbank: bigint; // total abono (neto)
   montoComision: bigint; // comisión + IVA comisión
+  // Detalle por movimiento (para el desglose auditable). Opcional.
+  fecha?: string | null; // ISO
+  opBoleta?: string | null;
+  medioPago?: string | null;
+}
+
+export interface MovimientoDTO {
+  fecha: string | null;
+  opBoleta: string | null;
+  medioPago: string | null;
+  dynatech: string;
+  transbank: string;
+  comision: string;
+  diferencia: string; // dynatech − transbank − comisión (con signo)
 }
 
 export type AsientoSide = "DEBE" | "HABER";
@@ -48,6 +62,7 @@ export interface SucursalAsientoDTO {
   diferencia: string; // con signo
   count: number;
   lineas: AsientoLineaDTO[];
+  movimientos: MovimientoDTO[];
 }
 
 export interface ConsolidacionDTO {
@@ -87,6 +102,7 @@ export function buildCuadraturaAsiento(
       transbank: bigint;
       comision: bigint;
       count: number;
+      movimientos: MovimientoDTO[];
     }
   >();
 
@@ -101,13 +117,24 @@ export function buildCuadraturaAsiento(
         transbank: 0n,
         comision: 0n,
         count: 0,
+        movimientos: [],
       };
       groups.set(it.sucursalId, g);
     }
-    g.dynatech += abs(it.montoDynatech);
+    const dyn = abs(it.montoDynatech);
+    g.dynatech += dyn;
     g.transbank += it.montoTransbank;
     g.comision += it.montoComision;
     g.count += 1;
+    g.movimientos.push({
+      fecha: it.fecha ?? null,
+      opBoleta: it.opBoleta ?? null,
+      medioPago: it.medioPago ?? null,
+      dynatech: dyn.toString(),
+      transbank: it.montoTransbank.toString(),
+      comision: it.montoComision.toString(),
+      diferencia: (dyn - it.montoTransbank - it.montoComision).toString(),
+    });
     // El nombre/código pueden venir nulos en algún par; rellenamos si aparecen.
     if (!g.sucursalName && it.sucursalName) g.sucursalName = it.sucursalName;
     if (g.sucursalCodigo == null && it.sucursalCodigo != null) g.sucursalCodigo = it.sucursalCodigo;
@@ -191,6 +218,7 @@ export function buildCuadraturaAsiento(
       diferencia: diferencia.toString(),
       count: g.count,
       lineas,
+      movimientos: g.movimientos.sort((a, b) => (b.fecha ?? "").localeCompare(a.fecha ?? "")),
     };
   });
 
