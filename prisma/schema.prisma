@@ -605,3 +605,77 @@ model AsientoManualSettings {
   retencionRubro Int      @default(26) @map("retencion_rubro")
   updatedAt      DateTime @updatedAt @map("updated_at")
 }
+
+// ===========================================================================
+// Cuadratura Transbank (subtab "Conciliados (asiento)" de Cruce Transbank).
+//
+// Por cada sucursal se suman los movimientos CUADRADOS (POS/Dynatech ↔
+// settlement Transbank) y se arma un asiento de partida doble:
+//   HABER rubro 17  (ventas)     = Σ monto Dynatech (bruto POS)
+//   DEBE  rubro 200 (Tesorería)  = Σ total abono Transbank (neto)
+//   DEBE  rubro 708 (comisión)   = Σ comisión + IVA comisión
+//   DEBE  rubro 1403 (diferencia)= Σ Dynatech − Σ Transbank − Σ comisión  (tapón
+//                                  que cuadra el asiento; va al haber si es < 0)
+//
+// Generar una cuadratura PERSISTE los pares consumidos para que no se vuelvan a
+// considerar en la siguiente corrida (semanal, re-ejecutable). Ver memoria.
+// ===========================================================================
+
+model CuadraturaTransbank {
+  id    String   @id @default(uuid())
+  desde DateTime
+  hasta DateTime
+  glosa String?  @db.Text
+
+  // Snapshot de los rubros usados (la config puede cambiar después).
+  rubroVentas     Int @map("rubro_ventas")
+  rubroTesoreria  Int @map("rubro_tesoreria")
+  rubroComision   Int @map("rubro_comision")
+  rubroDiferencia Int @map("rubro_diferencia")
+
+  // Totales snapshot (CLP).
+  totalDynatech   BigInt @default(0) @map("total_dynatech")
+  totalTransbank  BigInt @default(0) @map("total_transbank")
+  totalComision   BigInt @default(0) @map("total_comision")
+  totalDiferencia BigInt @default(0) @map("total_diferencia")
+
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  items CuadraturaTransbankItem[]
+
+  @@index([createdAt])
+}
+
+// Un par POS↔settlement consumido por una cuadratura. La unicidad de cada lado
+// es lo que evita re-considerarlo. Sin FK a TbkTesoreria/TransbankSale a
+// propósito: el sync/import puede recrear filas; el filtrado es por id presente.
+model CuadraturaTransbankItem {
+  id           String              @id @default(uuid())
+  cuadraturaId String              @map("cuadratura_id")
+  cuadratura   CuadraturaTransbank @relation(fields: [cuadraturaId], references: [id], onDelete: Cascade)
+
+  tbkTesoreriaId  String @unique @map("tbk_tesoreria_id")
+  transbankSaleId String @unique @map("transbank_sale_id")
+
+  sucursalId     Int     @map("sucursal_id")
+  sucursalName   String? @map("sucursal_name")
+  sucursalCodigo Int?    @map("sucursal_codigo")
+
+  montoDynatech  BigInt @map("monto_dynatech")  // bruto POS
+  montoTransbank BigInt @map("monto_transbank") // total abono (neto)
+  montoComision  BigInt @map("monto_comision")  // comisión + IVA comisión
+
+  @@index([cuadraturaId])
+  @@index([sucursalId])
+}
+
+// Settings de un row: los 4 rubros del asiento de cuadratura (editables).
+model CuadraturaTransbankSettings {
+  id              String   @id @default("default")
+  rubroVentas     Int      @default(17) @map("rubro_ventas")
+  rubroTesoreria  Int      @default(200) @map("rubro_tesoreria")
+  rubroComision   Int      @default(708) @map("rubro_comision")
+  rubroDiferencia Int      @default(1403) @map("rubro_diferencia")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+}

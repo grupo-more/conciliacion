@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatMoney, formatDate } from "@/lib/format";
+import { CuadraturaTransbankView } from "./CuadraturaTransbankView";
 
 type Estado = "cuadrado" | "pos_sin_settlement" | "settlement_sin_pos";
 
@@ -51,6 +52,7 @@ export function CruceTransbankView() {
   const [to, setTo] = useState<string>(todayIso());
   const [sucursalId, setSucursalId] = useState<string>("");
   const [estado, setEstado] = useState<Estado | "">("");
+  const [mode, setMode] = useState<"movimientos" | "asiento">("movimientos");
 
   const [data, setData] = useState<CruceResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -105,6 +107,22 @@ export function CruceTransbankView() {
 
   return (
     <div className="space-y-4">
+      {/* Toggle Movimientos / Conciliados (asiento) */}
+      <div className="inline-flex rounded-md border border-border-soft overflow-hidden text-sm">
+        <button
+          onClick={() => setMode("movimientos")}
+          className={`px-3 py-1.5 font-semibold ${mode === "movimientos" ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
+        >
+          Movimientos
+        </button>
+        <button
+          onClick={() => setMode("asiento")}
+          className={`px-3 py-1.5 font-semibold ${mode === "asiento" ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
+        >
+          Conciliados (asiento)
+        </button>
+      </div>
+
       {/* Filtros + resumen (estilo egresos) */}
       <div className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
@@ -126,19 +144,21 @@ export function CruceTransbankView() {
             ))}
           </select>
         </label>
-        <label className="text-sm">
-          <span className="block text-text-muted">Estado</span>
-          <select value={estado} onChange={(e) => setEstado(e.target.value as Estado | "")} className="input">
-            <option value="">Todos</option>
-            <option value="cuadrado">Cuadrados</option>
-            <option value="pos_sin_settlement">Sin settlement</option>
-            <option value="settlement_sin_pos">Sin POS (cartola)</option>
-          </select>
-        </label>
+        {mode === "movimientos" && (
+          <label className="text-sm">
+            <span className="block text-text-muted">Estado</span>
+            <select value={estado} onChange={(e) => setEstado(e.target.value as Estado | "")} className="input">
+              <option value="">Todos</option>
+              <option value="cuadrado">Cuadrados</option>
+              <option value="pos_sin_settlement">Sin settlement</option>
+              <option value="settlement_sin_pos">Sin POS (cartola)</option>
+            </select>
+          </label>
+        )}
         <button onClick={onSyncPos} disabled={busy} className="btn-ghost text-sm">
           {busy ? "Sincronizando…" : "Sincronizar POS"}
         </button>
-        {k && (
+        {mode === "movimientos" && k && (
           <div className="ml-auto text-sm text-text-muted text-right leading-tight">
             <div>
               <b className="text-emerald-700">{k.cuadrados}</b> cuadrados ·{" "}
@@ -168,6 +188,10 @@ export function CruceTransbankView() {
         </div>
       )}
 
+      {mode === "asiento" ? (
+        <CuadraturaTransbankView from={from} to={to} sucursalId={sucursalId} />
+      ) : (
+        <>
       {/* Tabla */}
       <div className="rounded-xl border border-border-soft overflow-hidden">
         {loading && <div className="p-4 text-sm text-text-muted">Cargando…</div>}
@@ -242,6 +266,8 @@ export function CruceTransbankView() {
         <p className="text-xs text-text-muted">
           Mostrando {data.rows.length} de {data.rowsTotal} filas.
         </p>
+      )}
+        </>
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { matchCruce } from "@/lib/transbank/cruce";
 
 /**
  * GET /api/consolidados/cruce-transbank?from=YYYY-MM-DD&to=YYYY-MM-DD&sucursalId=&estado=
@@ -44,70 +45,10 @@ export async function GET(req: Request) {
   for (const s of tesoSuc) if (s.sucursalName) sucName.set(s.sucursalId, s.sucursalName);
   for (const p of posAll) if (p.sucursalName) sucName.set(p.sucursalId, p.sucursalName);
 
-  // Tolerancia de monto: el settlement de Transbank suma el RECARGO de crédito
-  // (~2%) sobre el monto base del POS. Para débito la diferencia es 0; para
-  // crédito ~2%. Aceptamos hasta este % y MOSTRAMOS la diferencia (auditable).
-  const MATCH_TOLERANCE = 0.05;
   const absB = (n: bigint) => (n < 0n ? -n : n);
 
-  // Índice de settlements por boleta(=OP); una OP puede repetirse en POS.
-  const settByBoleta = new Map<string, typeof settAll>();
-  for (const sv of settAll) {
-    if (!sv.numeroBoleta) continue;
-    (settByBoleta.get(sv.numeroBoleta) ?? settByBoleta.set(sv.numeroBoleta, []).get(sv.numeroBoleta)!).push(sv);
-  }
-  const usedSett = new Set<string>();
-
-  type Pair = { pos: (typeof posAll)[number]; sett: (typeof settAll)[number] | null; diff: bigint };
-  const pairs: Pair[] = [];
-
-  // Pass 1: por boleta(=OP), elegir el settlement de monto más cercano dentro
-  // de la tolerancia (débito exacto, crédito dentro del recargo).
-  const unmatchedPos: typeof posAll = [];
-  for (const pos of posAll) {
-    const op = pos.opNumber;
-    let best: (typeof settAll)[number] | null = null;
-    let bestDiff = 0n;
-    if (op) {
-      const base = absB(pos.monto);
-      for (const c of settByBoleta.get(op) ?? []) {
-        if (usedSett.has(c.id)) continue;
-        const diff = c.montoVenta - pos.monto;
-        if (base > 0n && Number(absB(diff)) / Number(base) > MATCH_TOLERANCE) continue;
-        if (best === null || absB(diff) < absB(bestDiff)) {
-          best = c;
-          bestDiff = diff;
-        }
-      }
-    }
-    if (best) {
-      usedSett.add(best.id);
-      pairs.push({ pos, sett: best, diff: bestDiff });
-    } else {
-      unmatchedPos.push(pos);
-    }
-  }
-
-  // Pass 2: fallback por monto exacto + fecha (±1.5d) para los sin boleta.
-  const freeSett = settAll.filter((s) => !usedSett.has(s.id));
-  const dayMs = 86400000;
-  for (const pos of unmatchedPos) {
-    const cand = freeSett.find(
-      (s) =>
-        !usedSett.has(s.id) &&
-        s.montoVenta === pos.monto &&
-        Math.abs(pos.fecha.getTime() - s.fechaVenta.getTime()) <= dayMs * 1.5 &&
-        (s.sucursalId == null || s.sucursalId === pos.sucursalId),
-    );
-    if (cand) {
-      usedSett.add(cand.id);
-      pairs.push({ pos, sett: cand, diff: 0n });
-    } else {
-      pairs.push({ pos, sett: null, diff: 0n });
-    }
-  }
-
-  const settlementOnly = settAll.filter((s) => !usedSett.has(s.id));
+  // Matching POS ↔ settlement (lib compartida con la cuadratura/asiento).
+  const { pairs, settlementOnly } = matchCruce(posAll, settAll);
 
   // Serializar filas según estado.
   type Row = {
