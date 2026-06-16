@@ -19,12 +19,18 @@ export async function getPendingPairs(
   to: Date,
   opts: { sucursalId?: number | null } = {},
 ): Promise<PendingPair[]> {
-  // Ids ya consumidos por cuadraturas previas (cada lado es único).
-  const consumed = await prisma.cuadraturaTransbankItem.findMany({
-    select: { tbkTesoreriaId: true, transbankSaleId: true },
-  });
-  const usedPos = new Set(consumed.map((c) => c.tbkTesoreriaId));
-  const usedSett = new Set(consumed.map((c) => c.transbankSaleId));
+  // Ids ya consumidos por cuadraturas previas + apartados en la papelera (cada
+  // lado es único). Ambos quedan fuera de "por cuadrar".
+  const [consumed, apartados] = await Promise.all([
+    prisma.cuadraturaTransbankItem.findMany({
+      select: { tbkTesoreriaId: true, transbankSaleId: true },
+    }),
+    prisma.cuadraturaTransbankApartado.findMany({
+      select: { tbkTesoreriaId: true, transbankSaleId: true },
+    }),
+  ]);
+  const usedPos = new Set([...consumed, ...apartados].map((c) => c.tbkTesoreriaId));
+  const usedSett = new Set([...consumed, ...apartados].map((c) => c.transbankSaleId));
 
   const [posAll, settAll] = await Promise.all([
     prisma.tbkTesoreria.findMany({

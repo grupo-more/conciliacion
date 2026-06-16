@@ -26,12 +26,16 @@ export interface CuadraturaItemInput {
   montoTransbank: bigint; // total abono (neto)
   montoComision: bigint; // comisión + IVA comisión
   // Detalle por movimiento (para el desglose auditable). Opcional.
+  tbkTesoreriaId?: string;
+  transbankSaleId?: string;
   fecha?: string | null; // ISO
   opBoleta?: string | null;
   medioPago?: string | null;
 }
 
 export interface MovimientoDTO {
+  tbkTesoreriaId: string | null;
+  transbankSaleId: string | null;
   fecha: string | null;
   opBoleta: string | null;
   medioPago: string | null;
@@ -127,6 +131,8 @@ export function buildCuadraturaAsiento(
     g.comision += it.montoComision;
     g.count += 1;
     g.movimientos.push({
+      tbkTesoreriaId: it.tbkTesoreriaId ?? null,
+      transbankSaleId: it.transbankSaleId ?? null,
       fecha: it.fecha ?? null,
       opBoleta: it.opBoleta ?? null,
       medioPago: it.medioPago ?? null,

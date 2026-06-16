@@ -79,6 +79,22 @@ interface Cuadratura {
   totalComision: string;
   totalDiferencia: string;
 }
+interface Apartado {
+  id: string;
+  sucursalId: number;
+  sucursalName: string | null;
+  sucursalCodigo: number | null;
+  fecha: string | null;
+  opBoleta: string | null;
+  medioPago: string | null;
+  montoDynatech: string;
+  montoTransbank: string;
+  montoComision: string;
+  motivo: string | null;
+  createdAt: string;
+  expiresAt: string;
+  recuperable: boolean;
+}
 
 function money(s: string | null) {
   if (s == null) return "";
@@ -100,7 +116,7 @@ export function CuadraturaTransbankView({
   to: string;
   sucursalId: string;
 }) {
-  const [vista, setVista] = useState<"pendiente" | "generadas">("pendiente");
+  const [vista, setVista] = useState<"pendiente" | "generadas" | "papelera">("pendiente");
   const [data, setData] = useState<PreviewResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -108,6 +124,7 @@ export function CuadraturaTransbankView({
 
   const [cuads, setCuads] = useState<Cuadratura[] | null>(null);
   const [detalle, setDetalle] = useState<{ cuadratura: Cuadratura; asiento: Asiento } | null>(null);
+  const [apartados, setApartados] = useState<Apartado[] | null>(null);
 
   const loadPreview = useCallback(async () => {
     setLoading(true);
@@ -132,10 +149,79 @@ export function CuadraturaTransbankView({
     }
   }, [from, to]);
 
+  const loadPapelera = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/consolidados/cruce-transbank/papelera`);
+      setApartados(res.ok ? (await res.json()).apartados : []);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (vista === "pendiente") loadPreview();
-    else loadGeneradas();
-  }, [vista, loadPreview, loadGeneradas]);
+    else if (vista === "generadas") loadGeneradas();
+    else loadPapelera();
+  }, [vista, loadPreview, loadGeneradas, loadPapelera]);
+
+  async function onApartar(mov: Movimiento, suc: SucursalAsiento) {
+    if (!mov.tbkTesoreriaId || !mov.transbankSaleId) return;
+    const motivo = window.prompt(
+      `Apartar a la papelera el movimiento ${mov.opBoleta ?? ""} de ${suc.sucursalName ?? `#${suc.sucursalId}`}.\n` +
+        `Motivo (opcional). Aceptar para confirmar, Cancelar para abortar:`,
+      "",
+    );
+    if (motivo === null) return; // canceló
+    setBusy(true);
+    setBanner(null);
+    try {
+      const res = await fetch(`/api/consolidados/cruce-transbank/papelera`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tbkTesoreriaId: mov.tbkTesoreriaId,
+          transbankSaleId: mov.transbankSaleId,
+          sucursalId: suc.sucursalId,
+          sucursalName: suc.sucursalName,
+          sucursalCodigo: suc.sucursalCodigo,
+          fecha: mov.fecha,
+          opBoleta: mov.opBoleta,
+          medioPago: mov.medioPago,
+          montoDynatech: mov.dynatech,
+          montoTransbank: mov.transbank,
+          montoComision: mov.comision,
+          motivo: motivo.trim() || null,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) setBanner({ kind: "err", msg: j.error || "Error al apartar" });
+      else {
+        setBanner({ kind: "ok", msg: "Movimiento enviado a la papelera." });
+        loadPreview();
+      }
+    } catch {
+      setBanner({ kind: "err", msg: "Error de red al apartar" });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onRestaurar(id: string) {
+    setBusy(true);
+    setBanner(null);
+    try {
+      const res = await fetch(`/api/consolidados/cruce-transbank/papelera?id=${id}`, { method: "DELETE" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) setBanner({ kind: "err", msg: j.error || "Error al restaurar" });
+      else {
+        setBanner({ kind: "ok", msg: "Movimiento restaurado a 'por cuadrar'." });
+        loadPapelera();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function onGenerar() {
     if (!data || data.pendingCount === 0) return;
@@ -195,6 +281,12 @@ export function CuadraturaTransbankView({
           >
             Generadas
           </button>
+          <button
+            onClick={() => setVista("papelera")}
+            className={`px-3 py-1.5 font-semibold ${vista === "papelera" ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
+          >
+            Papelera
+          </button>
         </div>
         {data?.settings && vista === "pendiente" && (
           <span className="text-xs text-text-muted">
@@ -222,11 +314,15 @@ export function CuadraturaTransbankView({
       {loading && <div className="p-4 text-sm text-text-muted">Cargando…</div>}
 
       {!loading && vista === "pendiente" && data && (
-        <PreviewBlock data={data} busy={busy} onGenerar={onGenerar} from={from} to={to} />
+        <PreviewBlock data={data} busy={busy} onGenerar={onGenerar} onApartar={onApartar} from={from} to={to} />
       )}
 
       {!loading && vista === "generadas" && (
         <GeneradasBlock cuads={cuads} onOpen={(c) => openCuadratura(c.id, setDetalle)} onDeshacer={onDeshacer} busy={busy} />
+      )}
+
+      {!loading && vista === "papelera" && (
+        <PapeleraBlock apartados={apartados} onRestaurar={onRestaurar} busy={busy} />
       )}
 
       {detalle && (
@@ -255,12 +351,14 @@ function PreviewBlock({
   data,
   busy,
   onGenerar,
+  onApartar,
   from,
   to,
 }: {
   data: PreviewResp;
   busy: boolean;
   onGenerar: () => void;
+  onApartar: (mov: Movimiento, suc: SucursalAsiento) => void;
   from: string;
   to: string;
 }) {
@@ -298,14 +396,20 @@ function PreviewBlock({
         </div>
       </div>
 
-      {hasRows && <AsientoTable asiento={a} />}
+      {hasRows && <AsientoTable asiento={a} onApartar={onApartar} />}
     </div>
   );
 }
 
 /* ============================ Tabla del asiento ============================ */
 
-function AsientoTable({ asiento }: { asiento: Asiento }) {
+function AsientoTable({
+  asiento,
+  onApartar,
+}: {
+  asiento: Asiento;
+  onApartar?: (mov: Movimiento, suc: SucursalAsiento) => void;
+}) {
   const t = asiento.totals;
   const [open, setOpen] = useState<Set<number>>(new Set());
   const toggle = (id: number) =>
@@ -374,7 +478,10 @@ function AsientoTable({ asiento }: { asiento: Asiento }) {
                     {isOpen && (
                       <tr className="bg-sky-50/40">
                         <td colSpan={5} className="px-3 py-2">
-                          <MovimientosDetalle movimientos={s.movimientos} />
+                          <MovimientosDetalle
+                            movimientos={s.movimientos}
+                            onApartar={onApartar ? (m) => onApartar(m, s) : undefined}
+                          />
                         </td>
                       </tr>
                     )}
@@ -449,7 +556,13 @@ function AsientoTable({ asiento }: { asiento: Asiento }) {
   );
 }
 
-function MovimientosDetalle({ movimientos }: { movimientos: Movimiento[] }) {
+function MovimientosDetalle({
+  movimientos,
+  onApartar,
+}: {
+  movimientos: Movimiento[];
+  onApartar?: (mov: Movimiento) => void;
+}) {
   if (movimientos.length === 0)
     return <div className="text-xs text-text-muted">Sin detalle de movimientos guardado.</div>;
   return (
@@ -464,6 +577,7 @@ function MovimientosDetalle({ movimientos }: { movimientos: Movimiento[] }) {
             <th className="px-2 py-1.5 text-right">Transbank (neto)</th>
             <th className="px-2 py-1.5 text-right">Comisión</th>
             <th className="px-2 py-1.5 text-right">Diferencia</th>
+            {onApartar && <th className="px-2 py-1.5 text-center">Acción</th>}
           </tr>
         </thead>
         <tbody>
@@ -485,6 +599,17 @@ function MovimientosDetalle({ movimientos }: { movimientos: Movimiento[] }) {
                 >
                   {dif !== 0n ? money(m.diferencia) : "—"}
                 </td>
+                {onApartar && (
+                  <td className="px-2 py-1 text-center whitespace-nowrap">
+                    <button
+                      onClick={() => onApartar(m)}
+                      className="text-rose-700 hover:underline"
+                      title="Apartar este movimiento a la papelera (no entra al asiento)"
+                    >
+                      Apartar
+                    </button>
+                  </td>
+                )}
               </tr>
             );
           })}
@@ -559,6 +684,88 @@ function GeneradasBlock({
                 >
                   Deshacer
                 </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* ============================ Papelera ============================ */
+
+function PapeleraBlock({
+  apartados,
+  onRestaurar,
+  busy,
+}: {
+  apartados: Apartado[] | null;
+  onRestaurar: (id: string) => void;
+  busy: boolean;
+}) {
+  if (!apartados) return null;
+  if (apartados.length === 0)
+    return (
+      <div className="p-4 text-sm text-text-muted">
+        La papelera está vacía. Los movimientos que apartes desde el desglose aparecen acá (con 30 días para
+        restaurarlos).
+      </div>
+    );
+  return (
+    <div className="rounded-xl border border-border-soft overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-bg-soft text-xs uppercase tracking-wider text-text-muted">
+          <tr>
+            <th className="px-3 py-2 text-left">Apartado</th>
+            <th className="px-3 py-2 text-left">Sucursal</th>
+            <th className="px-3 py-2 text-left">OP / Boleta</th>
+            <th className="px-3 py-2 text-right">Dynatech</th>
+            <th className="px-3 py-2 text-right">Transbank</th>
+            <th className="px-3 py-2 text-left">Motivo</th>
+            <th className="px-3 py-2 text-left">Estado</th>
+            <th className="px-3 py-2 text-center">Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {apartados.map((a) => (
+            <tr key={a.id} className="border-t border-border-soft/60 hover:bg-bg-soft/40">
+              <td className="px-3 py-2 whitespace-nowrap text-text-muted">{formatDate(a.createdAt)}</td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                {a.sucursalName ?? `#${a.sucursalId}`}
+                {a.sucursalCodigo != null && (
+                  <span className="ml-1 text-xs text-text-muted font-mono">({a.sucursalCodigo})</span>
+                )}
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">{a.opBoleta ?? "—"}</td>
+              <td className="px-3 py-2 text-right font-mono">{money(a.montoDynatech)}</td>
+              <td className="px-3 py-2 text-right font-mono">{money(a.montoTransbank)}</td>
+              <td className="px-3 py-2 max-w-[220px] truncate" title={a.motivo ?? ""}>
+                {a.motivo || <span className="text-text-dim">—</span>}
+              </td>
+              <td className="px-3 py-2 whitespace-nowrap">
+                {a.recuperable ? (
+                  <span className="text-xs text-text-muted">
+                    Recuperable hasta <b>{formatDate(a.expiresAt)}</b>
+                  </span>
+                ) : (
+                  <span className="inline-block rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200 px-2 py-0.5 text-[11px] font-semibold">
+                    Definitivo
+                  </span>
+                )}
+              </td>
+              <td className="px-3 py-2 text-center whitespace-nowrap">
+                {a.recuperable ? (
+                  <button
+                    onClick={() => onRestaurar(a.id)}
+                    disabled={busy}
+                    className="text-brand hover:underline text-xs disabled:opacity-50"
+                  >
+                    Restaurar
+                  </button>
+                ) : (
+                  <span className="text-text-dim text-xs">—</span>
+                )}
               </td>
             </tr>
           ))}

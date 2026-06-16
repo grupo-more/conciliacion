@@ -684,3 +684,34 @@ model CuadraturaTransbankSettings {
   rubroDiferencia Int      @default(1403) @map("rubro_diferencia")
   updatedAt       DateTime @updatedAt @map("updated_at")
 }
+
+// Papelera de la cuadratura: pares cuadrados que el usuario APARTA para que NO
+// entren al asiento (no cuadran, etc.). Mientras el registro exista, el par
+// queda fuera de "por cuadrar". `expiresAt` = ventana para restaurar si fue por
+// error; pasado el plazo el apartado es definitivo (sigue excluido, ya no se
+// puede restaurar). No hay job: la exclusión la da la sola existencia del row.
+model CuadraturaTransbankApartado {
+  id String @id @default(uuid())
+
+  tbkTesoreriaId  String @unique @map("tbk_tesoreria_id")
+  transbankSaleId String @unique @map("transbank_sale_id")
+
+  sucursalId     Int     @map("sucursal_id")
+  sucursalName   String? @map("sucursal_name")
+  sucursalCodigo Int?    @map("sucursal_codigo")
+
+  fecha     DateTime? @map("fecha")
+  opBoleta  String?   @map("op_boleta")
+  medioPago String?   @map("medio_pago")
+
+  montoDynatech  BigInt @map("monto_dynatech")
+  montoTransbank BigInt @map("monto_transbank")
+  montoComision  BigInt @map("monto_comision")
+
+  motivo      String?  @db.Text
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  expiresAt   DateTime @map("expires_at")
+
+  @@index([expiresAt])
+}
