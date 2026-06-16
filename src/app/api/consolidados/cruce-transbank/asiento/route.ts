@@ -138,16 +138,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No hay movimientos pendientes por cuadrar en el rango." }, { status: 400 });
   }
 
-  // Totales snapshot. 708 = comisión real (cartola); 1403 = tapón (boleta − neto − comisión).
+  // Totales snapshot. 708 = comisión API; 1403 = comisión cartola − comisión API.
   let totDynatech = 0n;
   let totTransbank = 0n;
+  let totComisionApi = 0n;
   let totComisionCartola = 0n;
   for (const p of pending) {
     totDynatech += p.montoDynatech;
     totTransbank += p.montoTransbank;
+    totComisionApi += p.montoComisionApi;
     totComisionCartola += p.montoComision;
   }
-  const totDiferencia = totDynatech - totTransbank - totComisionCartola;
+  const totDiferencia = totComisionCartola - totComisionApi;
 
   try {
     const created = await prisma.$transaction(async (tx) => {
@@ -162,7 +164,7 @@ export async function POST(req: Request) {
           rubroDiferencia: settings.rubroDiferencia,
           totalDynatech: totDynatech,
           totalTransbank: totTransbank,
-          totalComision: totComisionCartola,
+          totalComision: totComisionApi,
           totalDiferencia: totDiferencia,
           createdById: session.sub,
         },

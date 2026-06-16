@@ -591,8 +591,9 @@ function MovimientosDetalle({
             <th className="px-2 py-1.5 text-right" title="Monto liquidado por Transbank (bruto)">Transbank</th>
             <th className="px-2 py-1.5 text-right" title="Recargo de crédito esperado / diferencia. Rojo = no calza (posible mal tipado).">Recargo / Δ</th>
             <th className="px-2 py-1.5 text-right" title="Total abono que llega al banco (rubro 200)">Neto</th>
-            <th className="px-2 py-1.5 text-right" title="Comisión real cobrada por Transbank (rubro 708)">Comisión</th>
-            <th className="px-2 py-1.5 text-right" title="Aporte al rubro 1403 (tapón que cuadra)">1403</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión que registra la API/Dynatech → rubro 708 (recargo en crédito; 0 en débito)">Com. API (708)</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión real cobrada por Transbank (cartola)">Com. cartola</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión cartola − comisión API → rubro 1403 (debe si +, haber si −)">1403</th>
             {onApartar && <th className="px-2 py-1.5 text-center">Acción</th>}
           </tr>
         </thead>
@@ -626,14 +627,18 @@ function MovimientosDetalle({
                   {delta === 0n ? "—" : `${anomalia !== 0n ? "⚠ " : ""}${signed(m.difMonto)}`}
                 </td>
                 <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-emerald-700">{money(m.transbank)}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-text-muted">
+                  {recargoEsperado !== 0n ? money(m.comisionApi) : "—"}
+                </td>
                 <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-rose-600">{money(m.comisionCartola)}</td>
                 <td
                   className={
                     "px-2 py-1 text-right font-mono whitespace-nowrap " +
                     (dif !== 0n ? "text-amber-700 font-semibold" : "text-text-dim")
                   }
+                  title={dif < 0n ? "Haber (crédito: recargo > comisión)" : "Debe"}
                 >
-                  {dif !== 0n ? money(m.diferencia) : "—"}
+                  {dif !== 0n ? signed(m.diferencia) : "—"}
                 </td>
                 {onApartar && (
                   <td className="px-2 py-1 text-center whitespace-nowrap">
