@@ -26,26 +26,57 @@ export interface CruceResult {
   settlementOnly: TransbankSale[];
 }
 
+/** Vínculo manual POS↔settlement que el matching fuerza como cuadrado. */
+export interface ManualLink {
+  tbkTesoreriaId: string;
+  transbankSaleId: string;
+}
+
 const absB = (n: bigint) => (n < 0n ? -n : n);
 
 /**
  * Empareja POS contra settlement. Asume que los arreglos ya vienen filtrados
  * (rango, anulados, ya-consumidos por cuadraturas previas, etc.).
+ *
+ * `manualLinks` se fuerzan como cuadrados ANTES de las pasadas automáticas
+ * (Pasada 0), y ambos lados salen del pool. Sirve para pares sin llave común.
  */
-export function matchCruce(posAll: TbkTesoreria[], settAll: TransbankSale[]): CruceResult {
+export function matchCruce(
+  posAll: TbkTesoreria[],
+  settAll: TransbankSale[],
+  manualLinks: ManualLink[] = [],
+): CruceResult {
+  const usedSett = new Set<string>();
+  const usedPos = new Set<string>();
+  const pairs: CrucePair[] = [];
+
+  // Pass 0: vínculos manuales (forzados). Se emparejan sin importar la llave ni
+  // el monto; la diferencia se calcula igual (queda visible/auditable).
+  if (manualLinks.length) {
+    const posById = new Map(posAll.map((p) => [p.id, p]));
+    const settById = new Map(settAll.map((s) => [s.id, s]));
+    for (const l of manualLinks) {
+      const pos = posById.get(l.tbkTesoreriaId);
+      const sett = settById.get(l.transbankSaleId);
+      if (!pos || !sett || usedPos.has(pos.id) || usedSett.has(sett.id)) continue;
+      usedPos.add(pos.id);
+      usedSett.add(sett.id);
+      pairs.push({ pos, sett, diff: sett.montoVenta - pos.monto });
+    }
+  }
+
   // Índice de settlements por boleta(=OP); una OP puede repetirse en POS.
   const settByBoleta = new Map<string, TransbankSale[]>();
   for (const sv of settAll) {
     if (!sv.numeroBoleta) continue;
     (settByBoleta.get(sv.numeroBoleta) ?? settByBoleta.set(sv.numeroBoleta, []).get(sv.numeroBoleta)!).push(sv);
   }
-  const usedSett = new Set<string>();
-  const pairs: CrucePair[] = [];
 
   // Pass 1: por boleta(=OP), elegir el settlement de monto más cercano dentro
   // de la tolerancia (débito exacto, crédito dentro del recargo).
   const unmatchedPos: TbkTesoreria[] = [];
   for (const pos of posAll) {
+    if (usedPos.has(pos.id)) continue; // ya fijado por vínculo manual
     const op = pos.opNumber;
     let best: TransbankSale | null = null;
     let bestDiff = 0n;

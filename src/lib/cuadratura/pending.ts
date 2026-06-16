@@ -32,7 +32,7 @@ export async function getPendingPairs(
   const usedPos = new Set([...consumed, ...apartados].map((c) => c.tbkTesoreriaId));
   const usedSett = new Set([...consumed, ...apartados].map((c) => c.transbankSaleId));
 
-  const [posAll, settAll] = await Promise.all([
+  const [posAll, settAll, manualLinks] = await Promise.all([
     prisma.tbkTesoreria.findMany({
       where: { fecha: { gte: from, lt: to }, estadoActual: { not: "ANU" } },
       orderBy: { fecha: "desc" },
@@ -40,6 +40,9 @@ export async function getPendingPairs(
     prisma.transbankSale.findMany({
       where: { fechaVenta: { gte: from, lt: to } },
       orderBy: { fechaVenta: "desc" },
+    }),
+    prisma.cruceTransbankLink.findMany({
+      select: { tbkTesoreriaId: true, transbankSaleId: true },
     }),
   ]);
 
@@ -54,7 +57,7 @@ export async function getPendingPairs(
   const sucByCodigo = new Map<number, string>();
   for (const s of sucRows) if (s.codigo != null) sucByCodigo.set(s.codigo, s.nombre);
 
-  const { pairs } = matchCruce(posFree, settFree);
+  const { pairs } = matchCruce(posFree, settFree, manualLinks);
 
   const out: PendingPair[] = [];
   for (const p of pairs) {

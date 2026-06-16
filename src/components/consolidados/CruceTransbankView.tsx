@@ -21,6 +21,9 @@ interface CruceRow {
   diferenciaPct: number | null;
   tid: string | null;
   boleta: string | null;
+  tbkTesoreriaId: string | null;
+  transbankSaleId: string | null;
+  manual: boolean;
 }
 
 interface CruceResponse {
@@ -58,6 +61,25 @@ export function CruceTransbankView() {
   const [loading, setLoading] = useState(false);
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [linkTarget, setLinkTarget] = useState<CruceRow | null>(null);
+
+  async function onDesvincular(row: CruceRow) {
+    if (!row.tbkTesoreriaId) return;
+    if (!confirm("Deshacer este vínculo manual? El par volverá a quedar sin conciliar.")) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/consolidados/cruce-transbank/link?tbkTesoreriaId=${row.tbkTesoreriaId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) load();
+      else {
+        const j = await res.json().catch(() => ({}));
+        setBanner({ kind: "err", msg: j.error || "Error al desvincular" });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function load(silent = false) {
     if (!silent) setLoading(true);
@@ -215,6 +237,7 @@ export function CruceTransbankView() {
                   <th className="px-3 py-2 text-right">Comisión</th>
                   <th className="px-3 py-2 text-right">Neto</th>
                   <th className="px-3 py-2 text-left">Glosa / Local</th>
+                  <th className="px-3 py-2 text-center">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -254,6 +277,34 @@ export function CruceTransbankView() {
                     </td>
                     <td className="px-3 py-2 max-w-[280px] truncate" title={r.glosa ?? ""}>
                       {r.glosa ?? ""}
+                      {r.manual && (
+                        <span
+                          className="ml-1.5 inline-block rounded-full bg-sky-100 text-sky-800 border border-sky-200 text-[10px] px-1.5 py-0.5 font-bold align-middle"
+                          title="Vinculado manualmente"
+                        >
+                          MANUAL
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-center whitespace-nowrap">
+                      {r.estado === "pos_sin_settlement" && (
+                        <button
+                          onClick={() => setLinkTarget(r)}
+                          className="text-brand hover:underline text-xs"
+                          title="Buscar y vincular su abono Transbank a mano"
+                        >
+                          Vincular
+                        </button>
+                      )}
+                      {r.estado === "cuadrado" && r.manual && (
+                        <button
+                          onClick={() => onDesvincular(r)}
+                          disabled={busy}
+                          className="text-rose-700 hover:underline text-xs disabled:opacity-50"
+                        >
+                          Desvincular
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -269,8 +320,179 @@ export function CruceTransbankView() {
       )}
         </>
       )}
+
+      {linkTarget && (
+        <VincularModal
+          pos={linkTarget}
+          from={from}
+          to={to}
+          onClose={() => setLinkTarget(null)}
+          onLinked={() => {
+            setLinkTarget(null);
+            setBanner({ kind: "ok", msg: "Vínculo creado. El par quedó cuadrado." });
+            load();
+          }}
+        />
+      )}
     </div>
   );
+}
+
+/* ===================== Modal de vinculación manual ===================== */
+
+function VincularModal({
+  pos,
+  from,
+  to,
+  onClose,
+  onLinked,
+}: {
+  pos: CruceRow;
+  from: string;
+  to: string;
+  onClose: () => void;
+  onLinked: () => void;
+}) {
+  const [cands, setCands] = useState<CruceRow[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const posMonto = BigInt(pos.montoBruto);
+
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const p = new URLSearchParams({ from, to, estado: "settlement_sin_pos" });
+        const res = await fetch(`/api/consolidados/cruce-transbank?${p}`);
+        const j = res.ok ? await res.json() : { rows: [] };
+        if (cancel) return;
+        // Ranking: misma sucursal primero, luego menor diferencia de monto, luego fecha cercana.
+        const posDate = new Date(pos.fecha).getTime();
+        const rows: CruceRow[] = (j.rows as CruceRow[]).slice().sort((a, b) => {
+          const sa = a.sucursalId === pos.sucursalId ? 0 : 1;
+          const sb = b.sucursalId === pos.sucursalId ? 0 : 1;
+          if (sa !== sb) return sa - sb;
+          const da = Number(absBig(BigInt(a.montoBruto) - posMonto));
+          const dbb = Number(absBig(BigInt(b.montoBruto) - posMonto));
+          if (da !== dbb) return da - dbb;
+          return Math.abs(new Date(a.fecha).getTime() - posDate) - Math.abs(new Date(b.fecha).getTime() - posDate);
+        });
+        setCands(rows);
+      } finally {
+        if (!cancel) setLoading(false);
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [from, to, pos.fecha, pos.sucursalId, posMonto]);
+
+  async function link(sett: CruceRow) {
+    if (!pos.tbkTesoreriaId || !sett.transbankSaleId) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/consolidados/cruce-transbank/link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tbkTesoreriaId: pos.tbkTesoreriaId, transbankSaleId: sett.transbankSaleId }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) setErr(j.error || "Error al vincular");
+      else onLinked();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel max-w-3xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold tracking-tight">Vincular abono Transbank</h2>
+          <button onClick={onClose} className="btn-ghost text-sm">Cerrar</button>
+        </div>
+
+        <div className="rounded-md border border-border-soft bg-bg-soft p-3 text-sm mb-3">
+          <div className="text-text-muted text-xs uppercase tracking-wide mb-1">Movimiento POS a vincular</div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1">
+            <span><b>{formatDate(pos.fecha)}</b></span>
+            <span>{pos.sucursalName ?? `#${pos.sucursalId}`}</span>
+            <span className="font-mono">OP {pos.op ?? "—"}</span>
+            <span className="font-mono">${formatMoney(posMonto)}</span>
+            <span className="text-text-muted truncate max-w-[320px]" title={pos.glosa ?? ""}>{pos.glosa}</span>
+          </div>
+        </div>
+
+        {err && <div className="rounded-md bg-rose-50 text-rose-800 border border-rose-200 px-3 py-2 text-sm mb-2">{err}</div>}
+
+        <p className="text-xs text-text-muted mb-2">
+          Elegí el abono que corresponde. Ordenados por sucursal, monto más cercano y fecha. El monto <b>no tiene que
+          ser exacto</b>: si Transbank liquidó distinto a la boleta, esa diferencia (la columna Δ) se registra
+          automáticamente en el <b>rubro 1403 (Diferencia)</b> al generar el asiento.
+        </p>
+
+        <div className="rounded-lg border border-border-soft overflow-hidden max-h-[50vh] overflow-y-auto">
+          {loading && <div className="p-4 text-sm text-text-muted">Buscando candidatos…</div>}
+          {!loading && cands && cands.length === 0 && (
+            <div className="p-4 text-sm text-text-muted">No hay abonos sin POS en el rango. Ampliá las fechas.</div>
+          )}
+          {!loading && cands && cands.length > 0 && (
+            <table className="w-full text-sm">
+              <thead className="bg-bg-soft text-xs uppercase tracking-wider text-text-muted sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 text-left">Fecha</th>
+                  <th className="px-3 py-2 text-left">Sucursal</th>
+                  <th className="px-3 py-2 text-left">Boleta</th>
+                  <th className="px-3 py-2 text-left">Medio</th>
+                  <th className="px-3 py-2 text-right">Monto</th>
+                  <th className="px-3 py-2 text-right">Δ vs POS</th>
+                  <th className="px-3 py-2 text-center">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cands.map((c, i) => {
+                  const d = BigInt(c.montoBruto) - posMonto;
+                  const sameSuc = c.sucursalId === pos.sucursalId;
+                  return (
+                    <tr key={i} className="border-t border-border-soft/60 hover:bg-bg-soft/40">
+                      <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(c.fecha)}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">
+                        {c.sucursalName ?? (c.sucursalId ? `#${c.sucursalId}` : "—")}
+                        {!sameSuc && <span className="ml-1 text-[10px] text-amber-700">(otra)</span>}
+                      </td>
+                      <td className="px-3 py-1.5 whitespace-nowrap font-mono text-xs">{c.boleta ?? "—"}</td>
+                      <td className="px-3 py-1.5 whitespace-nowrap">{c.medioPago ?? "—"}</td>
+                      <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap">${formatMoney(BigInt(c.montoBruto))}</td>
+                      <td className={"px-3 py-1.5 text-right font-mono whitespace-nowrap " + (d === 0n ? "text-text-dim" : "text-amber-700")}>
+                        {d === 0n ? "—" : `${d > 0n ? "+" : "-"}$${formatMoney(absBig(d))}`}
+                      </td>
+                      <td className="px-3 py-1.5 text-center">
+                        <button
+                          onClick={() => link(c)}
+                          disabled={busy}
+                          className="rounded-md bg-brand text-white px-2.5 py-1 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+                        >
+                          Vincular
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function absBig(n: bigint): bigint {
+  return n < 0n ? -n : n;
 }
 
 function todayIso(): string {

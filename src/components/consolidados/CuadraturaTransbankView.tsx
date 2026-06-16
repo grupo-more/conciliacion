@@ -21,9 +21,11 @@ interface Movimiento {
   opBoleta: string | null;
   medioPago: string | null;
   dynatech: string;
+  transbankBruto: string;
   transbank: string;
   comisionApi: string;
   comisionCartola: string;
+  difMonto: string;
   diferencia: string;
 }
 interface SucursalAsiento {
@@ -104,6 +106,13 @@ interface Apartado {
 function money(s: string | null) {
   if (s == null) return "";
   return formatMoney(BigInt(s));
+}
+
+/** Monto con signo: +$X / -$X. */
+function signed(s: string) {
+  const n = BigInt(s);
+  const a = n < 0n ? -n : n;
+  return `${n < 0n ? "-" : "+"}$${formatMoney(a)}`;
 }
 
 /**
@@ -578,11 +587,13 @@ function MovimientosDetalle({
             <th className="px-2 py-1.5 text-left">Fecha</th>
             <th className="px-2 py-1.5 text-left">OP / Boleta</th>
             <th className="px-2 py-1.5 text-left">Medio</th>
-            <th className="px-2 py-1.5 text-right">Dynatech (bruto)</th>
-            <th className="px-2 py-1.5 text-right">Transbank (neto)</th>
-            <th className="px-2 py-1.5 text-right" title="Comisión que registra Dynatech (rubro 708)">Comisión API</th>
-            <th className="px-2 py-1.5 text-right" title="Comisión que cobró Transbank (cartola)">Comisión cartola</th>
-            <th className="px-2 py-1.5 text-right" title="Comisión cartola − comisión API (rubro 1403)">Diferencia</th>
+            <th className="px-2 py-1.5 text-right" title="Monto de la boleta (Dynatech)">Boleta (Dynatech)</th>
+            <th className="px-2 py-1.5 text-right" title="Monto liquidado por Transbank (bruto)">Transbank (bruto)</th>
+            <th className="px-2 py-1.5 text-right" title="Diferencia de monto: Transbank − boleta">Δ monto</th>
+            <th className="px-2 py-1.5 text-right" title="Total abono que llega al banco (rubro 200)">Neto</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión que registra Dynatech (rubro 708)">Com. API</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión que cobró Transbank (cartola)">Com. cartola</th>
+            <th className="px-2 py-1.5 text-right" title="Aporte al rubro 1403 (tapón que cuadra)">1403</th>
             {onApartar && <th className="px-2 py-1.5 text-center">Acción</th>}
           </tr>
         </thead>
@@ -595,6 +606,16 @@ function MovimientosDetalle({
                 <td className="px-2 py-1 whitespace-nowrap font-mono">{m.opBoleta ?? "—"}</td>
                 <td className="px-2 py-1 whitespace-nowrap">{m.medioPago ?? "—"}</td>
                 <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{money(m.dynatech)}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{money(m.transbankBruto)}</td>
+                <td
+                  className={
+                    "px-2 py-1 text-right font-mono whitespace-nowrap " +
+                    (BigInt(m.difMonto) !== 0n ? "text-rose-700 font-semibold" : "text-text-dim")
+                  }
+                  title="Diferencia entre lo liquidado por Transbank y la boleta"
+                >
+                  {BigInt(m.difMonto) !== 0n ? signed(m.difMonto) : "—"}
+                </td>
                 <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{money(m.transbank)}</td>
                 <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-text-muted">{money(m.comisionApi)}</td>
                 <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-text-muted">{money(m.comisionCartola)}</td>

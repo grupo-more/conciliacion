@@ -685,6 +685,21 @@ model CuadraturaTransbankItem {
   @@index([sucursalId])
 }
 
+// Vínculo MANUAL POS↔settlement en Cruce Transbank: para pares que el motor no
+// puede cuadrar solo (sin llave común, monto no exacto, "ENVIO APP" con TCKT en
+// vez de boleta, etc.). El matching los fuerza como cuadrados antes de las
+// pasadas automáticas. Unicidad por lado: cada uno se vincula a lo sumo una vez.
+model CruceTransbankLink {
+  id              String   @id @default(uuid())
+  tbkTesoreriaId  String   @unique @map("tbk_tesoreria_id")
+  transbankSaleId String   @unique @map("transbank_sale_id")
+  nota            String?  @db.Text
+  createdById     String?  @map("created_by_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+}
+
 // Settings de un row: los 4 rubros del asiento de cuadratura (editables).
 model CuadraturaTransbankSettings {
   id              String   @id @default("default")

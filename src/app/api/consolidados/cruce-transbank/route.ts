@@ -26,7 +26,7 @@ export async function GET(req: Request) {
   const sucursalId = sucursalIdRaw ? parseInt(sucursalIdRaw, 10) : null;
   const estado = url.searchParams.get("estado");
 
-  const [posAll, settAll] = await Promise.all([
+  const [posAll, settAll, manualLinks] = await Promise.all([
     prisma.tbkTesoreria.findMany({
       // Ventas POS anuladas en origen quedan fuera del cruce.
       where: { fecha: { gte: from, lt: to }, estadoActual: { not: "ANU" } },
@@ -36,7 +36,11 @@ export async function GET(req: Request) {
       where: { fechaVenta: { gte: from, lt: to } },
       orderBy: { fechaVenta: "desc" },
     }),
+    prisma.cruceTransbankLink.findMany({
+      select: { tbkTesoreriaId: true, transbankSaleId: true },
+    }),
   ]);
+  const manualPosIds = new Set(manualLinks.map((l) => l.tbkTesoreriaId));
 
   // Nombres de sucursal: POS + feed Tesorería (que tiene Bosque/Suecia, etc.),
   // para que los abonos "sin POS" muestren el nombre y no "#2"/"#3".
@@ -48,7 +52,8 @@ export async function GET(req: Request) {
   const absB = (n: bigint) => (n < 0n ? -n : n);
 
   // Matching POS ↔ settlement (lib compartida con la cuadratura/asiento).
-  const { pairs, settlementOnly } = matchCruce(posAll, settAll);
+  // Los vínculos manuales se fuerzan como cuadrados.
+  const { pairs, settlementOnly } = matchCruce(posAll, settAll, manualLinks);
 
   // Serializar filas según estado.
   type Row = {
@@ -66,6 +71,9 @@ export async function GET(req: Request) {
     diferenciaPct: number | null;
     tid: string | null;
     boleta: string | null;
+    tbkTesoreriaId: string | null;
+    transbankSaleId: string | null;
+    manual: boolean;
   };
   const rows: Row[] = [];
 
@@ -87,6 +95,9 @@ export async function GET(req: Request) {
         diferenciaPct: base > 0 ? Math.round((Number(p.diff) / base) * 1000) / 10 : null,
         tid: p.sett.tid,
         boleta: p.sett.numeroBoleta,
+        tbkTesoreriaId: p.pos.id,
+        transbankSaleId: p.sett.id,
+        manual: manualPosIds.has(p.pos.id),
       });
     } else {
       rows.push({
@@ -104,6 +115,9 @@ export async function GET(req: Request) {
         diferenciaPct: null,
         tid: null,
         boleta: null,
+        tbkTesoreriaId: p.pos.id,
+        transbankSaleId: null,
+        manual: false,
       });
     }
   }
@@ -123,6 +137,9 @@ export async function GET(req: Request) {
       diferenciaPct: null,
       tid: s.tid,
       boleta: s.numeroBoleta,
+      tbkTesoreriaId: null,
+      transbankSaleId: s.id,
+      manual: false,
     });
   }
 

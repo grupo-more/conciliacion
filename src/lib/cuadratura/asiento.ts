@@ -40,11 +40,13 @@ export interface MovimientoDTO {
   fecha: string | null;
   opBoleta: string | null;
   medioPago: string | null;
-  dynatech: string;
-  transbank: string;
+  dynatech: string; // bruto POS (boleta)
+  transbankBruto: string; // monto liquidado por Transbank (neto + comisión cartola)
+  transbank: string; // total abono (neto) → 200
   comisionApi: string; // Dynatech → 708
-  comisionCartola: string; // settlement → 1403
-  diferencia: string; // comisión cartola − comisión API (con signo)
+  comisionCartola: string; // settlement
+  difMonto: string; // Transbank bruto − Dynatech (boleta) — diferencia de monto
+  diferencia: string; // aporte al 1403 = dynatech − neto − comisión API (con signo)
 }
 
 export type AsientoSide = "DEBE" | "HABER";
@@ -137,6 +139,7 @@ export function buildCuadraturaAsiento(
     g.comisionApi += it.montoComisionApi;
     g.comisionCartola += it.montoComision;
     g.count += 1;
+    const transbankBruto = it.montoTransbank + it.montoComision; // neto + comisión cartola
     g.movimientos.push({
       tbkTesoreriaId: it.tbkTesoreriaId ?? null,
       transbankSaleId: it.transbankSaleId ?? null,
@@ -144,10 +147,14 @@ export function buildCuadraturaAsiento(
       opBoleta: it.opBoleta ?? null,
       medioPago: it.medioPago ?? null,
       dynatech: dyn.toString(),
+      transbankBruto: transbankBruto.toString(),
       transbank: it.montoTransbank.toString(),
       comisionApi: it.montoComisionApi.toString(),
       comisionCartola: it.montoComision.toString(),
-      diferencia: (it.montoComision - it.montoComisionApi).toString(),
+      difMonto: (transbankBruto - dyn).toString(),
+      // 1403 = lo que falta para cuadrar (dynatech − neto − comisión API). Incluye
+      // la diferencia de comisión Y la diferencia de monto boleta↔Transbank.
+      diferencia: (dyn - it.montoTransbank - it.montoComisionApi).toString(),
     });
     // El nombre/código pueden venir nulos en algún par; rellenamos si aparecen.
     if (!g.sucursalName && it.sucursalName) g.sucursalName = it.sucursalName;
@@ -167,8 +174,10 @@ export function buildCuadraturaAsiento(
   let totHaber = 0n;
 
   const sucursales: SucursalAsientoDTO[] = ordered.map((g) => {
-    // 708 = comisión de la API (Dynatech). 1403 = comisión cartola − comisión API.
-    const diferencia = g.comisionCartola - g.comisionApi;
+    // 708 = comisión de la API (Dynatech). 1403 = tapón que cuadra:
+    // dynatech − neto − comisión API. Absorbe la diferencia de comisión Y la
+    // diferencia de monto (cuando la boleta y lo liquidado por Transbank difieren).
+    const diferencia = g.dynatech - g.transbank - g.comisionApi;
     const cuenta = g.sucursalName ?? (g.sucursalCodigo != null ? `#${g.sucursalCodigo}` : `#${g.sucursalId}`);
 
     const lineas: AsientoLineaDTO[] = [
