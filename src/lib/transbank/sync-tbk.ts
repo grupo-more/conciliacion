@@ -87,7 +87,10 @@ function parseDate(s: string): Date {
  */
 export function extractOpNumber(glosa: string): string | null {
   const g = (glosa || "").toUpperCase();
-  const re = /\b(?:N\s*OPE|OPE|OP|NO|TD\s*OP|TCKT|TKT)[\s.:#]*0*(\d{2,7})/g;
+  // OJO: TCKT/TKT (ticket de la app "ENVIO APP") NO es el N° de boleta de
+  // Transbank — son numeraciones distintas. No los tratamos como llave; si la
+  // glosa trae "OP. 4005 ... TCKT. 13439", la boleta es 4005, no 13439.
+  const re = /\b(?:N\s*OPE|OPE|OP|NO|TD\s*OP)[\s.:#]*0*(\d{2,7})/g;
   let m: RegExpExecArray | null;
   let last: string | null = null;
   while ((m = re.exec(g)) !== null) last = m[1];
