@@ -15,6 +15,8 @@ interface AsientoLinea {
   haber: string | null;
 }
 interface Movimiento {
+  tbkTesoreriaId: string | null;
+  transbankSaleId: string | null;
   fecha: string | null;
   opBoleta: string | null;
   medioPago: string | null;
