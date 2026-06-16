@@ -152,9 +152,10 @@ export function buildCuadraturaAsiento(
       comisionApi: it.montoComisionApi.toString(),
       comisionCartola: it.montoComision.toString(),
       difMonto: (transbankBruto - dyn).toString(),
-      // 1403 = lo que falta para cuadrar (boleta − neto − comisión real). Captura
-      // el recargo de crédito y cualquier diferencia de monto boleta↔Transbank.
-      diferencia: (dyn - it.montoTransbank - it.montoComision).toString(),
+      // 1403 = lo que falta para cuadrar. Ventas = boleta + recargo esperado
+      // (comisión API), así el recargo de crédito se cancela y el 1403 queda en 0
+      // cuando todo calza; solo muestra valor si hay un mal tipado real.
+      diferencia: (dyn + it.montoComisionApi - it.montoTransbank - it.montoComision).toString(),
     });
     // El nombre/código pueden venir nulos en algún par; rellenamos si aparecen.
     if (!g.sucursalName && it.sucursalName) g.sucursalName = it.sucursalName;
@@ -166,6 +167,7 @@ export function buildCuadraturaAsiento(
   );
 
   let totDynatech = 0n;
+  let totVentas = 0n; // boleta + recargo esperado
   let totTransbank = 0n;
   let totComisionApi = 0n;
   let totComisionCartola = 0n;
@@ -174,10 +176,11 @@ export function buildCuadraturaAsiento(
   let totHaber = 0n;
 
   const sucursales: SucursalAsientoDTO[] = ordered.map((g) => {
-    // 708 = comisión de la API (Dynatech). 1403 = tapón que cuadra:
-    // dynatech − neto − comisión API. Absorbe la diferencia de comisión Y la
-    // diferencia de monto (cuando la boleta y lo liquidado por Transbank difieren).
-    const diferencia = g.dynatech - g.transbank - g.comisionCartola;
+    // 708 = comisión real (cartola). Ventas (17) = boleta + recargo esperado
+    // (comisión API): así el recargo de crédito se cancela y el 1403 (tapón) queda
+    // en 0 cuando todo calza; solo muestra valor si hay un mal tipado real.
+    const ventas = g.dynatech + g.comisionApi;
+    const diferencia = ventas - g.transbank - g.comisionCartola;
     const cuenta = g.sucursalName ?? (g.sucursalCodigo != null ? `#${g.sucursalCodigo}` : `#${g.sucursalId}`);
 
     const lineas: AsientoLineaDTO[] = [
@@ -187,7 +190,7 @@ export function buildCuadraturaAsiento(
         detalle: "Ventas",
         side: "HABER",
         debe: null,
-        haber: g.dynatech.toString(),
+        haber: ventas.toString(),
       },
       {
         rubro: settings.rubroTesoreria,
@@ -226,14 +229,15 @@ export function buildCuadraturaAsiento(
           },
     ];
 
-    // Totales: debe = transbank + comisión real + max(dif,0); haber = dynatech + max(-dif,0).
+    // Totales: debe = transbank + comisión real + max(dif,0); haber = ventas + max(-dif,0).
     totDynatech += g.dynatech;
+    totVentas += ventas;
     totTransbank += g.transbank;
     totComisionApi += g.comisionApi;
     totComisionCartola += g.comisionCartola;
     totDiferencia += diferencia;
     totDebe += g.transbank + g.comisionCartola + (diferencia > 0n ? diferencia : 0n);
-    totHaber += g.dynatech + (diferencia < 0n ? abs(diferencia) : 0n);
+    totHaber += ventas + (diferencia < 0n ? abs(diferencia) : 0n);
 
     return {
       sucursalId: g.sucursalId,
@@ -258,7 +262,7 @@ export function buildCuadraturaAsiento(
       cuenta: null,
       detalle: "Consolidado ventas",
       side: "DEBE",
-      debe: totDynatech.toString(),
+      debe: totVentas.toString(),
       haber: null,
     },
     ...ordered.map<AsientoLineaDTO>((g) => ({
@@ -270,7 +274,7 @@ export function buildCuadraturaAsiento(
       haber: g.transbank.toString(),
     })),
   ];
-  const consDebe = totDynatech;
+  const consDebe = totVentas;
   const consHaber = totTransbank;
 
   return {
