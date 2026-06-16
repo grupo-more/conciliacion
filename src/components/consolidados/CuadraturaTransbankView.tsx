@@ -587,38 +587,46 @@ function MovimientosDetalle({
             <th className="px-2 py-1.5 text-left">Fecha</th>
             <th className="px-2 py-1.5 text-left">OP / Boleta</th>
             <th className="px-2 py-1.5 text-left">Medio</th>
-            <th className="px-2 py-1.5 text-right" title="Monto de la boleta (Dynatech)">Boleta (Dynatech)</th>
-            <th className="px-2 py-1.5 text-right" title="Monto liquidado por Transbank (bruto)">Transbank (bruto)</th>
-            <th className="px-2 py-1.5 text-right" title="Diferencia de monto: Transbank − boleta">Δ monto</th>
+            <th className="px-2 py-1.5 text-right" title="Monto de la boleta (Dynatech)">Boleta</th>
+            <th className="px-2 py-1.5 text-right" title="Monto liquidado por Transbank (bruto)">Transbank</th>
+            <th className="px-2 py-1.5 text-right" title="Recargo de crédito esperado / diferencia. Rojo = no calza (posible mal tipado).">Recargo / Δ</th>
             <th className="px-2 py-1.5 text-right" title="Total abono que llega al banco (rubro 200)">Neto</th>
-            <th className="px-2 py-1.5 text-right" title="Comisión que registra Dynatech (rubro 708)">Com. API</th>
-            <th className="px-2 py-1.5 text-right" title="Comisión que cobró Transbank (cartola)">Com. cartola</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión real cobrada por Transbank (rubro 708)">Comisión</th>
             <th className="px-2 py-1.5 text-right" title="Aporte al rubro 1403 (tapón que cuadra)">1403</th>
             {onApartar && <th className="px-2 py-1.5 text-center">Acción</th>}
           </tr>
         </thead>
         <tbody>
           {movimientos.map((m, i) => {
-            const dif = BigInt(m.diferencia);
+            const dif = BigInt(m.diferencia); // aporte al 1403
+            const delta = BigInt(m.difMonto); // Transbank bruto − boleta
+            const recargoEsperado = BigInt(m.comisionApi); // recargo que reporta Dynatech
+            const anomalia = delta - recargoEsperado; // ≠0 ⇒ no calza con el recargo ⇒ mal tipado
+            // Color del Recargo/Δ: gris si no hay; azul si es el recargo esperado;
+            // rojo si difiere del recargo (posible error de tipeo).
+            const deltaCls =
+              delta === 0n ? "text-text-dim" : anomalia !== 0n ? "text-rose-600 font-bold" : "text-sky-700";
             return (
               <tr key={i} className="border-t border-sky-100">
                 <td className="px-2 py-1 whitespace-nowrap">{m.fecha ? formatDate(m.fecha) : "—"}</td>
                 <td className="px-2 py-1 whitespace-nowrap font-mono">{m.opBoleta ?? "—"}</td>
                 <td className="px-2 py-1 whitespace-nowrap">{m.medioPago ?? "—"}</td>
-                <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{money(m.dynatech)}</td>
-                <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{money(m.transbankBruto)}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-slate-700">{money(m.dynatech)}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-slate-700">{money(m.transbankBruto)}</td>
                 <td
-                  className={
-                    "px-2 py-1 text-right font-mono whitespace-nowrap " +
-                    (BigInt(m.difMonto) !== 0n ? "text-rose-700 font-semibold" : "text-text-dim")
+                  className={"px-2 py-1 text-right font-mono whitespace-nowrap " + deltaCls}
+                  title={
+                    delta === 0n
+                      ? "Sin diferencia"
+                      : anomalia !== 0n
+                        ? `No calza con el recargo esperado por ${signed(anomalia.toString())} — posible mal tipado`
+                        : "Recargo de crédito (esperado)"
                   }
-                  title="Diferencia entre lo liquidado por Transbank y la boleta"
                 >
-                  {BigInt(m.difMonto) !== 0n ? signed(m.difMonto) : "—"}
+                  {delta === 0n ? "—" : `${anomalia !== 0n ? "⚠ " : ""}${signed(m.difMonto)}`}
                 </td>
-                <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{money(m.transbank)}</td>
-                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-text-muted">{money(m.comisionApi)}</td>
-                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-text-muted">{money(m.comisionCartola)}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-emerald-700">{money(m.transbank)}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-rose-600">{money(m.comisionCartola)}</td>
                 <td
                   className={
                     "px-2 py-1 text-right font-mono whitespace-nowrap " +
@@ -643,6 +651,11 @@ function MovimientosDetalle({
           })}
         </tbody>
       </table>
+      <div className="px-2 py-1.5 text-[10px] text-text-muted border-t border-sky-100 flex flex-wrap gap-x-4 gap-y-1">
+        <span><span className="text-sky-700 font-bold">azul</span> = recargo de crédito (esperado)</span>
+        <span><span className="text-rose-600 font-bold">rojo ⚠</span> = no calza con el recargo (posible mal tipado)</span>
+        <span><span className="text-emerald-700 font-bold">verde</span> = neto al banco</span>
+      </div>
     </div>
   );
 }

@@ -152,9 +152,9 @@ export function buildCuadraturaAsiento(
       comisionApi: it.montoComisionApi.toString(),
       comisionCartola: it.montoComision.toString(),
       difMonto: (transbankBruto - dyn).toString(),
-      // 1403 = lo que falta para cuadrar (dynatech − neto − comisión API). Incluye
-      // la diferencia de comisión Y la diferencia de monto boleta↔Transbank.
-      diferencia: (dyn - it.montoTransbank - it.montoComisionApi).toString(),
+      // 1403 = lo que falta para cuadrar (boleta − neto − comisión real). Captura
+      // el recargo de crédito y cualquier diferencia de monto boleta↔Transbank.
+      diferencia: (dyn - it.montoTransbank - it.montoComision).toString(),
     });
     // El nombre/código pueden venir nulos en algún par; rellenamos si aparecen.
     if (!g.sucursalName && it.sucursalName) g.sucursalName = it.sucursalName;
@@ -177,7 +177,7 @@ export function buildCuadraturaAsiento(
     // 708 = comisión de la API (Dynatech). 1403 = tapón que cuadra:
     // dynatech − neto − comisión API. Absorbe la diferencia de comisión Y la
     // diferencia de monto (cuando la boleta y lo liquidado por Transbank difieren).
-    const diferencia = g.dynatech - g.transbank - g.comisionApi;
+    const diferencia = g.dynatech - g.transbank - g.comisionCartola;
     const cuenta = g.sucursalName ?? (g.sucursalCodigo != null ? `#${g.sucursalCodigo}` : `#${g.sucursalId}`);
 
     const lineas: AsientoLineaDTO[] = [
@@ -202,10 +202,11 @@ export function buildCuadraturaAsiento(
         cuenta,
         detalle: "Comisión Transbank",
         side: "DEBE",
-        debe: g.comisionApi.toString(),
+        debe: g.comisionCartola.toString(),
         haber: null,
       },
-      // 1403 = comisión cartola − comisión API; si es negativa va al haber.
+      // 1403 = tapón que cuadra (boleta − neto − comisión real). Captura el
+      // recargo de crédito y cualquier diferencia de monto; al haber si < 0.
       diferencia >= 0n
         ? {
             rubro: settings.rubroDiferencia,
@@ -225,13 +226,13 @@ export function buildCuadraturaAsiento(
           },
     ];
 
-    // Totales: debe = transbank + comisiónApi + max(dif,0); haber = dynatech + max(-dif,0).
+    // Totales: debe = transbank + comisión real + max(dif,0); haber = dynatech + max(-dif,0).
     totDynatech += g.dynatech;
     totTransbank += g.transbank;
     totComisionApi += g.comisionApi;
     totComisionCartola += g.comisionCartola;
     totDiferencia += diferencia;
-    totDebe += g.transbank + g.comisionApi + (diferencia > 0n ? diferencia : 0n);
+    totDebe += g.transbank + g.comisionCartola + (diferencia > 0n ? diferencia : 0n);
     totHaber += g.dynatech + (diferencia < 0n ? abs(diferencia) : 0n);
 
     return {
