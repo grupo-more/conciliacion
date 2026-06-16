@@ -75,11 +75,31 @@ function parseFecha(v: unknown, fallbackYear?: number): Date | null {
   return null;
 }
 
-function parseNum(v: unknown): number {
-  const str = s(v).replace(/\$/g, "").replace(/\./g, "").replace(/,/g, ".");
+/**
+ * Parsea un monto tolerando AMBOS formatos de separador, porque el reporte de
+ * Transbank llega indistintamente en es-CL ("$350.000" → punto = miles) y en
+ * en-US ("$350,000" → coma = miles). Antes asumíamos solo es-CL, así que un
+ * "$350,000" se convertía en 350 (÷1000).
+ *
+ * Regla: el separador DECIMAL es el último "." o "," seguido de 1-2 dígitos al
+ * final ("1.234,56" CL / "1,234.56" US). Todo lo demás son separadores de
+ * miles. Los montos CLP son enteros, así que si no hay decimal claro, se quitan
+ * TODOS los separadores ("350.000" y "350,000" → 350000).
+ */
+export function parseNum(v: unknown): number {
+  let str = s(v).replace(/[$\s]/g, "");
   if (str === "" || /^n\/?a$/i.test(str)) return 0;
+  const neg = str.startsWith("-");
+  str = str.replace(/[^0-9.,]/g, "");
+  const dec = str.match(/[.,](\d{1,2})$/);
+  if (dec) {
+    str = str.slice(0, -dec[0].length).replace(/[.,]/g, "") + "." + dec[1];
+  } else {
+    str = str.replace(/[.,]/g, "");
+  }
   const n = Number(str);
-  return Number.isFinite(n) ? Math.round(n) : 0;
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(neg ? -n : n);
 }
 
 /** Header → indice de columna, tolerante (incluye substring). */
