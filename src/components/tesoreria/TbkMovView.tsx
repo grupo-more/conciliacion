@@ -14,6 +14,8 @@ interface TbkRow {
   cajeroName: string | null;
   clienteName: string | null;
   clienteRut: string | null;
+  comisionMonto: string | null;
+  comisionPorcentaje: number | null;
 }
 interface Resp {
   total: number;
@@ -113,14 +115,15 @@ export function TbkMovView() {
               <th className="px-3 py-2 text-left">Sucursal</th>
               <th className="px-3 py-2 text-left">OP</th>
               <th className="px-3 py-2 text-right">Monto</th>
+              <th className="px-3 py-2 text-right">Comisión</th>
               <th className="px-3 py-2 text-left">Cajero</th>
               <th className="px-3 py-2 text-left">Glosa</th>
             </tr>
           </thead>
           <tbody>
-            {loading && <tr><td colSpan={6} className="px-3 py-6 text-center text-text-muted">Cargando…</td></tr>}
+            {loading && <tr><td colSpan={7} className="px-3 py-6 text-center text-text-muted">Cargando…</td></tr>}
             {!loading && data && data.movements.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-text-muted">Sin movimientos. Sincronizá el POS.</td></tr>
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-text-muted">Sin movimientos. Sincronizá el POS.</td></tr>
             )}
             {!loading && data?.movements.map((m) => (
               <tr key={m.id} className="border-t border-border-soft/40 hover:bg-bg-elevated/40">
@@ -128,6 +131,18 @@ export function TbkMovView() {
                 <td className="px-3 py-2 whitespace-nowrap">{m.sucursalName ?? `#${m.sucursalId}`}</td>
                 <td className="px-3 py-2 font-mono text-xs">{m.opNumber ?? "—"}</td>
                 <td className="px-3 py-2 text-right font-mono text-success whitespace-nowrap">+{formatMoney(BigInt(m.monto))}</td>
+                <td className="px-3 py-2 text-right font-mono whitespace-nowrap text-text-muted">
+                  {m.comisionMonto != null ? (
+                    <>
+                      ${formatMoney(BigInt(m.comisionMonto))}
+                      {m.comisionPorcentaje != null && (
+                        <span className="text-[11px] text-text-dim"> ({m.comisionPorcentaje}%)</span>
+                      )}
+                    </>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="px-3 py-2 whitespace-nowrap text-xs">{m.cajeroName ?? "—"}</td>
                 <td className="px-3 py-2 max-w-md truncate" title={m.glosa}>{m.glosa}</td>
               </tr>

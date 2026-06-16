@@ -69,6 +69,8 @@ export async function GET(req: Request) {
       clienteName: m.clienteName,
       clienteRut: m.clienteRut,
       fechaCarga: m.fechaCarga?.toISOString() ?? null,
+      comisionMonto: m.comisionMonto != null ? m.comisionMonto.toString() : null,
+      comisionPorcentaje: m.comisionPorcentaje != null ? Number(m.comisionPorcentaje) : null,
     })),
     facets: {
       sucursales: sucursales.map((s) => ({ id: s.sucursalId, name: s.sucursalName })),

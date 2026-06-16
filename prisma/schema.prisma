@@ -440,6 +440,15 @@ model TbkTesoreria {
   clienteName    String?  @map("cliente_name")
   clienteRut     String?  @map("cliente_rut")
 
+  // Comisión que trae el feed por operación (objeto `comision`). El `monto`
+  // viene CON IVA (es la comisión tal como la registra Dynatech). Es la fuente
+  // del rubro 708 en la cuadratura. Débito suele venir null (= sin comisión).
+  comisionMonto      BigInt?  @map("comision_monto")
+  comisionPorcentaje Decimal? @map("comision_porcentaje") @db.Decimal(7, 4)
+  comisionId         BigInt?  @map("comision_id")
+  comisionGlosa      String?  @map("comision_glosa") @db.Text
+  comisionFecha      DateTime? @map("comision_fecha")
+
   // Estado del documento en origen (contexto.estado). Ver TesoreriaMovement.
   // Los anulados (estadoActual="ANU") se excluyen del cruce Transbank.
   estadoOriginal String?  @map("estado_original")
@@ -667,9 +676,10 @@ model CuadraturaTransbankItem {
   opBoleta  String?   @map("op_boleta")  // OP del POS / N° boleta del settlement
   medioPago String?   @map("medio_pago") // Débito/Crédito/Prepago
 
-  montoDynatech  BigInt @map("monto_dynatech")  // bruto POS
-  montoTransbank BigInt @map("monto_transbank") // total abono (neto)
-  montoComision  BigInt @map("monto_comision")  // comisión + IVA comisión
+  montoDynatech     BigInt  @map("monto_dynatech")      // bruto POS
+  montoTransbank    BigInt  @map("monto_transbank")     // total abono (neto)
+  montoComision     BigInt  @map("monto_comision")      // comisión cartola (comision + IVA) → 1403
+  montoComisionApi  BigInt  @default(0) @map("monto_comision_api") // comisión Dynatech (con IVA) → 708
 
   @@index([cuadraturaId])
   @@index([sucursalId])

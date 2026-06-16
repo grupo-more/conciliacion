@@ -24,7 +24,8 @@ export interface CuadraturaItemInput {
   sucursalCodigo: number | null;
   montoDynatech: bigint; // bruto POS
   montoTransbank: bigint; // total abono (neto)
-  montoComision: bigint; // comisión + IVA comisión
+  montoComision: bigint; // comisión cartola (comision + IVA) → base 1403
+  montoComisionApi: bigint; // comisión Dynatech/API (con IVA) → rubro 708
   // Detalle por movimiento (para el desglose auditable). Opcional.
   tbkTesoreriaId?: string;
   transbankSaleId?: string;
@@ -41,8 +42,9 @@ export interface MovimientoDTO {
   medioPago: string | null;
   dynatech: string;
   transbank: string;
-  comision: string;
-  diferencia: string; // dynatech − transbank − comisión (con signo)
+  comisionApi: string; // Dynatech → 708
+  comisionCartola: string; // settlement → 1403
+  diferencia: string; // comisión cartola − comisión API (con signo)
 }
 
 export type AsientoSide = "DEBE" | "HABER";
@@ -62,8 +64,9 @@ export interface SucursalAsientoDTO {
   sucursalCodigo: number | null;
   dynatech: string;
   transbank: string;
-  comision: string;
-  diferencia: string; // con signo
+  comisionApi: string; // → 708
+  comisionCartola: string;
+  diferencia: string; // comisión cartola − comisión API (con signo) → 1403
   count: number;
   lineas: AsientoLineaDTO[];
   movimientos: MovimientoDTO[];
@@ -82,7 +85,8 @@ export interface CuadraturaAsientoDTO {
   totals: {
     dynatech: string;
     transbank: string;
-    comision: string;
+    comisionApi: string;
+    comisionCartola: string;
     diferencia: string;
     debe: string;
     haber: string;
@@ -104,7 +108,8 @@ export function buildCuadraturaAsiento(
       sucursalCodigo: number | null;
       dynatech: bigint;
       transbank: bigint;
-      comision: bigint;
+      comisionApi: bigint;
+      comisionCartola: bigint;
       count: number;
       movimientos: MovimientoDTO[];
     }
@@ -119,7 +124,8 @@ export function buildCuadraturaAsiento(
         sucursalCodigo: it.sucursalCodigo,
         dynatech: 0n,
         transbank: 0n,
-        comision: 0n,
+        comisionApi: 0n,
+        comisionCartola: 0n,
         count: 0,
         movimientos: [],
       };
@@ -128,7 +134,8 @@ export function buildCuadraturaAsiento(
     const dyn = abs(it.montoDynatech);
     g.dynatech += dyn;
     g.transbank += it.montoTransbank;
-    g.comision += it.montoComision;
+    g.comisionApi += it.montoComisionApi;
+    g.comisionCartola += it.montoComision;
     g.count += 1;
     g.movimientos.push({
       tbkTesoreriaId: it.tbkTesoreriaId ?? null,
@@ -138,8 +145,9 @@ export function buildCuadraturaAsiento(
       medioPago: it.medioPago ?? null,
       dynatech: dyn.toString(),
       transbank: it.montoTransbank.toString(),
-      comision: it.montoComision.toString(),
-      diferencia: (dyn - it.montoTransbank - it.montoComision).toString(),
+      comisionApi: it.montoComisionApi.toString(),
+      comisionCartola: it.montoComision.toString(),
+      diferencia: (it.montoComision - it.montoComisionApi).toString(),
     });
     // El nombre/código pueden venir nulos en algún par; rellenamos si aparecen.
     if (!g.sucursalName && it.sucursalName) g.sucursalName = it.sucursalName;
@@ -152,13 +160,15 @@ export function buildCuadraturaAsiento(
 
   let totDynatech = 0n;
   let totTransbank = 0n;
-  let totComision = 0n;
+  let totComisionApi = 0n;
+  let totComisionCartola = 0n;
   let totDiferencia = 0n;
   let totDebe = 0n;
   let totHaber = 0n;
 
   const sucursales: SucursalAsientoDTO[] = ordered.map((g) => {
-    const diferencia = g.dynatech - g.transbank - g.comision; // tapón
+    // 708 = comisión de la API (Dynatech). 1403 = comisión cartola − comisión API.
+    const diferencia = g.comisionCartola - g.comisionApi;
     const cuenta = g.sucursalName ?? (g.sucursalCodigo != null ? `#${g.sucursalCodigo}` : `#${g.sucursalId}`);
 
     const lineas: AsientoLineaDTO[] = [
@@ -183,10 +193,10 @@ export function buildCuadraturaAsiento(
         cuenta,
         detalle: "Comisión Transbank",
         side: "DEBE",
-        debe: g.comision.toString(),
+        debe: g.comisionApi.toString(),
         haber: null,
       },
-      // El tapón cuadra el asiento: si la diferencia es negativa va al haber.
+      // 1403 = comisión cartola − comisión API; si es negativa va al haber.
       diferencia >= 0n
         ? {
             rubro: settings.rubroDiferencia,
@@ -206,12 +216,13 @@ export function buildCuadraturaAsiento(
           },
     ];
 
-    // Acumular totales (debe = transbank + comisión + max(dif,0); haber = dynatech + max(-dif,0)).
+    // Totales: debe = transbank + comisiónApi + max(dif,0); haber = dynatech + max(-dif,0).
     totDynatech += g.dynatech;
     totTransbank += g.transbank;
-    totComision += g.comision;
+    totComisionApi += g.comisionApi;
+    totComisionCartola += g.comisionCartola;
     totDiferencia += diferencia;
-    totDebe += g.transbank + g.comision + (diferencia > 0n ? diferencia : 0n);
+    totDebe += g.transbank + g.comisionApi + (diferencia > 0n ? diferencia : 0n);
     totHaber += g.dynatech + (diferencia < 0n ? abs(diferencia) : 0n);
 
     return {
@@ -220,7 +231,8 @@ export function buildCuadraturaAsiento(
       sucursalCodigo: g.sucursalCodigo,
       dynatech: g.dynatech.toString(),
       transbank: g.transbank.toString(),
-      comision: g.comision.toString(),
+      comisionApi: g.comisionApi.toString(),
+      comisionCartola: g.comisionCartola.toString(),
       diferencia: diferencia.toString(),
       count: g.count,
       lineas,
@@ -262,7 +274,8 @@ export function buildCuadraturaAsiento(
     totals: {
       dynatech: totDynatech.toString(),
       transbank: totTransbank.toString(),
-      comision: totComision.toString(),
+      comisionApi: totComisionApi.toString(),
+      comisionCartola: totComisionCartola.toString(),
       diferencia: totDiferencia.toString(),
       debe: totDebe.toString(),
       haber: totHaber.toString(),

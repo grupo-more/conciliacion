@@ -22,7 +22,8 @@ interface Movimiento {
   medioPago: string | null;
   dynatech: string;
   transbank: string;
-  comision: string;
+  comisionApi: string;
+  comisionCartola: string;
   diferencia: string;
 }
 interface SucursalAsiento {
@@ -31,7 +32,8 @@ interface SucursalAsiento {
   sucursalCodigo: number | null;
   dynatech: string;
   transbank: string;
-  comision: string;
+  comisionApi: string;
+  comisionCartola: string;
   diferencia: string;
   count: number;
   lineas: AsientoLinea[];
@@ -49,7 +51,8 @@ interface Asiento {
   totals: {
     dynatech: string;
     transbank: string;
-    comision: string;
+    comisionApi: string;
+    comisionCartola: string;
     diferencia: string;
     debe: string;
     haber: string;
@@ -192,7 +195,7 @@ export function CuadraturaTransbankView({
           medioPago: mov.medioPago,
           montoDynatech: mov.dynatech,
           montoTransbank: mov.transbank,
-          montoComision: mov.comision,
+          montoComision: mov.comisionCartola,
           motivo: motivo.trim() || null,
         }),
       });
@@ -577,8 +580,9 @@ function MovimientosDetalle({
             <th className="px-2 py-1.5 text-left">Medio</th>
             <th className="px-2 py-1.5 text-right">Dynatech (bruto)</th>
             <th className="px-2 py-1.5 text-right">Transbank (neto)</th>
-            <th className="px-2 py-1.5 text-right">Comisión</th>
-            <th className="px-2 py-1.5 text-right">Diferencia</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión que registra Dynatech (rubro 708)">Comisión API</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión que cobró Transbank (cartola)">Comisión cartola</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión cartola − comisión API (rubro 1403)">Diferencia</th>
             {onApartar && <th className="px-2 py-1.5 text-center">Acción</th>}
           </tr>
         </thead>
@@ -592,7 +596,8 @@ function MovimientosDetalle({
                 <td className="px-2 py-1 whitespace-nowrap">{m.medioPago ?? "—"}</td>
                 <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{money(m.dynatech)}</td>
                 <td className="px-2 py-1 text-right font-mono whitespace-nowrap">{money(m.transbank)}</td>
-                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-text-muted">{money(m.comision)}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-text-muted">{money(m.comisionApi)}</td>
+                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-text-muted">{money(m.comisionCartola)}</td>
                 <td
                   className={
                     "px-2 py-1 text-right font-mono whitespace-nowrap " +

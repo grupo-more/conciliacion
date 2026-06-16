@@ -50,6 +50,17 @@ const recordSchema = z.object({
   currency: z.string().optional().default("CLP"),
   fechaCarga: z.string().optional().nullable(),
   tipo: z.string().optional().default("TBK"),
+  // Comisión por operación (objeto). `monto` viene CON IVA. null en débito.
+  comision: z
+    .object({
+      id: z.number().int().optional().nullable(),
+      monto: z.number().optional().nullable(),
+      glosa: z.string().optional().nullable(),
+      fecha: z.string().optional().nullable(),
+      porcentaje: z.number().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
 });
 
 export interface TbkSyncResult {
@@ -150,6 +161,7 @@ export async function runTbkTesoreriaSync(): Promise<TbkSyncResult> {
           select: { id: true },
         });
         const clienteDoc = r.cliente?.documento ?? null;
+        const com = r.comision ?? null;
         const payload = {
           sucursalId: r.contexto.sucursal.id,
           sucursalName: r.contexto.sucursal.nombre ?? null,
@@ -168,6 +180,12 @@ export async function runTbkTesoreriaSync(): Promise<TbkSyncResult> {
           estadoActual: r.contexto.estado?.actual?.trim().toUpperCase() || null,
           anulado: r.contexto.estado?.anulado ?? false,
           fechaCarga: r.fechaCarga ? parseDate(r.fechaCarga) : null,
+          // Comisión por operación (con IVA). Débito viene null.
+          comisionMonto: com?.monto != null ? BigInt(Math.round(com.monto)) : null,
+          comisionPorcentaje: com?.porcentaje != null ? com.porcentaje : null,
+          comisionId: com?.id != null ? BigInt(com.id) : null,
+          comisionGlosa: com?.glosa ?? null,
+          comisionFecha: com?.fecha ? parseDate(com.fecha) : null,
           rawJson: r as unknown as object,
         };
         await prisma.tbkTesoreria.upsert({

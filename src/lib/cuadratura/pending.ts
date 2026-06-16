@@ -60,7 +60,10 @@ export async function getPendingPairs(
   for (const p of pairs) {
     if (!p.sett) continue; // solo cuadrados
     if (opts.sucursalId != null && p.pos.sucursalId !== opts.sucursalId) continue;
-    const comision = p.sett.comision + p.sett.ivaComision;
+    // Comisión de cartola (settlement, con IVA) → base del 1403.
+    // Comisión de la API/Dynatech (con IVA, null en débito → 0) → rubro 708.
+    const comisionCartola = p.sett.comision + p.sett.ivaComision;
+    const comisionApi = p.pos.comisionMonto ?? 0n;
     out.push({
       tbkTesoreriaId: p.pos.id,
       transbankSaleId: p.sett.id,
@@ -69,7 +72,8 @@ export async function getPendingPairs(
       sucursalCodigo: sucByCodigo.has(p.pos.sucursalId) ? p.pos.sucursalId : null,
       montoDynatech: p.pos.monto < 0n ? -p.pos.monto : p.pos.monto,
       montoTransbank: p.sett.totalAbono,
-      montoComision: comision,
+      montoComision: comisionCartola,
+      montoComisionApi: comisionApi,
       // Detalle por movimiento (para el desglose y el snapshot al generar).
       fecha: p.pos.fecha.toISOString(),
       opBoleta: p.pos.opNumber ?? p.sett.numeroBoleta ?? null,

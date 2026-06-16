@@ -44,6 +44,7 @@ export async function GET(req: Request) {
       montoDynatech: i.montoDynatech,
       montoTransbank: i.montoTransbank,
       montoComision: i.montoComision,
+      montoComisionApi: i.montoComisionApi,
       tbkTesoreriaId: i.tbkTesoreriaId,
       transbankSaleId: i.transbankSaleId,
       fecha: i.fecha ? i.fecha.toISOString() : null,
@@ -85,6 +86,7 @@ export async function GET(req: Request) {
     montoDynatech: p.montoDynatech,
     montoTransbank: p.montoTransbank,
     montoComision: p.montoComision,
+    montoComisionApi: p.montoComisionApi,
     tbkTesoreriaId: p.tbkTesoreriaId,
     transbankSaleId: p.transbankSaleId,
     fecha: p.fecha,
@@ -136,16 +138,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "No hay movimientos pendientes por cuadrar en el rango." }, { status: 400 });
   }
 
-  // Totales snapshot.
+  // Totales snapshot. 708 = comisión API; 1403 = comisión cartola − comisión API.
   let totDynatech = 0n;
   let totTransbank = 0n;
-  let totComision = 0n;
+  let totComisionApi = 0n;
+  let totComisionCartola = 0n;
   for (const p of pending) {
     totDynatech += p.montoDynatech;
     totTransbank += p.montoTransbank;
-    totComision += p.montoComision;
+    totComisionApi += p.montoComisionApi;
+    totComisionCartola += p.montoComision;
   }
-  const totDiferencia = totDynatech - totTransbank - totComision;
+  const totDiferencia = totComisionCartola - totComisionApi;
 
   try {
     const created = await prisma.$transaction(async (tx) => {
@@ -160,7 +164,7 @@ export async function POST(req: Request) {
           rubroDiferencia: settings.rubroDiferencia,
           totalDynatech: totDynatech,
           totalTransbank: totTransbank,
-          totalComision: totComision,
+          totalComision: totComisionApi,
           totalDiferencia: totDiferencia,
           createdById: session.sub,
         },
@@ -179,6 +183,7 @@ export async function POST(req: Request) {
           montoDynatech: p.montoDynatech,
           montoTransbank: p.montoTransbank,
           montoComision: p.montoComision,
+          montoComisionApi: p.montoComisionApi,
         })),
       });
       return cuad;
