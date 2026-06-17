@@ -112,6 +112,7 @@ export function buildCuadraturaAsiento(
       transbank: bigint;
       comisionApi: bigint;
       comisionCartola: bigint;
+      c708: bigint; // lo que va al rubro 708 (API si vino, si no la cartola)
       count: number;
       movimientos: MovimientoDTO[];
     }
@@ -128,16 +129,21 @@ export function buildCuadraturaAsiento(
         transbank: 0n,
         comisionApi: 0n,
         comisionCartola: 0n,
+        c708: 0n,
         count: 0,
         movimientos: [],
       };
       groups.set(it.sucursalId, g);
     }
     const dyn = abs(it.montoDynatech);
+    // 708 = comisión API si vino; si no (débito sin comisión API) = comisión cartola.
+    // 1403 = comisión cartola − lo que fue al 708 (la diferencia API↔cartola).
+    const c708i = it.montoComisionApi > 0n ? it.montoComisionApi : it.montoComision;
     g.dynatech += dyn;
     g.transbank += it.montoTransbank;
     g.comisionApi += it.montoComisionApi;
     g.comisionCartola += it.montoComision;
+    g.c708 += c708i;
     g.count += 1;
     const transbankBruto = it.montoTransbank + it.montoComision; // neto + comisión cartola
     g.movimientos.push({
@@ -152,8 +158,8 @@ export function buildCuadraturaAsiento(
       comisionApi: it.montoComisionApi.toString(),
       comisionCartola: it.montoComision.toString(),
       difMonto: (transbankBruto - dyn).toString(),
-      // 1403 = comisión cartola − comisión API (DEBE si +, HABER si −).
-      diferencia: (it.montoComision - it.montoComisionApi).toString(),
+      // 1403 = comisión cartola − comisión que fue al 708 (DEBE si +, HABER si −).
+      diferencia: (it.montoComision - c708i).toString(),
     });
     // El nombre/código pueden venir nulos en algún par; rellenamos si aparecen.
     if (!g.sucursalName && it.sucursalName) g.sucursalName = it.sucursalName;
@@ -169,19 +175,19 @@ export function buildCuadraturaAsiento(
   let totTransbank = 0n;
   let totComisionApi = 0n;
   let totComisionCartola = 0n;
+  let totC708 = 0n; // total que va al rubro 708
   let totDiferencia = 0n;
   let totDebe = 0n;
   let totHaber = 0n;
 
   const sucursales: SucursalAsientoDTO[] = ordered.map((g) => {
-    // Modelo final:
+    // Modelo final (cuadra siempre: 200 + 708 + 1403 = 17):
     //   17 Ventas (H)   = neto + comisión cartola (= bruto Transbank)
     //   200 Tesorería(D)= neto
-    //   708 Comisión (D)= comisión API (recargo en crédito; 0 en débito)
-    //   1403            = comisión cartola − comisión API (DEBE si +, HABER si −)
-    // Cuadra siempre: 200 + 708 + 1403 = Ventas.
+    //   708 Comisión (D)= comisión API si vino; si no, comisión cartola (nunca 0)
+    //   1403            = comisión cartola − lo que fue al 708 (DEBE si +, HABER si −)
     const ventas = g.transbank + g.comisionCartola;
-    const diferencia = g.comisionCartola - g.comisionApi;
+    const diferencia = g.comisionCartola - g.c708;
     const cuenta = g.sucursalName ?? (g.sucursalCodigo != null ? `#${g.sucursalCodigo}` : `#${g.sucursalId}`);
 
     const lineas: AsientoLineaDTO[] = [
@@ -206,11 +212,11 @@ export function buildCuadraturaAsiento(
         cuenta,
         detalle: "Comisión Transbank",
         side: "DEBE",
-        debe: g.comisionApi.toString(),
+        debe: g.c708.toString(),
         haber: null,
       },
-      // 1403 = comisión cartola − comisión API. DEBE si + (débito: comisión al
-      // debe), HABER si − (crédito: el recargo cobrado de más sobre la comisión).
+      // 1403 = comisión cartola − lo que fue al 708. HABER si la API cobró de más
+      // (crédito), DEBE si la cartola fue mayor.
       diferencia >= 0n
         ? {
             rubro: settings.rubroDiferencia,
@@ -230,14 +236,15 @@ export function buildCuadraturaAsiento(
           },
     ];
 
-    // Totales: debe = transbank + comisión API + max(dif,0); haber = ventas + max(-dif,0).
+    // Totales: debe = transbank + 708 + max(dif,0); haber = ventas + max(-dif,0).
     totDynatech += g.dynatech;
     totVentas += ventas;
     totTransbank += g.transbank;
     totComisionApi += g.comisionApi;
     totComisionCartola += g.comisionCartola;
+    totC708 += g.c708;
     totDiferencia += diferencia;
-    totDebe += g.transbank + g.comisionApi + (diferencia > 0n ? diferencia : 0n);
+    totDebe += g.transbank + g.c708 + (diferencia > 0n ? diferencia : 0n);
     totHaber += ventas + (diferencia < 0n ? abs(diferencia) : 0n);
 
     return {
