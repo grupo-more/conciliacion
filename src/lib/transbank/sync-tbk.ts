@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { normalizeRut } from "@/lib/cartolas/normalize";
 
@@ -150,6 +151,12 @@ export async function runTbkTesoreriaSync(): Promise<TbkSyncResult> {
       pages++;
       if (data.length === 0) break;
 
+      // Parseamos y armamos los payloads de la pagina primero. Evitamos el
+      // patron N+1 (un findUnique + un upsert por fila, en serie): con miles
+      // de registros eran cientos de miles de round-trips secuenciales a la BD
+      // y la peticion quedaba "pending" varios minutos.
+      type TbkPayload = Omit<Prisma.TbkTesoreriaUncheckedCreateInput, "externalId">;
+      const batch: { externalId: bigint; payload: TbkPayload }[] = [];
       for (const raw of data) {
         const p = recordSchema.safeParse(raw);
         if (!p.success) {
@@ -159,10 +166,6 @@ export async function runTbkTesoreriaSync(): Promise<TbkSyncResult> {
         const r = p.data;
         fetchedRows++;
         const externalId = BigInt(r.contexto.id);
-        const existing = await prisma.tbkTesoreria.findUnique({
-          where: { externalId },
-          select: { id: true },
-        });
         const clienteDoc = r.cliente?.documento ?? null;
         const com = r.comision ?? null;
         const payload = {
@@ -190,14 +193,39 @@ export async function runTbkTesoreriaSync(): Promise<TbkSyncResult> {
           comisionGlosa: com?.glosa ?? null,
           comisionFecha: com?.fecha ? parseDate(com.fecha) : null,
           rawJson: r as unknown as object,
-        };
-        await prisma.tbkTesoreria.upsert({
-          where: { externalId },
-          create: { externalId, ...payload },
-          update: { ...payload, syncedAt: new Date() },
-        });
-        if (existing) updatedRows++;
-        else insertedRows++;
+        } satisfies TbkPayload;
+        batch.push({ externalId, payload });
+      }
+
+      // Un solo query para saber cuales ya existen (insert vs update).
+      const ids = batch.map((b) => b.externalId);
+      const existingRows = ids.length
+        ? await prisma.tbkTesoreria.findMany({
+            where: { externalId: { in: ids } },
+            select: { externalId: true },
+          })
+        : [];
+      const existingSet = new Set(existingRows.map((e) => e.externalId.toString()));
+
+      // Upserts en paralelo por chunks (concurrencia acotada para no saturar
+      // el pool de conexiones).
+      const CHUNK = 25;
+      const now = new Date();
+      for (let i = 0; i < batch.length; i += CHUNK) {
+        const chunk = batch.slice(i, i + CHUNK);
+        await Promise.all(
+          chunk.map(({ externalId, payload }) =>
+            prisma.tbkTesoreria.upsert({
+              where: { externalId },
+              create: { externalId, ...payload },
+              update: { ...payload, syncedAt: now },
+            })
+          )
+        );
+        for (const { externalId } of chunk) {
+          if (existingSet.has(externalId.toString())) updatedRows++;
+          else insertedRows++;
+        }
       }
 
       // Paginacion por cursor.
