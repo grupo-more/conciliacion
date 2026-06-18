@@ -43,6 +43,9 @@ export async function GET(req: Request) {
     where: {
       status: { in: ["AUTO_MATCHED", "MANUAL"] },
       tesoreriaMovement: {
+        // OK = ingresos (clientes). Los egresos (tipoOperacion=EGRESO) van a la
+        // tab "Egresos a terceros → Conciliados (asiento)".
+        tipoOperacion: "INGRESO",
         fecha: { gte: from, lt: to },
         ...(rubroSucursal !== null ? { rubroSucursal } : {}),
       },
@@ -224,7 +227,7 @@ export async function GET(req: Request) {
   const allInRange = await prisma.consolidado.findMany({
     where: {
       status: { in: ["AUTO_MATCHED", "MANUAL"] },
-      tesoreriaMovement: { fecha: { gte: from, lt: to } },
+      tesoreriaMovement: { tipoOperacion: "INGRESO", fecha: { gte: from, lt: to } },
     },
     select: {
       resolvedAccountId: true,

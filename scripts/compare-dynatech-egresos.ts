@@ -181,6 +181,13 @@ async function main() {
   const win = DATE_WINDOW_DAYS;
   const dyna = { amount: 0, plusName: 0, plusRut: 0, plusBanco: 0 };
   const op = { amount: 0, plusName: 0 };
+  // Clasificación para AUTO-MATCH (qué tan seguro es resolverlo solo):
+  const auto = {
+    unico: 0,        // 1 solo egreso dynatech por monto+fecha → 1:1 directo
+    desempBanco: 0,  // varios, pero solo 1 coincide en banco
+    desempNombre: 0, // varios, pero solo 1 comparte token de nombre
+    ambiguo: 0,      // varios y nada los desempata → manual
+  };
   const rows: string[][] = [];
 
   for (const bm of outPool) {
@@ -196,26 +203,33 @@ async function main() {
     if (dCands.length > 0) {
       dyna.amount++;
       let hasName = false, hasRut = false, hasBank = false;
+      // ¿cuántos candidatos calzan cada llave de desempate?
+      let nBank = 0, nName = 0;
       for (const e of dCands) {
         const eNames = nameTokens(e.glosa, e.clienteName);
         const eRut = rutFrom(e.glosa, e.clienteRut, e.clienteName);
         const tok = shareToken(bmNames, eNames);
         const rutOk = !!(bmRut && eRut && bmRut === eRut);
         const bankOk = !!(e.banco && bmBank && stripDiacritics(e.banco).includes(bmBank.split(" ")[0]));
-        if (tok) hasName = true;
+        if (tok) { hasName = true; nName++; }
         if (rutOk) hasRut = true;
-        if (bankOk) hasBank = true;
+        if (bankOk) { hasBank = true; nBank++; }
         rows.push([
           d(bm.postDate), bm.account.bankName, bm.account.displayNumber ?? bm.account.accountNumber,
           clp(absBig(bm.amount)), bm.counterpartyName ?? "", bm.counterpartyRut ?? "", bm.description ?? "",
           "→", d(e.fecha), e.banco ?? "", e.glosa, e.consolidado?.status ?? "SIN_PROCESAR",
           tok ? `NOMBRE:${tok}` : "", rutOk ? `RUT:${bmRut}` : "", bankOk ? "BANCO" : "",
-          String(daysBetween(e.fecha, bm.postDate)),
+          String(daysBetween(e.fecha, bm.postDate)), String(dCands.length),
         ]);
       }
       if (hasName) dyna.plusName++;
       if (hasRut) dyna.plusRut++;
       if (hasBank) dyna.plusBanco++;
+      // tier de auto-match
+      if (dCands.length === 1) auto.unico++;
+      else if (nBank === 1) auto.desempBanco++;
+      else if (nName === 1) auto.desempNombre++;
+      else auto.ambiguo++;
     }
 
     // --- EgresoMovement (fuente actual) ---
@@ -243,6 +257,18 @@ async function main() {
   console.log(`     monto + fecha ±${win}d ............ ${op.amount}  (${pct(op.amount, T)}%)`);
   console.log(`       └ además comparte NOMBRE ....... ${op.plusName}  (${pct(op.plusName, T)}%)`);
 
+  // ---- Tiers de AUTO-MATCH (sobre los ${dyna.amount} OUT con egreso dynatech del mismo monto+fecha) ----
+  const M = dyna.amount;
+  console.log("\n" + "-".repeat(72));
+  console.log(`FACTIBILIDAD DE AUTO-MATCH (de los ${M} OUT con egreso dynatech mismo monto+fecha):`);
+  console.log("-".repeat(72));
+  console.log(`  1:1 ÚNICO (auto directo) ........... ${auto.unico}  (${pct(auto.unico, M)}% de los ${M})`);
+  console.log(`  ambiguo, desempata BANCO ........... ${auto.desempBanco}  (${pct(auto.desempBanco, M)}%)`);
+  console.log(`  ambiguo, desempata NOMBRE .......... ${auto.desempNombre}  (${pct(auto.desempNombre, M)}%)`);
+  console.log(`  ambiguo SIN desempate → MANUAL ..... ${auto.ambiguo}  (${pct(auto.ambiguo, M)}%)`);
+  const autoTotal = auto.unico + auto.desempBanco + auto.desempNombre;
+  console.log(`  → AUTO-MATCHEABLE estimado: ${autoTotal}  (${pct(autoTotal, T)}% del pool total de ${T})`);
+
   // ---- CSV ----
   const dumpsDir = resolve(process.cwd(), "dumps");
   if (!existsSync(dumpsDir)) mkdirSync(dumpsDir, { recursive: true });
@@ -253,7 +279,7 @@ async function main() {
   ws.write([
     "out_fecha", "out_banco", "out_cuenta", "out_monto", "out_contraparte", "out_rut", "out_glosa",
     "", "dyna_fecha", "dyna_banco", "dyna_glosa", "dyna_estado_conc",
-    "llave_nombre", "llave_rut", "llave_banco", "delta_dias",
+    "llave_nombre", "llave_rut", "llave_banco", "delta_dias", "n_candidatos",
   ].join(",") + "\n");
   for (const r of rows) ws.write(r.map(csvEscape).join(",") + "\n");
   await new Promise<void>((res, rej) => ws.end((e?: Error | null) => (e ? rej(e) : res())));

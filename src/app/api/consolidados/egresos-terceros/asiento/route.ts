@@ -5,11 +5,14 @@ import { prisma } from "@/lib/db";
 /**
  * GET /api/consolidados/egresos-terceros/asiento?from&to&accountId
  *
- * Asiento contable (partida doble) de los egresos a terceros CONCILIADOS
- * (EgresoConciliacion AUTO_MATCHED | MANUAL) — raíz banco / destino gasto:
- *   DEBE  = rubro del gasto operativo (EgresoMovement)
+ * Asiento contable (partida doble) de los EGRESOS a terceros CONCILIADOS contra
+ * Dynatech: Consolidado (status AUTO_MATCHED | MANUAL) de un TesoreriaMovement
+ * con tipoOperacion=EGRESO. Convención (cargo al banco):
+ *   DEBE  = rubro del gasto (lado Tesorería / sucursal)
  *   HABER = cuenta banco (BankMovement OUT)
- * Análogo a OK / Abono Transbank.
+ *
+ * Espeja la pestaña OK pero del lado egresos — OK ahora muestra solo ingresos
+ * (clientes) y los egresos viven en su propia tab.
  */
 export async function GET(req: Request) {
   const session = await getSession();
@@ -19,17 +22,37 @@ export async function GET(req: Request) {
   const { from, to } = parseRange(url.searchParams.get("from"), url.searchParams.get("to"));
   const accountId = url.searchParams.get("accountId") || null;
 
-  const concs = await prisma.egresoConciliacion.findMany({
+  const concs = await prisma.consolidado.findMany({
     where: {
       status: { in: ["AUTO_MATCHED", "MANUAL"] },
-      egresoMovement: { fecha: { gte: from, lt: to } },
+      tesoreriaMovement: {
+        tipoOperacion: "EGRESO",
+        fecha: { gte: from, lt: to },
+      },
+      ...(accountId ? { resolvedAccountId: accountId } : {}),
     },
     include: {
-      egresoMovement: true,
+      tesoreriaMovement: true,
       links: { include: { bankMovement: { include: { account: true } } } },
     },
-    orderBy: { egresoMovement: { fecha: "desc" } },
+    orderBy: { tesoreriaMovement: { fecha: "desc" } },
+    take: 2000,
   });
+
+  // Etiquetas de rubro (lado gasto) en un solo query.
+  const rubroCodes = new Set<number>();
+  for (const c of concs) {
+    if (c.tesoreriaMovement.rubroSucursal !== null) rubroCodes.add(c.tesoreriaMovement.rubroSucursal);
+    if (c.tesoreriaMovement.rubroBanco !== null) rubroCodes.add(c.tesoreriaMovement.rubroBanco);
+  }
+  const rubroLabels =
+    rubroCodes.size > 0
+      ? await prisma.rubroLabel.findMany({
+          where: { rubro: { in: Array.from(rubroCodes) } },
+          select: { rubro: true, name: true },
+        })
+      : [];
+  const labelByRubro = new Map(rubroLabels.map((r) => [r.rubro, r.name]));
 
   type Row = {
     groupId: string;
@@ -52,37 +75,40 @@ export async function GET(req: Request) {
   let totalHaber = 0n;
 
   for (const c of concs) {
-    const links = c.links;
-    if (links.length === 0) continue;
-    // Filtro por cuenta: si se pidió, solo asientos cuyo banco está en esa cuenta.
-    if (accountId && !links.some((l) => l.bankMovement.accountId === accountId)) continue;
+    if (c.links.length === 0) continue;
+    if (accountId && !c.links.some((l) => l.bankMovement.accountId === accountId)) continue;
 
-    const e = c.egresoMovement;
-    const abs = e.monto < 0n ? -e.monto : e.monto;
-    const fecha = e.fecha.toISOString();
+    const tm = c.tesoreriaMovement;
+    const rubroGasto = tm.rubroSucursal ?? tm.rubroBanco;
+    const detalleGasto =
+      labelByRubro.get(rubroGasto ?? -1) ??
+      tm.sucursalName ??
+      (tm.sucursalId ? `Sucursal ${tm.sucursalId}` : "Gasto");
+    const absTm = tm.monto < 0n ? -tm.monto : tm.monto;
 
-    // Lado GASTO (debe).
+    // Lado GASTO (debe) — uno por consolidado (1 documento de Tesorería).
     rows.push({
       groupId: c.id,
       side: "GASTO",
-      fecha,
-      rubro: e.rubroId,
-      rubroLabel: e.rubroNombre,
-      detalle: e.rubroNombre ?? "Gasto",
-      cuenta: e.sucursalName,
-      glosa: e.glosa,
-      debe: abs.toString(),
+      fecha: tm.fecha.toISOString(),
+      rubro: rubroGasto,
+      rubroLabel: labelByRubro.get(rubroGasto ?? -1) ?? null,
+      detalle: detalleGasto,
+      cuenta: tm.sucursalName,
+      glosa: tm.glosa,
+      debe: absTm.toString(),
       haber: null,
       status: c.status,
-      egresoExternalId: e.externalId.toString(),
+      egresoExternalId: tm.externalId.toString(),
       bankMovementId: null,
     });
-    totalDebe += abs;
+    totalDebe += absTm;
 
-    // Lado(s) BANCO (haber) — uno por movimiento vinculado.
-    for (const l of links) {
+    // Lado(s) BANCO (haber) — uno por cada cartola vinculada.
+    for (const l of c.links) {
       const bm = l.bankMovement;
-      const bmAbs = bm.amount < 0n ? -bm.amount : bm.amount;
+      const linkAmount = l.amountAllocated ?? bm.amount;
+      const bmAbs = linkAmount < 0n ? -linkAmount : linkAmount;
       rows.push({
         groupId: c.id,
         side: "BANCO",
@@ -95,7 +121,7 @@ export async function GET(req: Request) {
         debe: null,
         haber: bmAbs.toString(),
         status: c.status,
-        egresoExternalId: e.externalId.toString(),
+        egresoExternalId: tm.externalId.toString(),
         bankMovementId: bm.id,
       });
       totalHaber += bmAbs;

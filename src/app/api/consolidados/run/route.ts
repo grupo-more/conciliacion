@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { runConsolidados } from "@/lib/consolidados/match";
 import { runEgresosTerceros } from "@/lib/egresos/match-terceros";
+import { runDynatechEgresosTerceros } from "@/lib/egresos/match-dynatech-terceros";
 
 /**
  * POST /api/consolidados/run
@@ -29,5 +30,9 @@ export async function POST(req: Request) {
   // Además, conciliar egresos a terceros (OUT banco ↔ EgresoMovement). Corre
   // después porque excluye del pool los OUT ya conciliados contra Tesorería.
   const egresos = await runEgresosTerceros({ dryRun, preserveManual });
-  return NextResponse.json({ ...result, egresos });
+  // Auto-match de egresos a terceros contra EGRESO de Dynatech (TesoreriaMovement).
+  // Corre al final: auto-confirma solo los pares 1:1 únicos por monto+fecha que el
+  // motor principal no pudo cerrar (cross-banco / sin banco resuelto).
+  const egresosDynatech = await runDynatechEgresosTerceros({ dryRun });
+  return NextResponse.json({ ...result, egresos, egresosDynatech });
 }
