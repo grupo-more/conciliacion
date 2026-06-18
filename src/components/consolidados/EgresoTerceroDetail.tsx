@@ -239,7 +239,7 @@ export function EgresoTerceroDetail({
                   type="text"
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Buscar egreso de Dynatech por glosa, cliente o RUT…"
+                  placeholder="Buscar por nombre, RUT, glosa o monto…"
                   className="flex-1 rounded-md border border-border-soft px-3 py-1.5 text-sm"
                 />
                 <span className="text-xs text-text-muted w-16">
@@ -247,8 +247,10 @@ export function EgresoTerceroDetail({
                 </span>
               </div>
               <p className="text-xs text-text-muted mb-2">
-                Solo egresos del mismo monto ({formatMoney(BigInt(data.bankMovement.amount))}),
-                para que la conciliación cuadre exacto.
+                Busca por letra en cualquier campo de los egresos de Dynatech
+                (nombre, RUT, glosa, monto). Para vincular, el monto debe coincidir
+                con el del banco ({formatMoney(BigInt(data.bankMovement.amount))}) —
+                las sugerencias con otro monto se muestran pero no se pueden vincular.
               </p>
               <div className="space-y-2 max-h-64 overflow-y-auto">
                 {data.tesoreriaSearch.map((t) => (
@@ -256,6 +258,7 @@ export function EgresoTerceroDetail({
                     key={`s-${t.tesoreriaId}`}
                     t={t}
                     acting={acting}
+                    outAmount={data.bankMovement.amount}
                     onLink={() => linkTesoreria(t.tesoreriaId)}
                   />
                 ))}
@@ -274,11 +277,16 @@ function TesoreriaRow({
   t,
   acting,
   onLink,
+  outAmount,
 }: {
   t: TesoreriaCand;
   acting: boolean;
   onLink: () => void;
+  // Monto del OUT de banco. Si se pasa y difiere del egreso, el monto no cuadra
+  // y manual-link lo rechazaría → se marca y se desactiva el botón.
+  outAmount?: string;
 }) {
+  const montoMismatch = outAmount != null && BigInt(t.monto) !== BigInt(outAmount);
   return (
     <div className="rounded-md border border-border-soft bg-white p-2 text-sm flex justify-between items-start gap-2">
       <div className="flex-1 min-w-0">
@@ -300,10 +308,16 @@ function TesoreriaRow({
         </div>
       </div>
       <div className="text-right shrink-0">
-        <div className="font-mono font-bold whitespace-nowrap">{formatMoney(BigInt(t.monto))}</div>
+        <div className={`font-mono font-bold whitespace-nowrap ${montoMismatch ? "text-rose-600" : ""}`}>
+          {formatMoney(BigInt(t.monto))}
+        </div>
+        {montoMismatch && (
+          <div className="text-[10px] text-rose-600 font-semibold">monto ≠ banco</div>
+        )}
         <button
           onClick={onLink}
-          disabled={acting}
+          disabled={acting || montoMismatch}
+          title={montoMismatch ? "El monto no coincide con el del banco" : undefined}
           className="mt-1 rounded-md bg-brand text-white text-xs font-semibold px-3 py-1 hover:opacity-90 disabled:opacity-50"
         >
           Vincular

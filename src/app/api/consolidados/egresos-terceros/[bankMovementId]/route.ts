@@ -145,30 +145,32 @@ export async function GET(
       .sort((a, b) => Number(b.proposedForThis) - Number(a.proposedForThis));
   }
 
-  // Búsqueda manual: mismo monto (link cuadra), CUALQUIER fecha, filtrando por
-  // texto en glosa / cliente / RUT. Permite hallar el egreso fuera de la ventana.
+  // Búsqueda manual: parcial (por letra) sobre TODOS los egresos de Dynatech, en
+  // CUALQUIER campo — glosa, cliente, RUT y monto. Filtra en memoria (los egresos
+  // son pocos) normalizando puntos/guiones/espacios, así "76" pega al RUT
+  // 76.060.342-2 y "5000000" o "5.000.000" pegan al monto. No ata al monto del
+  // banco: muestra sugerencias aunque no calcen (el monto ≠ se marca en la fila).
   let tesoreriaSearch: TesoreriaCand[] = [];
-  if (!alreadyResolved && q) {
+  const normalize = (s: string | bigint | null | undefined) =>
+    (s ?? "").toString().toLowerCase().replace(/[.\-\s]/g, "");
+  const nq = normalize(q);
+  if (!alreadyResolved && nq) {
     const rows = await prisma.tesoreriaMovement.findMany({
-      where: {
-        tipoOperacion: "EGRESO",
-        monto: bm.amount,
-        AND: [
-          unresolvedClause,
-          {
-            OR: [
-              { glosa: { contains: q, mode: "insensitive" } },
-              { clienteName: { contains: q, mode: "insensitive" } },
-              { clienteRut: { contains: q, mode: "insensitive" } },
-            ],
-          },
-        ],
-      },
+      where: { tipoOperacion: "EGRESO", ...unresolvedClause },
       include: { consolidado: { select: { status: true, proposalJson: true } } },
       orderBy: { fecha: "desc" },
-      take: 50,
+      take: 3000,
     });
-    tesoreriaSearch = rows.map(mapTm);
+    tesoreriaSearch = rows
+      .filter((t) => {
+        const absMonto = t.monto < 0n ? -t.monto : t.monto;
+        const hay = normalize(
+          `${t.glosa} ${t.clienteName ?? ""} ${t.clienteRut ?? ""} ${absMonto} ${t.monto}`,
+        );
+        return hay.includes(nq);
+      })
+      .slice(0, 50)
+      .map(mapTm);
   }
 
   return NextResponse.json({
