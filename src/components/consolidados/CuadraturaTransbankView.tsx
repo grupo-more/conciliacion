@@ -397,6 +397,13 @@ function PreviewBlock({
           )}
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => exportAsientoPdf(a, `Cuadratura ${from} → ${to} (por cuadrar)`)}
+            disabled={!hasRows}
+            className="btn-ghost text-sm"
+          >
+            PDF
+          </button>
           <button onClick={exportXlsx} disabled={!hasRows} className="btn-ghost text-sm">
             Descargar Excel
           </button>
@@ -890,6 +897,12 @@ function CuadraturaModal({
           </h2>
           <div className="flex gap-2">
             <button
+              onClick={() => exportAsientoPdf(asiento, `Cuadratura ${formatDate(c.desde)} → ${formatDate(c.hasta)}`)}
+              className="btn-ghost text-sm"
+            >
+              PDF
+            </button>
+            <button
               onClick={() => exportAsientoXlsx(asiento, `cuadratura_${c.id.slice(0, 8)}`)}
               className="btn-ghost text-sm"
             >
@@ -939,4 +952,155 @@ function exportAsientoXlsx(a: Asiento, filename: string) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, sheet, "Cuadratura");
   XLSX.writeFile(wb, `${filename}.xlsx`);
+}
+
+/* ============================ Export PDF (imprimible) ============================ */
+
+function exportAsientoPdf(a: Asiento, titulo: string) {
+  const w = window.open("", "_blank");
+  if (!w) {
+    alert("Habilitá las ventanas emergentes para exportar el PDF.");
+    return;
+  }
+  const esc = (s: string) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] || c);
+  const m = (s: string | null) => (s ? `$${formatMoney(BigInt(s))}` : "");
+
+  const sucRows = a.sucursales
+    .map((s) => {
+      const head = `<tr class="suc"><td colspan="5">${esc(
+        s.sucursalName ?? `#${s.sucursalId}`,
+      )}${s.sucursalCodigo != null ? ` (${s.sucursalCodigo})` : ""} · ${s.count} mov</td></tr>`;
+      const lines = s.lineas
+        .map(
+          (l) =>
+            `<tr><td>${l.rubro}</td><td>${l.side}</td><td>${esc(l.detalle)}</td><td class="r">${m(
+              l.debe,
+            )}</td><td class="r">${m(l.haber)}</td></tr>`,
+        )
+        .join("");
+      return head + lines;
+    })
+    .join("");
+
+  const consRows = a.consolidacion.lineas
+    .map(
+      (l) =>
+        `<tr><td>${l.rubro}</td><td>${l.side}</td><td>${esc(l.cuenta ?? l.detalle)}</td><td class="r">${m(
+          l.debe,
+        )}</td><td class="r">${m(l.haber)}</td></tr>`,
+    )
+    .join("");
+
+  // Detalle por sucursal: una sección por sucursal con TODOS sus movimientos.
+  const detalle = a.sucursales
+    .map((s) => {
+      let tBoleta = 0n, tTbk = 0n, tRec = 0n, tNeto = 0n, tCart = 0n, t1403 = 0n, tFav = 0n;
+      const rows = s.movimientos
+        .map((mv) => {
+          const cApi = BigInt(mv.comisionApi);
+          const cCart = BigInt(mv.comisionCartola);
+          const c708 = cApi > 0n ? cApi : cCart;
+          const fav = c708 - cCart;
+          tBoleta += BigInt(mv.dynatech);
+          tTbk += BigInt(mv.transbankBruto);
+          tRec += BigInt(mv.difMonto);
+          tNeto += BigInt(mv.transbank);
+          tCart += cCart;
+          t1403 += BigInt(mv.diferencia);
+          tFav += fav;
+          return `<tr>
+            <td>${mv.fecha ? formatDate(mv.fecha) : "—"}</td>
+            <td>${esc(mv.opBoleta ?? "—")}</td>
+            <td>${esc(mv.medioPago ?? "—")}</td>
+            <td class="r">${m(mv.dynatech)}</td>
+            <td class="r">${m(mv.transbankBruto)}</td>
+            <td class="r">${mv.difMonto !== "0" ? m(mv.difMonto) : ""}</td>
+            <td class="r">${m(mv.transbank)}</td>
+            <td class="r">${m(mv.comisionCartola)}</td>
+            <td class="r">${mv.diferencia !== "0" ? m(mv.diferencia) : ""}</td>
+            <td class="r">${fav !== 0n ? m(fav.toString()) : ""}</td>
+          </tr>`;
+        })
+        .join("");
+      return `<div class="suc-det">
+        <h3>${esc(s.sucursalName ?? `#${s.sucursalId}`)}${
+          s.sucursalCodigo != null ? ` (${s.sucursalCodigo})` : ""
+        } · ${s.count} mov</h3>
+        <table class="det">
+          <thead><tr>
+            <th>Fecha</th><th>OP/Boleta</th><th>Medio</th>
+            <th class="r">Boleta</th><th class="r">Transbank</th><th class="r">Recargo(708)</th>
+            <th class="r">Neto</th><th class="r">Com.cartola</th><th class="r">1403</th><th class="r">A favor</th>
+          </tr></thead>
+          <tbody>
+            ${rows}
+            <tr class="tot">
+              <td colspan="3">TOTAL (${s.count})</td>
+              <td class="r">${m(tBoleta.toString())}</td><td class="r">${m(tTbk.toString())}</td>
+              <td class="r">${m(tRec.toString())}</td><td class="r">${m(tNeto.toString())}</td>
+              <td class="r">${m(tCart.toString())}</td><td class="r">${m(t1403.toString())}</td>
+              <td class="r">${m(tFav.toString())}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>`;
+    })
+    .join("");
+
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(titulo)}</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#1e293b;padding:24px;margin:0}
+  h1{font-size:16px;margin:0 0 2px}
+  .sub{color:#64748b;font-size:11px;margin-bottom:14px}
+  h2{font-size:13px;margin:18px 0 4px;border-bottom:1px solid #cbd5e1;padding-bottom:4px}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:3px 8px;text-align:left;vertical-align:top}
+  th{background:#f1f5f9;font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:#475569}
+  td.r,th.r{text-align:right;font-family:'Courier New',monospace}
+  tr.suc td{background:#fff;font-weight:bold;border-top:2px solid #94a3b8;padding-top:9px}
+  tr.tot td{font-weight:bold;border-top:2px solid #334155;background:#f8fafc}
+  /* Detalle por sucursal (páginas siguientes) */
+  .detalle{page-break-before:always}
+  .suc-det{page-break-inside:auto;margin-top:14px}
+  .suc-det h3{font-size:12px;margin:0 0 4px;page-break-after:avoid}
+  table.det th,table.det td{font-size:8px;padding:2px 4px}
+  @media print{ body{padding:0} }
+</style></head>
+<body>
+  <h1>Cuadratura Transbank</h1>
+  <div class="sub">${esc(titulo)}</div>
+
+  <h2>Asiento por sucursal</h2>
+  <table>
+    <thead><tr><th>Rubro</th><th>Lado</th><th>Detalle</th><th class="r">Debe</th><th class="r">Haber</th></tr></thead>
+    <tbody>
+      ${sucRows}
+      <tr class="tot"><td colspan="3">TOTAL</td><td class="r">${m(a.totals.debe)}</td><td class="r">${m(
+        a.totals.haber,
+      )}</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Asiento de consolidación</h2>
+  <table>
+    <thead><tr><th>Rubro</th><th>Lado</th><th>Cuenta / Detalle</th><th class="r">Debe</th><th class="r">Haber</th></tr></thead>
+    <tbody>
+      ${consRows}
+      <tr class="tot"><td colspan="3">TOTAL</td><td class="r">${m(a.consolidacion.totalDebe)}</td><td class="r">${m(
+        a.consolidacion.totalHaber,
+      )}</td></tr>
+    </tbody>
+  </table>
+
+  <section class="detalle">
+    <h2>Detalle de movimientos por sucursal</h2>
+    ${detalle}
+  </section>
+
+  <script>window.onload=function(){window.print();}</script>
+</body></html>`;
+
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
 }
