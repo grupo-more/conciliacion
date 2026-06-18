@@ -158,7 +158,7 @@ export function buildCuadraturaAsiento(
       comisionApi: it.montoComisionApi.toString(),
       comisionCartola: it.montoComision.toString(),
       difMonto: (transbankBruto - dyn).toString(),
-      // 1403 = comisión cartola − comisión que fue al 708 (DEBE si +, HABER si −).
+      // 1403 por movimiento = comisión cartola − lo que fue al 708 (DEBE si +, HABER si −).
       diferencia: (it.montoComision - c708i).toString(),
     });
     // El nombre/código pueden venir nulos en algún par; rellenamos si aparecen.
@@ -175,18 +175,19 @@ export function buildCuadraturaAsiento(
   let totTransbank = 0n;
   let totComisionApi = 0n;
   let totComisionCartola = 0n;
-  let totC708 = 0n; // total que va al rubro 708
   let totDiferencia = 0n;
   let totDebe = 0n;
   let totHaber = 0n;
 
   const sucursales: SucursalAsientoDTO[] = ordered.map((g) => {
-    // Modelo final (cuadra siempre: 200 + 708 + 1403 = 17):
+    // Modelo que CUADRA (200 + 708 + 1403 = 17):
     //   17 Ventas (H)   = neto + comisión cartola (= bruto Transbank)
     //   200 Tesorería(D)= neto
-    //   708 Comisión (D)= comisión API si vino; si no, comisión cartola (nunca 0)
-    //   1403            = comisión cartola − lo que fue al 708 (DEBE si +, HABER si −)
-    const ventas = g.transbank + g.comisionCartola;
+    //   708 Comisión (D)= comisión por operación (API si vino; si no, cartola)
+    //   1403            = comisión cartola − lo que fue al 708
+    // En crédito el 708 = recargo (2%) y como Transbank cobra menos, el 1403 da
+    // negativo → va al HABER: es la "diferencia a favor" (cobramos más que TBK).
+    const ventas = g.transbank + g.comisionCartola; // bruto
     const diferencia = g.comisionCartola - g.c708;
     const cuenta = g.sucursalName ?? (g.sucursalCodigo != null ? `#${g.sucursalCodigo}` : `#${g.sucursalId}`);
 
@@ -215,8 +216,8 @@ export function buildCuadraturaAsiento(
         debe: g.c708.toString(),
         haber: null,
       },
-      // 1403 = comisión cartola − lo que fue al 708. HABER si la API cobró de más
-      // (crédito), DEBE si la cartola fue mayor.
+      // 1403 = comisión cartola − comisión del 708. HABER (diferencia a favor) si
+      // la API/recargo fue mayor que la comisión real; DEBE si fue menor.
       diferencia >= 0n
         ? {
             rubro: settings.rubroDiferencia,
@@ -229,20 +230,19 @@ export function buildCuadraturaAsiento(
         : {
             rubro: settings.rubroDiferencia,
             cuenta,
-            detalle: "Diferencia",
+            detalle: "Diferencia a favor",
             side: "HABER",
             debe: null,
             haber: abs(diferencia).toString(),
           },
     ];
 
-    // Totales: debe = transbank + 708 + max(dif,0); haber = ventas + max(-dif,0).
+    // Totales: debe = transbank + 708 + max(dif,0); haber = ventas + max(-dif,0). Cuadra.
     totDynatech += g.dynatech;
     totVentas += ventas;
     totTransbank += g.transbank;
     totComisionApi += g.comisionApi;
     totComisionCartola += g.comisionCartola;
-    totC708 += g.c708;
     totDiferencia += diferencia;
     totDebe += g.transbank + g.c708 + (diferencia > 0n ? diferencia : 0n);
     totHaber += ventas + (diferencia < 0n ? abs(diferencia) : 0n);

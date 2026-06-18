@@ -511,6 +511,16 @@ function AsientoTable({
                 <td className="px-3 py-2 text-right font-mono font-bold">{money(t.debe)}</td>
                 <td className="px-3 py-2 text-right font-mono font-bold">{money(t.haber)}</td>
               </tr>
+              {t.debe !== t.haber && (
+                <tr className="bg-amber-50">
+                  <td className="px-3 py-1.5 text-amber-800 text-xs" colSpan={3}>
+                    ⚠ Diferencia Debe − Haber (ajustar donde corresponda)
+                  </td>
+                  <td className="px-3 py-1.5 text-right font-mono text-amber-800 text-xs" colSpan={2}>
+                    {signed((BigInt(t.debe) - BigInt(t.haber)).toString())}
+                  </td>
+                </tr>
+              )}
             </tfoot>
           </table>
         </div>
@@ -589,18 +599,18 @@ function MovimientosDetalle({
             <th className="px-2 py-1.5 text-left">Medio</th>
             <th className="px-2 py-1.5 text-right" title="Monto de la boleta (Dynatech)">Boleta</th>
             <th className="px-2 py-1.5 text-right" title="Monto liquidado por Transbank (bruto)">Transbank</th>
-            <th className="px-2 py-1.5 text-right" title="Recargo de crédito esperado / diferencia. Rojo = no calza (posible mal tipado).">Recargo / Δ</th>
+            <th className="px-2 py-1.5 text-right" title="Recargo de crédito (bruto − boleta). Azul = esperado; rojo ⚠ = no calza (posible mal tipado).">Recargo / Δ</th>
             <th className="px-2 py-1.5 text-right" title="Total abono que llega al banco (rubro 200)">Neto</th>
             <th className="px-2 py-1.5 text-right" title="Lo que va al rubro 708: comisión API si vino; si no, la de cartola">Comisión (708)</th>
             <th className="px-2 py-1.5 text-right" title="Comisión real cobrada por Transbank (cartola)">Com. cartola</th>
-            <th className="px-2 py-1.5 text-right" title="Comisión cartola − comisión del 708 → rubro 1403 (debe si +, haber si −)">1403</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión cartola − comisión del 708 → rubro 1403 (debe si +, haber 'a favor' si −)">1403</th>
             {onApartar && <th className="px-2 py-1.5 text-center">Acción</th>}
           </tr>
         </thead>
         <tbody>
           {movimientos.map((m, i) => {
             const dif = BigInt(m.diferencia); // aporte al 1403 (cartola − 708)
-            const delta = BigInt(m.difMonto); // Transbank bruto − boleta
+            const delta = BigInt(m.difMonto); // Transbank bruto − boleta (recargo crédito)
             const recargoEsperado = BigInt(m.comisionApi); // comisión API (0 si no vino)
             const c708 = recargoEsperado > 0n ? recargoEsperado : BigInt(m.comisionCartola); // lo que va al 708
             const anomalia = delta - recargoEsperado; // ≠0 ⇒ no calza con el recargo ⇒ mal tipado
