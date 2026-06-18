@@ -599,20 +599,21 @@ function MovimientosDetalle({
             <th className="px-2 py-1.5 text-left">Medio</th>
             <th className="px-2 py-1.5 text-right" title="Monto de la boleta (Dynatech)">Boleta</th>
             <th className="px-2 py-1.5 text-right" title="Monto liquidado por Transbank (bruto)">Transbank</th>
-            <th className="px-2 py-1.5 text-right" title="Recargo de crédito (bruto − boleta). Azul = esperado; rojo ⚠ = no calza (posible mal tipado).">Recargo / Δ</th>
+            <th className="px-2 py-1.5 text-right" title="Recargo de crédito (bruto − boleta) → va al rubro 708. Azul = esperado; rojo ⚠ = no calza (posible mal tipado).">Recargo (→708)</th>
             <th className="px-2 py-1.5 text-right" title="Total abono que llega al banco (rubro 200)">Neto</th>
-            <th className="px-2 py-1.5 text-right" title="Lo que va al rubro 708: comisión API si vino; si no, la de cartola">Comisión (708)</th>
             <th className="px-2 py-1.5 text-right" title="Comisión real cobrada por Transbank (cartola)">Com. cartola</th>
-            <th className="px-2 py-1.5 text-right" title="Comisión cartola − comisión del 708 → rubro 1403 (debe si +, haber 'a favor' si −)">1403</th>
+            <th className="px-2 py-1.5 text-right" title="Comisión de débito → rubro 1403 'Diferencia' (en crédito da 0)">1403</th>
+            <th className="px-2 py-1.5 text-right" title="Lo que se gana en crédito (recargo − comisión real) → rubro 1403 'Diferencia a favor'">A favor</th>
             {onApartar && <th className="px-2 py-1.5 text-center">Acción</th>}
           </tr>
         </thead>
         <tbody>
           {movimientos.map((m, i) => {
-            const dif = BigInt(m.diferencia); // aporte al 1403 (cartola − 708)
-            const delta = BigInt(m.difMonto); // Transbank bruto − boleta (recargo crédito)
+            const dif = BigInt(m.diferencia); // → 1403 "Diferencia" (c708 − recargo = comisión débito)
+            const delta = BigInt(m.difMonto); // Transbank bruto − boleta = recargo (→708)
             const recargoEsperado = BigInt(m.comisionApi); // comisión API (0 si no vino)
-            const c708 = recargoEsperado > 0n ? recargoEsperado : BigInt(m.comisionCartola); // lo que va al 708
+            const c708 = recargoEsperado > 0n ? recargoEsperado : BigInt(m.comisionCartola);
+            const favor = c708 - BigInt(m.comisionCartola); // → 1403 "Diferencia a favor" (gana crédito)
             const anomalia = delta - recargoEsperado; // ≠0 ⇒ no calza con el recargo ⇒ mal tipado
             // Color del Recargo/Δ: gris si no hay; azul si es el recargo esperado;
             // rojo si difiere del recargo (posible error de tipeo).
@@ -638,16 +639,24 @@ function MovimientosDetalle({
                   {delta === 0n ? "—" : `${anomalia !== 0n ? "⚠ " : ""}${signed(m.difMonto)}`}
                 </td>
                 <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-emerald-700">{money(m.transbank)}</td>
-                <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-rose-600">{money(c708.toString())}</td>
                 <td className="px-2 py-1 text-right font-mono whitespace-nowrap text-text-muted">{money(m.comisionCartola)}</td>
                 <td
                   className={
                     "px-2 py-1 text-right font-mono whitespace-nowrap " +
                     (dif !== 0n ? "text-amber-700 font-semibold" : "text-text-dim")
                   }
-                  title={dif < 0n ? "Haber (crédito: recargo > comisión)" : "Debe"}
+                  title="Comisión de débito que va al 1403 (en crédito da 0)"
                 >
-                  {dif !== 0n ? signed(m.diferencia) : "—"}
+                  {dif !== 0n ? money(m.diferencia) : "—"}
+                </td>
+                <td
+                  className={
+                    "px-2 py-1 text-right font-mono whitespace-nowrap " +
+                    (favor !== 0n ? "text-sky-700 font-semibold" : "text-text-dim")
+                  }
+                  title="Lo que se gana en crédito (recargo − comisión real) → 1403 a favor"
+                >
+                  {favor !== 0n ? money(favor.toString()) : "—"}
                 </td>
                 {onApartar && (
                   <td className="px-2 py-1 text-center whitespace-nowrap">

@@ -158,8 +158,9 @@ export function buildCuadraturaAsiento(
       comisionApi: it.montoComisionApi.toString(),
       comisionCartola: it.montoComision.toString(),
       difMonto: (transbankBruto - dyn).toString(),
-      // 1403 por movimiento = comisión cartola − lo que fue al 708 (DEBE si +, HABER si −).
-      diferencia: (it.montoComision - c708i).toString(),
+      // Por movimiento: al 708 va el recargo (difMonto); al 1403 "Diferencia" va
+      // c708 − recargo (= comisión de débito; en crédito da 0).
+      diferencia: (c708i - (transbankBruto - dyn)).toString(),
     });
     // El nombre/código pueden venir nulos en algún par; rellenamos si aparecen.
     if (!g.sucursalName && it.sucursalName) g.sucursalName = it.sucursalName;
@@ -180,15 +181,18 @@ export function buildCuadraturaAsiento(
   let totHaber = 0n;
 
   const sucursales: SucursalAsientoDTO[] = ordered.map((g) => {
-    // Modelo que CUADRA (200 + 708 + 1403 = 17):
-    //   17 Ventas (H)   = neto + comisión cartola (= bruto Transbank)
-    //   200 Tesorería(D)= neto
-    //   708 Comisión (D)= comisión por operación (API si vino; si no, cartola)
-    //   1403            = comisión cartola − lo que fue al 708
-    // En crédito el 708 = recargo (2%) y como Transbank cobra menos, el 1403 da
-    // negativo → va al HABER: es la "diferencia a favor" (cobramos más que TBK).
+    // Modelo (CUADRA con 3 líneas de comisión):
+    //   17 Ventas (H)            = neto + comisión cartola (= bruto Transbank)
+    //   200 Tesorería (D)        = neto
+    //   708 Comisión (D)         = Σ recargo (bruto − boleta = el 2% del crédito)
+    //   1403 Diferencia (D)      = comisión por operación (c708) − recargo
+    //   1403 Diferencia a favor(H)= c708 − comisión cartola (lo que ganamos: cobramos
+    //                               2% en crédito y Transbank cobró menos)
+    // Las 3 últimas hacen que cuadre: Debe = Haber.
     const ventas = g.transbank + g.comisionCartola; // bruto
-    const diferencia = g.comisionCartola - g.c708;
+    const recargo = ventas - g.dynatech; // Σ bruto − Σ boleta → 708
+    const dif1403 = g.c708 - recargo; // → 1403 "Diferencia" (DEBE, comisión de débito)
+    const favor = g.c708 - g.comisionCartola; // → 1403 "Diferencia a favor" (HABER si +)
     const cuenta = g.sucursalName ?? (g.sucursalCodigo != null ? `#${g.sucursalCodigo}` : `#${g.sucursalId}`);
 
     const lineas: AsientoLineaDTO[] = [
@@ -213,39 +217,44 @@ export function buildCuadraturaAsiento(
         cuenta,
         detalle: "Comisión Transbank",
         side: "DEBE",
-        debe: g.c708.toString(),
+        debe: recargo.toString(),
         haber: null,
       },
-      // 1403 = comisión cartola − comisión del 708. HABER (diferencia a favor) si
-      // la API/recargo fue mayor que la comisión real; DEBE si fue menor.
-      diferencia >= 0n
-        ? {
-            rubro: settings.rubroDiferencia,
-            cuenta,
-            detalle: "Diferencia",
-            side: "DEBE",
-            debe: diferencia.toString(),
-            haber: null,
-          }
-        : {
-            rubro: settings.rubroDiferencia,
-            cuenta,
-            detalle: "Diferencia a favor",
-            side: "HABER",
-            debe: null,
-            haber: abs(diferencia).toString(),
-          },
     ];
+    // 1403 "Diferencia" (comisión que cobra Transbank por débito) — al debe.
+    if (dif1403 !== 0n) {
+      lineas.push({
+        rubro: settings.rubroDiferencia,
+        cuenta,
+        detalle: "Diferencia",
+        side: dif1403 >= 0n ? "DEBE" : "HABER",
+        debe: dif1403 >= 0n ? dif1403.toString() : null,
+        haber: dif1403 < 0n ? abs(dif1403).toString() : null,
+      });
+    }
+    // 1403 "Diferencia a favor" (lo que ganamos en crédito) — al haber.
+    if (favor !== 0n) {
+      lineas.push({
+        rubro: settings.rubroDiferencia,
+        cuenta,
+        detalle: favor > 0n ? "Diferencia a favor" : "Diferencia en contra",
+        side: favor > 0n ? "HABER" : "DEBE",
+        debe: favor < 0n ? abs(favor).toString() : null,
+        haber: favor > 0n ? favor.toString() : null,
+      });
+    }
 
-    // Totales: debe = transbank + 708 + max(dif,0); haber = ventas + max(-dif,0). Cuadra.
+    // Totales (cuadra): debe = transbank + recargo + dif1403(si +) + favor(si −);
+    //                   haber = ventas + favor(si +) + dif1403(si −).
     totDynatech += g.dynatech;
     totVentas += ventas;
     totTransbank += g.transbank;
     totComisionApi += g.comisionApi;
     totComisionCartola += g.comisionCartola;
-    totDiferencia += diferencia;
-    totDebe += g.transbank + g.c708 + (diferencia > 0n ? diferencia : 0n);
-    totHaber += ventas + (diferencia < 0n ? abs(diferencia) : 0n);
+    totDiferencia += dif1403 - favor;
+    totDebe +=
+      g.transbank + recargo + (dif1403 > 0n ? dif1403 : 0n) + (favor < 0n ? abs(favor) : 0n);
+    totHaber += ventas + (favor > 0n ? favor : 0n) + (dif1403 < 0n ? abs(dif1403) : 0n);
 
     return {
       sucursalId: g.sucursalId,
