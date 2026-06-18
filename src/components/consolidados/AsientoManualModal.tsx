@@ -63,6 +63,7 @@ export function AsientoManualModal({
   // Sucursales seleccionadas → personas (editable). Se inicializa con todas las
   // activas y su headcount al elegir "proveedor".
   const [sel, setSel] = useState<Map<string, number>>(new Map());
+  const [query, setQuery] = useState("");
   const [useRet, setUseRet] = useState(false);
   const [retMode, setRetMode] = useState<"tasa" | "monto">("tasa");
   const [retTasa, setRetTasa] = useState(0);
@@ -91,9 +92,37 @@ export function AsientoManualModal({
 
   function startProveedor() {
     setTipo("PROVEEDOR");
-    // Selecciona todas las activas con su headcount por defecto.
+    // Arranca sin ninguna sucursal seleccionada; el usuario elige cuáles.
+    setSel(new Map());
+  }
+
+  function seleccionarTodas() {
     setSel(new Map(sucursales.map((s) => [s.id, s.headcount])));
   }
+
+  function deseleccionarTodas() {
+    setSel(new Map());
+  }
+
+  // Ordenadas por código (numérico, sin código al final).
+  const sucursalesOrdenadas = useMemo(
+    () =>
+      [...sucursales].sort(
+        (a, b) => (a.codigo ?? Infinity) - (b.codigo ?? Infinity),
+      ),
+    [sucursales],
+  );
+
+  // Filtradas por el buscador (solo para mostrar; la selección sigue por id).
+  const sucursalesVisibles = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return sucursalesOrdenadas;
+    return sucursalesOrdenadas.filter(
+      (s) =>
+        s.nombre.toLowerCase().includes(q) ||
+        (s.codigo != null && String(s.codigo).includes(q)),
+    );
+  }, [sucursalesOrdenadas, query]);
 
   const montoNeto = useMemo(
     () => (data ? bigAbs(BigInt(data.bankMovement.amount)) : 0n),
@@ -303,12 +332,34 @@ export function AsientoManualModal({
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-sm font-bold text-brand">Reparto por sucursal ({totalPersonas} pers.)</h3>
-                    {sucursales.length === 0 && (
+                    {sucursales.length === 0 ? (
                       <span className="text-xs text-rose-700">No hay sucursales. Cargalas en Configuración.</span>
+                    ) : (
+                      <div className="flex gap-2 text-xs">
+                        <button onClick={seleccionarTodas} className="text-brand font-semibold hover:underline">
+                          Seleccionar todas
+                        </button>
+                        <span className="text-border-soft">·</span>
+                        <button onClick={deseleccionarTodas} className="text-text-muted font-semibold hover:underline">
+                          Deseleccionar todas
+                        </button>
+                      </div>
                     )}
                   </div>
+                  {sucursales.length > 0 && (
+                    <input
+                      type="text"
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Buscar sucursal por nombre o código…"
+                      className="w-full mb-2 rounded-md border border-border-soft px-2.5 py-1.5 text-sm"
+                    />
+                  )}
                   <div className="space-y-1 max-h-72 overflow-y-auto">
-                    {sucursales.map((s) => {
+                    {sucursalesVisibles.length === 0 && sucursales.length > 0 && (
+                      <p className="text-xs text-text-muted px-1 py-2">Sin resultados para “{query}”.</p>
+                    )}
+                    {sucursalesVisibles.map((s) => {
                       const checked = sel.has(s.id);
                       const linea = lineas.find((l) => l.id === s.id);
                       return (
