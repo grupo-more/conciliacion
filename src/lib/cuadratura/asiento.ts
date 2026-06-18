@@ -4,18 +4,16 @@ import type { CuadraturaSettings } from "./settings";
  * Construye el asiento de cuadratura Transbank a partir de los pares
  * conciliados (uno por par POS↔settlement). Agrupa por sucursal y arma:
  *
- *  1. Un asiento de 4 líneas POR SUCURSAL:
- *       HABER rubroVentas (17)      = Σ Dynatech (bruto POS)
- *       DEBE  rubroTesoreria (200)  = Σ Transbank (total abono neto)
- *       DEBE  rubroComision (708)   = Σ comisión + IVA comisión
- *       DEBE/HABER rubroDiferencia (1403) = Dynatech − Transbank − comisión
- *         (tapón que cuadra; va al haber si da negativo)
+ *  1. Un asiento POR SUCURSAL (cuadra Debe = Haber):
+ *       HABER 17 Ventas            = neto + comisión cartola (= bruto Transbank)
+ *       DEBE  200 Tesorería        = neto (total abono)
+ *       DEBE  708 Comisión         = Σ recargo (bruto − boleta = el 2% del crédito)
+ *       DEBE  1403 Diferencia      = c708 − recargo (comisión de débito)
+ *       HABER 1403 Diferencia a favor = c708 − comisión cartola (ganancia crédito)
+ *     (c708 = comisión por operación = API si vino, si no cartola)
  *
- *  2. Un asiento de CONSOLIDACIÓN (según el correo del encargado):
- *       DEBE  rubroVentas (17)             = Σ Dynatech total
- *       HABER por sucursal (código Dynatech) = Σ Transbank (neto) de la sucursal
- *     Nota: este segundo asiento, tal como está descrito, no necesariamente
- *     cuadra (debe = ΣDynatech, haber = ΣTransbank). Mostramos ambos totales.
+ *  2. Un asiento de CONSOLIDACIÓN: junta el neto de todas las sucursales:
+ *       DEBE  17  = Σ neto;  HABER por sucursal (código) = neto. Cuadra.
  */
 
 export interface CuadraturaItemInput {
@@ -172,7 +170,6 @@ export function buildCuadraturaAsiento(
   );
 
   let totDynatech = 0n;
-  let totVentas = 0n; // neto + comisión cartola (= bruto Transbank)
   let totTransbank = 0n;
   let totComisionApi = 0n;
   let totComisionCartola = 0n;
@@ -247,7 +244,6 @@ export function buildCuadraturaAsiento(
     // Totales (cuadra): debe = transbank + recargo + dif1403(si +) + favor(si −);
     //                   haber = ventas + favor(si +) + dif1403(si −).
     totDynatech += g.dynatech;
-    totVentas += ventas;
     totTransbank += g.transbank;
     totComisionApi += g.comisionApi;
     totComisionCartola += g.comisionCartola;
@@ -271,15 +267,16 @@ export function buildCuadraturaAsiento(
     };
   });
 
-  // Asiento de consolidación (según correo): DEBE rubro ventas (total Dynatech),
-  // HABER por sucursal usando su código "Registro Dynatech" = total rubro 200.
+  // Asiento de consolidación: junta el NETO (Tesorería) de todas las sucursales
+  // en una cuenta central. DEBE rubro 17 = Σ neto; HABER por sucursal (código
+  // "Registro Dynatech") = neto de la sucursal. Cuadra (Σ neto = Σ neto).
   const consLineas: AsientoLineaDTO[] = [
     {
       rubro: settings.rubroVentas,
       cuenta: null,
-      detalle: "Consolidado ventas",
+      detalle: "Consolidado tesorería",
       side: "DEBE",
-      debe: totVentas.toString(),
+      debe: totTransbank.toString(),
       haber: null,
     },
     ...ordered.map<AsientoLineaDTO>((g) => ({
@@ -291,7 +288,7 @@ export function buildCuadraturaAsiento(
       haber: g.transbank.toString(),
     })),
   ];
-  const consDebe = totVentas;
+  const consDebe = totTransbank;
   const consHaber = totTransbank;
 
   return {

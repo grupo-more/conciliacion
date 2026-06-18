@@ -448,8 +448,9 @@ function VincularModal({
                   <th className="px-3 py-2 text-left">Sucursal</th>
                   <th className="px-3 py-2 text-left">Boleta</th>
                   <th className="px-3 py-2 text-left">Medio</th>
-                  <th className="px-3 py-2 text-right">Monto</th>
-                  <th className="px-3 py-2 text-right">Δ vs POS</th>
+                  <th className="px-3 py-2 text-right" title="Monto bruto de la venta (con el que se compara contra el POS)">Bruto</th>
+                  <th className="px-3 py-2 text-right" title="Neto que llega al banco (bruto − comisión)">Neto</th>
+                  <th className="px-3 py-2 text-right" title="Bruto del abono − monto del POS (la diferencia que iría al 1403)">Δ vs POS</th>
                   <th className="px-3 py-2 text-center">Acción</th>
                 </tr>
               </thead>
@@ -466,7 +467,8 @@ function VincularModal({
                       </td>
                       <td className="px-3 py-1.5 whitespace-nowrap font-mono text-xs">{c.boleta ?? "—"}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap">{c.medioPago ?? "—"}</td>
-                      <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap">${formatMoney(BigInt(c.montoBruto))}</td>
+                      <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap text-text-muted">${formatMoney(BigInt(c.montoBruto))}</td>
+                      <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap text-emerald-700">{c.neto ? `$${formatMoney(BigInt(c.neto))}` : "—"}</td>
                       <td className={"px-3 py-1.5 text-right font-mono whitespace-nowrap " + (d === 0n ? "text-text-dim" : "text-amber-700")}>
                         {d === 0n ? "—" : `${d > 0n ? "+" : "-"}$${formatMoney(absBig(d))}`}
                       </td>
