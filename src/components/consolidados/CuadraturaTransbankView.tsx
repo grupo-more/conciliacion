@@ -589,6 +589,23 @@ function MovimientosDetalle({
 }) {
   if (movimientos.length === 0)
     return <div className="text-xs text-text-muted">Sin detalle de movimientos guardado.</div>;
+  // Totales por columna (para no sumar a mano).
+  const tot = movimientos.reduce(
+    (a, m) => {
+      const cApi = BigInt(m.comisionApi);
+      const cCart = BigInt(m.comisionCartola);
+      const c708 = cApi > 0n ? cApi : cCart;
+      a.boleta += BigInt(m.dynatech);
+      a.transbank += BigInt(m.transbankBruto);
+      a.recargo += BigInt(m.difMonto);
+      a.neto += BigInt(m.transbank);
+      a.cartola += cCart;
+      a.d1403 += BigInt(m.diferencia);
+      a.favor += c708 - cCart;
+      return a;
+    },
+    { boleta: 0n, transbank: 0n, recargo: 0n, neto: 0n, cartola: 0n, d1403: 0n, favor: 0n },
+  );
   return (
     <div className="rounded-lg border border-sky-200 bg-white overflow-hidden">
       <table className="w-full text-xs">
@@ -673,6 +690,19 @@ function MovimientosDetalle({
             );
           })}
         </tbody>
+        <tfoot className="bg-sky-50 font-semibold border-t-2 border-sky-200">
+          <tr>
+            <td className="px-2 py-1.5 text-left" colSpan={3}>TOTAL ({movimientos.length})</td>
+            <td className="px-2 py-1.5 text-right font-mono whitespace-nowrap">{money(tot.boleta.toString())}</td>
+            <td className="px-2 py-1.5 text-right font-mono whitespace-nowrap">{money(tot.transbank.toString())}</td>
+            <td className="px-2 py-1.5 text-right font-mono whitespace-nowrap text-sky-700">{money(tot.recargo.toString())}</td>
+            <td className="px-2 py-1.5 text-right font-mono whitespace-nowrap text-emerald-700">{money(tot.neto.toString())}</td>
+            <td className="px-2 py-1.5 text-right font-mono whitespace-nowrap text-text-muted">{money(tot.cartola.toString())}</td>
+            <td className="px-2 py-1.5 text-right font-mono whitespace-nowrap text-amber-700">{money(tot.d1403.toString())}</td>
+            <td className="px-2 py-1.5 text-right font-mono whitespace-nowrap text-sky-700">{money(tot.favor.toString())}</td>
+            {onApartar && <td />}
+          </tr>
+        </tfoot>
       </table>
       <div className="px-2 py-1.5 text-[10px] text-text-muted border-t border-sky-100 flex flex-wrap gap-x-4 gap-y-1">
         <span><span className="text-sky-700 font-bold">azul</span> = recargo de crédito (esperado)</span>
