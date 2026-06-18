@@ -155,9 +155,10 @@ model TesoreriaMovement {
   // del signo del monto. Discrimina contra qué lado de la cartola se concilia:
   // INGRESO -> IN, EGRESO -> OUT.
   tipoOperacion      String   @default("INGRESO") @map("tipo_operacion")
-  // Clase de operación que manda la API en `tipoOperacion`: INGRESO | EGRESO |
-  // CRYPTOMKT_INGRESO | CRYPTOMKT_RETIRO. (Los "TBK" se descartan en el sync:
-  // las ventas con tarjeta ya vienen por TbkTesoreria / Cruce Transbank.)
+  // Clase de operación que manda la API en `tipoOperacion`: TBK | INGRESO |
+  // EGRESO | CRYPTOMKT_INGRESO | CRYPTOMKT_RETIRO. Los "TBK" NO se descartan: la
+  // etiqueta de la API no garantiza que sean el mismo registro que llega por
+  // TbkTesoreria, así que se guardan como un movimiento más.
   claseOperacion     String?  @map("clase_operacion")
   fecha              DateTime
   fechaCarga         DateTime? @map("fecha_carga")
