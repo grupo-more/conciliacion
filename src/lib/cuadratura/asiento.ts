@@ -264,7 +264,7 @@ export function buildCuadraturaAsiento(
       transbank: g.transbank.toString(),
       comisionApi: g.comisionApi.toString(),
       comisionCartola: g.comisionCartola.toString(),
-      diferencia: diferencia.toString(),
+      diferencia: dif1403.toString(),
       count: g.count,
       lineas,
       movimientos: g.movimientos.sort((a, b) => (b.fecha ?? "").localeCompare(a.fecha ?? "")),
