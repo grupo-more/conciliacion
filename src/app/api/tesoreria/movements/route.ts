@@ -33,6 +33,8 @@ export async function GET(req: Request) {
   const rubroBancoRaw = url.searchParams.get("rubroBanco");
   const rubroSucursalRaw = url.searchParams.get("rubroSucursal");
   const excepcionRaw = url.searchParams.get("excepcion");
+  const tipoOperacionRaw = url.searchParams.get("tipoOperacion"); // dirección: INGRESO|EGRESO
+  const claseRaw = url.searchParams.get("clase"); // clase: INGRESO|EGRESO|CRYPTOMKT_*
   // anulado: ausente/"all" => mostrar todos (default, es la vista general);
   // "1" => solo anulados; "0" => ocultar anulados.
   const anuladoRaw = url.searchParams.get("anulado");
@@ -71,6 +73,11 @@ export async function GET(req: Request) {
   if (excepcionRaw === "1") where.esExcepcion = true;
   else if (excepcionRaw === "0") where.esExcepcion = false;
 
+  if (tipoOperacionRaw === "INGRESO" || tipoOperacionRaw === "EGRESO") {
+    where.tipoOperacion = tipoOperacionRaw;
+  }
+  if (claseRaw) where.claseOperacion = claseRaw;
+
   if (anuladoRaw === "1") where.estadoActual = "ANU";
   else if (anuladoRaw === "0") where.estadoActual = { not: "ANU" };
   // default: sin filtro (se muestran todos, anulados incluidos).
@@ -97,7 +104,7 @@ export async function GET(req: Request) {
     ];
   }
 
-  const [rows, total, sucursales, cajeros, bancos, rubrosBanco, rubrosSucursal, rubroLabels] =
+  const [rows, total, sucursales, cajeros, bancos, rubrosBanco, rubrosSucursal, rubroLabels, clases] =
     await Promise.all([
       prisma.tesoreriaMovement.findMany({
         where,
@@ -130,6 +137,11 @@ export async function GET(req: Request) {
         orderBy: [{ rubroSucursal: "asc" }],
       }),
       prisma.rubroLabel.findMany({ select: { rubro: true, name: true } }),
+      prisma.tesoreriaMovement.groupBy({
+        by: ["claseOperacion"],
+        _count: { _all: true },
+        orderBy: [{ claseOperacion: "asc" }],
+      }),
     ]);
 
   const labelByRubro = new Map(rubroLabels.map((l) => [l.rubro, l.name]));
@@ -158,6 +170,9 @@ export async function GET(req: Request) {
         name: r.rubroSucursal !== null ? labelByRubro.get(r.rubroSucursal) ?? null : null,
         count: r._count._all,
       })),
+      clases: clases
+        .filter((c) => c.claseOperacion !== null)
+        .map((c) => ({ clase: c.claseOperacion as string, count: c._count._all })),
     },
   });
 }
@@ -184,6 +199,7 @@ function serialize(m: Awaited<ReturnType<typeof prisma.tesoreriaMovement.findFir
     rubroSucursal: m.rubroSucursal,
     monto: m.monto.toString(),
     tipoOperacion: m.tipoOperacion,
+    claseOperacion: m.claseOperacion,
     fecha: m.fecha.toISOString(),
     fechaCarga: m.fechaCarga?.toISOString() ?? null,
     esExcepcion: m.esExcepcion,

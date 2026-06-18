@@ -30,6 +30,7 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
     bancos: [],
     rubrosBanco: [],
     rubrosSucursal: [],
+    clases: [],
   });
   const [status, setStatus] = useState<SyncStatusResponse | null>(null);
 
@@ -46,6 +47,8 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
   const [rubroSucursal, setRubroSucursal] = useState("");
   const [excepcion, setExcepcion] = useState<"" | "1" | "0">("");
   const [anulado, setAnulado] = useState<"" | "1" | "0">("");
+  const [tipoOperacion, setTipoOperacion] = useState<"" | "INGRESO" | "EGRESO">("");
+  const [clase, setClase] = useState("");
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
   const [search, setSearch] = useState("");
@@ -66,6 +69,8 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
     if (rubroSucursal) p.set("rubroSucursal", rubroSucursal);
     if (excepcion) p.set("excepcion", excepcion);
     if (anulado) p.set("anulado", anulado);
+    if (tipoOperacion) p.set("tipoOperacion", tipoOperacion);
+    if (clase) p.set("clase", clase);
     if (since) p.set("since", since);
     if (until) p.set("until", until);
     if (search) p.set("q", search);
@@ -171,7 +176,7 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, sucursalId, cajero, banco, rubroBanco, rubroSucursal, excepcion, anulado, since, until, search, groupBy]);
+  }, [tab, sucursalId, cajero, banco, rubroBanco, rubroSucursal, excepcion, anulado, tipoOperacion, clase, since, until, search, groupBy]);
 
   useEffect(() => {
     if (tab === "list") loadMovements();
@@ -185,6 +190,8 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
     rubroSucursal,
     excepcion,
     anulado,
+    tipoOperacion,
+    clase,
     since,
     until,
     tab,
@@ -435,6 +442,31 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
           </select>
         </div>
         <div>
+          <label className="label">Tipo</label>
+          <select
+            className="input"
+            value={tipoOperacion}
+            onChange={(e) => setTipoOperacion(e.target.value as "" | "INGRESO" | "EGRESO")}
+          >
+            <option value="">Todos</option>
+            <option value="INGRESO">Ingresos</option>
+            <option value="EGRESO">Egresos</option>
+          </select>
+        </div>
+        {facets.clases.length > 0 && (
+          <div>
+            <label className="label">Clase</label>
+            <select className="input" value={clase} onChange={(e) => setClase(e.target.value)}>
+              <option value="">Todas</option>
+              {facets.clases.map((c) => (
+                <option key={c.clase} value={c.clase}>
+                  {c.clase} ({c.count})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div>
           <label className="label">Desde</label>
           <input type="date" className="input" value={since} onChange={(e) => setSince(e.target.value)} />
         </div>
@@ -453,6 +485,7 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
                 <th className="px-3 py-2 text-left">Sucursal</th>
                 <th className="px-3 py-2 text-left">Cajero</th>
                 <th className="px-3 py-2 text-left">Banco</th>
+                <th className="px-3 py-2 text-center">Tipo</th>
                 <th className="px-3 py-2 text-right">Monto</th>
                 <th className="px-3 py-2 text-left">Glosa</th>
                 <th className="px-3 py-2 text-center">Exc</th>
@@ -462,14 +495,14 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-text-muted">
+                  <td colSpan={9} className="px-3 py-6 text-center text-text-muted">
                     Cargando…
                   </td>
                 </tr>
               )}
               {!loading && movements.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-3 py-6 text-center text-text-muted">
+                  <td colSpan={9} className="px-3 py-6 text-center text-text-muted">
                     Sin movimientos.
                   </td>
                 </tr>
@@ -478,6 +511,9 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
                 movements.map((m) => {
                   const monto = Number(m.monto);
                   const anulado = m.estadoActual === "ANU";
+                  const esEgreso = m.tipoOperacion === "EGRESO";
+                  const esCrypto = (m.claseOperacion ?? "").startsWith("CRYPTOMKT");
+                  const esTbk = m.claseOperacion === "TBK";
                   return (
                     <tr
                       key={m.id}
@@ -518,9 +554,43 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
                             </div>
                           )}
                       </td>
+                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                        <span
+                          className={
+                            "inline-block rounded-full text-[10px] font-bold px-2 py-0.5 " +
+                            (esEgreso
+                              ? "bg-rose-500/15 text-rose-600"
+                              : "bg-emerald-500/15 text-emerald-600")
+                          }
+                          title={esEgreso ? "Egreso (sale plata)" : "Ingreso (entra plata)"}
+                        >
+                          {esEgreso ? "EGRESO" : "INGRESO"}
+                        </span>
+                        {esCrypto && (
+                          <span
+                            className="ml-1 inline-block rounded-full bg-violet-500/15 text-violet-600 text-[10px] font-bold px-2 py-0.5"
+                            title={m.claseOperacion ?? "CryptoMKT"}
+                          >
+                            CRYPTO
+                          </span>
+                        )}
+                        {esTbk && (
+                          <span
+                            className="ml-1 inline-block rounded-full bg-sky-500/15 text-sky-600 text-[10px] font-bold px-2 py-0.5"
+                            title="Tarjeta (Transbank)"
+                          >
+                            TBK
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
-                        <span className={anulado ? "line-through" : ""}>
-                          {formatMoney(monto)}
+                        <span
+                          className={
+                            (anulado ? "line-through " : "") +
+                            (esEgreso ? "text-rose-600" : "text-emerald-700")
+                          }
+                        >
+                          {esEgreso ? `-${formatMoney(Math.abs(monto))}` : formatMoney(monto)}
                         </span>
                       </td>
                       <td className="px-3 py-2 max-w-md truncate" title={m.glosa}>

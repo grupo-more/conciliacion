@@ -17,6 +17,8 @@ export interface TesoreriaMovementDTO {
   rubroBanco: number | null;
   rubroSucursal: number | null;
   monto: string;
+  tipoOperacion: string; // dirección: INGRESO | EGRESO
+  claseOperacion: string | null; // clase API: INGRESO | EGRESO | CRYPTOMKT_*
   fecha: string;
   fechaCarga: string | null;
   esExcepcion: boolean;
@@ -37,6 +39,7 @@ export interface MovementsResponse {
     bancos: Array<{ name: string; count: number }>;
     rubrosBanco: Array<{ rubro: number | null; name: string | null; count: number }>;
     rubrosSucursal: Array<{ rubro: number | null; name: string | null; count: number }>;
+    clases: Array<{ clase: string; count: number }>;
   };
 }
 

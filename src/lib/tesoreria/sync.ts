@@ -72,9 +72,12 @@ const rowSchema = z.object({
   glosa: z.string().optional().default(""),
   fecha: z.string(),
   monto: z.number(),
-  // INGRESO | EGRESO. Campo nuevo de la API (jun-2026). Si no viene, se deriva
-  // del signo del monto en el upsert (negativo = EGRESO).
-  tipoOperacion: z.enum(["INGRESO", "EGRESO"]).optional().nullable(),
+  // CLASE de operación: TBK | INGRESO | EGRESO | CRYPTOMKT_* (string libre para
+  // no rechazar valores nuevos). La DIRECCIÓN viene en `naturalezaOperacion`.
+  tipoOperacion: z.string().optional().nullable(),
+  // DIRECCIÓN del movimiento (jun-2026): INGRESO | EGRESO. Si no viene, se deriva
+  // del signo del monto / de la clase en el upsert.
+  naturalezaOperacion: z.string().optional().nullable(),
   currency: z.string().optional().default("CLP"),
   banco: z.string().optional().nullable(),
   rubroBanco: z.number().int().optional().nullable(),
@@ -221,6 +224,10 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
   let skippedNoCashier = 0;
 
   for (const r of valid) {
+    // OJO: NO descartamos los `tipoOperacion="TBK"`. Aunque la API los etiquete
+    // así, no hay garantía de que sean el mismo movimiento que llega por el feed
+    // TbkTesoreria (esa etiqueta es solo un dato más de esta API, no una llave de
+    // duplicado). Los guardamos como un movimiento más, con su clase = "TBK".
     // Sin cajero no podemos insertar (columna NOT NULL). En la practica todos
     // los movimientos vienen con cajero; este check es defensivo.
     const username = r.contexto.cajero?.id?.trim().toUpperCase();
@@ -237,11 +244,17 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
     const clienteName = r.contexto.cliente?.nombre?.trim() || null;
     const wasExisting = existingSet.has(BigInt(r.contexto.id).toString());
 
-    // tipoOperacion: usar el de la API si vino; si no, derivar del signo del
-    // monto (negativo = EGRESO). Asi quedamos robustos si la API a veces no lo
-    // manda o si hay payloads viejos.
+    // DIRECCIÓN (INGRESO/EGRESO): la API la manda en `naturalezaOperacion`.
+    // Fallback robusto: si la clase es EGRESO/CRYPTOMKT_RETIRO o el monto es
+    // negativo => EGRESO; si no, INGRESO. (OJO: el signo NO basta — los retiros
+    // cripto son egresos con monto positivo.)
+    const nat = r.naturalezaOperacion;
     const tipoOperacion: "INGRESO" | "EGRESO" =
-      r.tipoOperacion ?? (r.monto < 0 ? "EGRESO" : "INGRESO");
+      nat === "EGRESO" || nat === "INGRESO"
+        ? nat
+        : r.tipoOperacion === "EGRESO" || r.tipoOperacion === "CRYPTOMKT_RETIRO" || r.monto < 0
+          ? "EGRESO"
+          : "INGRESO";
 
     const payload = {
       sucursalId: r.contexto.sucursal.id,
@@ -261,6 +274,7 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
       rubroSucursal: r.rubroSucursal ?? null,
       monto: BigInt(Math.round(r.monto)),
       tipoOperacion,
+      claseOperacion: r.tipoOperacion ?? null,
       fecha: parseTesoreriaDate(r.fecha),
       fechaCarga: r.fechaCarga ? parseTesoreriaDate(r.fechaCarga) : null,
       esExcepcion: r.esExcepcion ?? false,
@@ -293,7 +307,6 @@ export async function runTesoreriaSync(): Promise<TesoreriaSyncResult> {
       `[tesoreria-sync] ${skippedNoCashier} movimiento(s) descartados por falta de cajero.`
     );
   }
-
   await prisma.tesoreriaSyncRun.update({
     where: { id: runId },
     data: {
