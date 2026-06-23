@@ -449,7 +449,7 @@ function VincularModal({
                   <th className="px-3 py-2 text-left">Boleta</th>
                   <th className="px-3 py-2 text-left">Medio</th>
                   <th className="px-3 py-2 text-right" title="Monto bruto de la venta (con el que se compara contra el POS)">Bruto</th>
-                  <th className="px-3 py-2 text-right" title="Bruto − comisión: el valor total que llega al banco">Total</th>
+                  <th className="px-3 py-2 text-right" title="Bruto − comisión">Bruto − com.</th>
                   <th className="px-3 py-2 text-right" title="Bruto del abono − monto del POS (la diferencia que iría al 1403)">Δ vs POS</th>
                   <th className="px-3 py-2 text-center sticky right-0 bg-bg-soft">Acción</th>
                 </tr>
