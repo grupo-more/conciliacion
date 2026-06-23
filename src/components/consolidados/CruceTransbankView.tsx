@@ -431,7 +431,7 @@ function VincularModal({
 
         <p className="text-xs text-text-muted mb-2">
           Elegí el abono que corresponde. Ordenados por sucursal, monto más cercano y fecha. El monto <b>no tiene que
-          ser exacto</b>: si Transbank liquidó distinto a la boleta, esa diferencia (la columna Δ) se registra
+          ser exacto</b>: si Transbank liquidó distinto a la boleta, esa diferencia se registra
           automáticamente en el <b>rubro 1403 (Diferencia)</b> al generar el asiento.
         </p>
 
@@ -448,15 +448,14 @@ function VincularModal({
                   <th className="px-3 py-2 text-left">Sucursal</th>
                   <th className="px-3 py-2 text-left">Boleta</th>
                   <th className="px-3 py-2 text-left">Medio</th>
-                  <th className="px-3 py-2 text-right" title="Monto bruto de la venta (con el que se compara contra el POS)">Bruto</th>
-                  <th className="px-3 py-2 text-right" title="Neto que llega al banco (bruto − comisión)">Neto</th>
-                  <th className="px-3 py-2 text-right" title="Bruto del abono − monto del POS (la diferencia que iría al 1403)">Δ vs POS</th>
+                  <th className="px-3 py-2 text-right" title="Monto bruto de la venta">Bruto</th>
+                  <th className="px-3 py-2 text-right" title="Comisión Transbank (comisión + IVA)">Comisión</th>
+                  <th className="px-3 py-2 text-right" title="Bruto − comisión: lo que llega al banco">Bruto − com.</th>
                   <th className="px-3 py-2 text-center sticky right-0 bg-bg-soft">Acción</th>
                 </tr>
               </thead>
               <tbody>
                 {cands.map((c, i) => {
-                  const d = BigInt(c.montoBruto) - posMonto;
                   const sameSuc = c.sucursalId === pos.sucursalId;
                   return (
                     <tr key={i} className="border-t border-border-soft/60 hover:bg-bg-soft/40">
@@ -468,10 +467,8 @@ function VincularModal({
                       <td className="px-3 py-1.5 whitespace-nowrap font-mono text-xs">{c.boleta ?? "—"}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap">{c.medioPago ?? "—"}</td>
                       <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap text-text-muted">${formatMoney(BigInt(c.montoBruto))}</td>
-                      <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap text-emerald-700">{c.neto ? `$${formatMoney(BigInt(c.neto))}` : "—"}</td>
-                      <td className={"px-3 py-1.5 text-right font-mono whitespace-nowrap " + (d === 0n ? "text-text-dim" : "text-amber-700")}>
-                        {d === 0n ? "—" : `${d > 0n ? "+" : "-"}$${formatMoney(absBig(d))}`}
-                      </td>
+                      <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap text-text-muted">{c.comision ? `$${formatMoney(BigInt(c.comision))}` : "—"}</td>
+                      <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap text-emerald-700">${formatMoney(BigInt(c.montoBruto) - BigInt(c.comision ?? "0"))}</td>
                       <td className="px-3 py-1.5 text-center sticky right-0 bg-white">
                         <button
                           onClick={() => link(c)}
