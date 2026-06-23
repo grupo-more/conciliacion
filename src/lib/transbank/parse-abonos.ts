@@ -241,23 +241,54 @@ export function parseTransbankAbonos(buffer: Buffer): TransbankAbonosParsed {
   return { empresaRut, cuentaAbono, periodFrom, periodTo, sales, errors };
 }
 
+function norm(s: string): string {
+  return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+}
+
+/**
+ * Alias por DIRECCIÓN: algunas sucursales llegan en la cartola/settlement de
+ * Transbank con el nombre de la CALLE en vez del nombre de la sucursal, así que
+ * el match por token nunca pega. Mapeamos el nombre canónico de la sucursal
+ * (como viene en el feed POS/Tesorería) → palabras clave que sí aparecen en el
+ * "Nombre local" del settlement.
+ *
+ *   VALPARAISO    → "More Exchange, COCHRANE 844"
+ *   PATRONATO     → "MORE EXCHANGE, ASUNCION 402"
+ *   IQUIQUE       → "More Exchange, PATRICIO LYNCH 513"
+ *   VIÑA DEL MAR  → "MORE EXCHANGE, SAN MARTIN 458"
+ *
+ * El alias solo se activa para la sucursal cuyo nombre canónico calza con
+ * `canon`, así que no contamina a otras (ej. "SAN MARTIN" solo cuenta para Viña).
+ */
+const SUCURSAL_ALIASES: Array<{ canon: RegExp; keywords: string[] }> = [
+  { canon: /VALPARAISO/, keywords: ["COCHRANE"] },
+  { canon: /PATRONATO/, keywords: ["ASUNCION"] },
+  { canon: /IQUIQUE/, keywords: ["PATRICIO LYNCH", "LYNCH"] },
+  { canon: /VINA DEL MAR/, keywords: ["SAN MARTIN"] },
+];
+
 /**
  * Resuelve la sucursal de un "Nombre local" contra el catalogo conocido
  * (ej. [{id:3,name:"SUECIA"}, ...]). Best-effort: matchea si un token
- * significativo del nombre de sucursal aparece en el nombre local.
- * Devuelve null si no hay match claro (el cruce igual funciona por boleta+monto).
+ * significativo del nombre de sucursal (o un alias por dirección) aparece en el
+ * nombre local. Devuelve null si no hay match claro (el cruce igual funciona por
+ * boleta+monto).
  */
 export function resolveSucursal(
   nombreLocal: string,
   catalog: Array<{ id: number; name: string }>,
 ): number | null {
-  const hay = nombreLocal.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+  const hay = norm(nombreLocal);
   let best: { id: number; score: number } | null = null;
   for (const suc of catalog) {
     if (!suc.name) continue;
-    const tokens = suc.name.normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase()
-      .split(/[^A-Z0-9]+/).filter((t) => t.length >= 4);
-    const hits = tokens.filter((t) => hay.includes(t)).length;
+    const name = norm(suc.name);
+    const needles = name.split(/[^A-Z0-9]+/).filter((t) => t.length >= 4);
+    // Alias por dirección: la cartola trae la calle en vez del nombre de sucursal.
+    for (const a of SUCURSAL_ALIASES) {
+      if (a.canon.test(name)) needles.push(...a.keywords.map(norm));
+    }
+    const hits = needles.filter((t) => hay.includes(t)).length;
     if (hits > 0 && (!best || hits > best.score)) best = { id: suc.id, score: hits };
   }
   return best?.id ?? null;
