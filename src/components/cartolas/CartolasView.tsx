@@ -361,7 +361,17 @@ export function CartolasView() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={() => setOnlyUnmatched((v) => !v)}
+                onClick={() =>
+                  setOnlyUnmatched((v) => {
+                    const next = !v;
+                    // "Solo sin conciliar" solo aplica a IN (abonos): el servidor
+                    // fuerza direction=IN. Sincronizamos el estado del cliente para
+                    // que el selector (deshabilitado) refleje lo que se muestra y no
+                    // quede en "Cargos"/"Todos" mostrando abonos.
+                    if (next) setDirection("IN");
+                    return next;
+                  })
+                }
                 className={
                   "rounded-full border px-3 py-1 text-xs font-semibold transition-all " +
                   (onlyUnmatched
