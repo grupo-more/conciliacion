@@ -435,7 +435,7 @@ function VincularModal({
           automáticamente en el <b>rubro 1403 (Diferencia)</b> al generar el asiento.
         </p>
 
-        <div className="rounded-lg border border-border-soft overflow-hidden max-h-[50vh] overflow-y-auto">
+        <div className="rounded-lg border border-border-soft max-h-[50vh] overflow-auto">
           {loading && <div className="p-4 text-sm text-text-muted">Buscando candidatos…</div>}
           {!loading && cands && cands.length === 0 && (
             <div className="p-4 text-sm text-text-muted">No hay abonos sin POS en el rango. Ampliá las fechas.</div>
@@ -451,7 +451,7 @@ function VincularModal({
                   <th className="px-3 py-2 text-right" title="Monto bruto de la venta (con el que se compara contra el POS)">Bruto</th>
                   <th className="px-3 py-2 text-right" title="Neto que llega al banco (bruto − comisión)">Neto</th>
                   <th className="px-3 py-2 text-right" title="Bruto del abono − monto del POS (la diferencia que iría al 1403)">Δ vs POS</th>
-                  <th className="px-3 py-2 text-center">Acción</th>
+                  <th className="px-3 py-2 text-center sticky right-0 bg-bg-soft">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -472,7 +472,7 @@ function VincularModal({
                       <td className={"px-3 py-1.5 text-right font-mono whitespace-nowrap " + (d === 0n ? "text-text-dim" : "text-amber-700")}>
                         {d === 0n ? "—" : `${d > 0n ? "+" : "-"}$${formatMoney(absBig(d))}`}
                       </td>
-                      <td className="px-3 py-1.5 text-center">
+                      <td className="px-3 py-1.5 text-center sticky right-0 bg-white">
                         <button
                           onClick={() => link(c)}
                           disabled={busy}
