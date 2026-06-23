@@ -182,6 +182,9 @@ export function parseTransbankAbonos(buffer: Buffer): TransbankAbonosParsed {
     local: findCol(colMap, "nombre local"),
     medio: findCol(colMap, "medio de pago"),
     bruto: findCol(colMap, "monto original de venta"),
+    // Fallback: en ventas a crédito Transbank deja "monto original de venta" en
+    // $0 y pone el monto real en "monto venta válido para abono".
+    brutoValido: findCol(colMap, "monto venta válido para abono", "monto venta valido para abono"),
     comision: findCol(colMap, "comisión transbank (-)", "comision transbank (-)"),
     ivaComision: findCol(colMap, "iva comisión transbank", "iva comision transbank"),
     abono: findCol(colMap, "total abono"),
@@ -224,7 +227,7 @@ export function parseTransbankAbonos(buffer: Buffer): TransbankAbonosParsed {
       codigoComercio: s(row[C.comercio]),
       nombreLocal: s(row[C.local]),
       medioPago: s(row[C.medio]),
-      montoVenta: parseNum(row[C.bruto]),
+      montoVenta: parseNum(row[C.bruto]) || (C.brutoValido >= 0 ? parseNum(row[C.brutoValido]) : 0),
       comision: parseNum(row[C.comision]),
       ivaComision: parseNum(row[C.ivaComision]),
       totalAbono: parseNum(row[C.abono]),
