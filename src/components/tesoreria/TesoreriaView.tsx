@@ -230,6 +230,9 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
     return map;
   }, [facets.rubrosBanco, facets.rubrosSucursal]);
 
+  const rubroNombre = (n: number | null) =>
+    n !== null ? rubroLabelMap.get(n) ?? null : null;
+
   function exportReportCSV() {
     if (!report) return;
     const lines: string[] = [];
@@ -484,9 +487,12 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
                 <th className="px-3 py-2 text-left">Fecha</th>
                 <th className="px-3 py-2 text-left">Sucursal</th>
                 <th className="px-3 py-2 text-left">Cajero</th>
+                <th className="px-3 py-2 text-left">Cliente</th>
                 <th className="px-3 py-2 text-left">Banco</th>
                 <th className="px-3 py-2 text-center">Tipo</th>
+                <th className="px-3 py-2 text-left">Clase</th>
                 <th className="px-3 py-2 text-right">Monto</th>
+                <th className="px-3 py-2 text-left">Documento</th>
                 <th className="px-3 py-2 text-left">Glosa</th>
                 <th className="px-3 py-2 text-center">Exc</th>
                 <th className="px-3 py-2 text-center">Rubro S/B</th>
@@ -495,14 +501,14 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-text-muted">
+                  <td colSpan={12} className="px-3 py-6 text-center text-text-muted">
                     Cargando…
                   </td>
                 </tr>
               )}
               {!loading && movements.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-6 text-center text-text-muted">
+                  <td colSpan={12} className="px-3 py-6 text-center text-text-muted">
                     Sin movimientos.
                   </td>
                 </tr>
@@ -545,6 +551,25 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
                         )}
                       </td>
                       <td className="px-3 py-2">
+                        {m.clienteName || m.clienteRut ? (
+                          <>
+                            <div
+                              className="text-xs truncate max-w-[160px]"
+                              title={m.clienteName ?? undefined}
+                            >
+                              {m.clienteName ?? "—"}
+                            </div>
+                            {m.clienteRut && (
+                              <div className="text-[10px] text-text-muted font-mono">
+                                {m.clienteRut}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-text-dim text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">
                         <div className="text-xs">{m.banco ?? "—"}</div>
                         {m.bancoSucursal && m.bancoDetectado &&
                           m.bancoSucursal.trim().toUpperCase() !==
@@ -583,6 +608,18 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
                           </span>
                         )}
                       </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {m.claseOperacion ? (
+                          <span
+                            className="inline-block rounded-full bg-bg-soft text-text-muted text-[10px] font-semibold px-2 py-0.5"
+                            title={`Clase de operación: ${m.claseOperacion}`}
+                          >
+                            {m.claseOperacion}
+                          </span>
+                        ) : (
+                          <span className="text-text-dim text-xs">—</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
                         <span
                           className={
@@ -592,6 +629,22 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
                         >
                           {esEgreso ? `-${formatMoney(Math.abs(monto))}` : formatMoney(monto)}
                         </span>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {m.tipoDocumento || m.folio !== "0" ? (
+                          <>
+                            {m.tipoDocumento && (
+                              <div className="text-xs">{m.tipoDocumento}</div>
+                            )}
+                            {m.folio !== "0" && (
+                              <div className="text-[10px] text-text-muted font-mono">
+                                #{m.folio}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-text-dim text-xs">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2 max-w-md truncate" title={m.glosa}>
                         {m.glosa || <span className="text-text-dim">—</span>}
@@ -624,12 +677,22 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
                           <span className="text-text-dim text-xs">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2 text-center text-xs font-mono">
-                        <div>
+                      <td className="px-3 py-2 text-center text-xs">
+                        <div className="font-mono">
                           {m.rubroSucursal ?? "—"}
                           <span className="text-text-dim mx-1">/</span>
                           {m.rubroBanco ?? "—"}
                         </div>
+                        {(rubroNombre(m.rubroSucursal) || rubroNombre(m.rubroBanco)) && (
+                          <div
+                            className="text-[10px] text-text-muted truncate max-w-[150px] mx-auto"
+                            title={`${rubroNombre(m.rubroSucursal) ?? "—"} / ${rubroNombre(m.rubroBanco) ?? "—"}`}
+                          >
+                            {rubroNombre(m.rubroSucursal) ?? "—"}
+                            <span className="text-text-dim mx-1">/</span>
+                            {rubroNombre(m.rubroBanco) ?? "—"}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
