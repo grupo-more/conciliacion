@@ -141,6 +141,13 @@ export async function GET(req: Request) {
     tipoOperacion: "INGRESO",
     // Anulados en origen no son candidatos para comparar/conciliar.
     estadoActual: { not: "ANU" },
+    // Ventas con tarjeta (claseOperacion="TBK"): NO se concilian acá. Llegan
+    // duplicadas desde /api/dynatech, pero su cuadre real es POS (TbkTesoreria)
+    // ↔ settlement (TransbankSale) en la tab "Cruce Transbank". Excluirlas evita
+    // que aparezcan como ingresos "sin matchear" redundantes — mismo criterio que
+    // del lado banco, donde se excluyen los abonos Transbank de la cartola.
+    // (En Prisma, `not` deja pasar los null, así que las clases vacías se mantienen.)
+    claseOperacion: { not: "TBK" },
     ...(banco ? { banco } : {}),
     ...(onlyUnmatched
       ? {
