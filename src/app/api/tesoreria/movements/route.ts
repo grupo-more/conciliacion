@@ -108,6 +108,39 @@ export async function GET(req: Request) {
     await Promise.all([
       prisma.tesoreriaMovement.findMany({
         where,
+        // Seleccionamos solo lo que usa serialize(): EXCLUYE rawJson (payload
+        // crudo completo de la API, ~1KB/fila, que nunca se devuelve). Traerlo
+        // para cientos/miles de filas era el grueso del costo de esta vista.
+        // `items` sí se incluye (lo usa el detalle del movimiento).
+        select: {
+          id: true,
+          externalId: true,
+          sucursalId: true,
+          sucursalName: true,
+          cajeroUsername: true,
+          cajeroName: true,
+          clienteName: true,
+          clienteRut: true,
+          folio: true,
+          tipoDocumento: true,
+          codigoDocumento: true,
+          glosa: true,
+          banco: true,
+          bancoSucursal: true,
+          bancoDetectado: true,
+          rubroBanco: true,
+          rubroSucursal: true,
+          monto: true,
+          tipoOperacion: true,
+          claseOperacion: true,
+          fecha: true,
+          fechaCarga: true,
+          esExcepcion: true,
+          estadoActual: true,
+          anulado: true,
+          items: true,
+          syncedAt: true,
+        },
         orderBy: [{ fecha: "desc" }],
         take: limit,
         skip: offset,
@@ -177,8 +210,9 @@ export async function GET(req: Request) {
   });
 }
 
-function serialize(m: Awaited<ReturnType<typeof prisma.tesoreriaMovement.findFirst>>) {
-  if (!m) return null;
+function serialize(
+  m: Omit<NonNullable<Awaited<ReturnType<typeof prisma.tesoreriaMovement.findFirst>>>, "rawJson">,
+) {
   return {
     id: m.id,
     externalId: m.externalId.toString(),
