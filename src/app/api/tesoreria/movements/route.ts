@@ -104,7 +104,7 @@ export async function GET(req: Request) {
     ];
   }
 
-  const [rows, total, sucursales, cajeros, bancos, rubrosBanco, rubrosSucursal, rubroLabels, clases] =
+  const [rows, total, sumAgg, sucursales, cajeros, bancos, rubrosBanco, rubrosSucursal, rubroLabels, clases] =
     await Promise.all([
       prisma.tesoreriaMovement.findMany({
         where,
@@ -147,6 +147,8 @@ export async function GET(req: Request) {
         skip: offset,
       }),
       prisma.tesoreriaMovement.count({ where }),
+      // Suma monetaria de TODO el filtro (no solo la página): para "Suma vista".
+      prisma.tesoreriaMovement.aggregate({ _sum: { monto: true }, where }),
       prisma.tesoreriaMovement.groupBy({
         by: ["sucursalId", "sucursalName"],
         orderBy: [{ sucursalId: "asc" }],
@@ -182,6 +184,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     total,
+    sum: (sumAgg._sum.monto ?? 0n).toString(),
     limit,
     offset,
     movements: rows.map(serialize),

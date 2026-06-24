@@ -18,12 +18,17 @@ import { formatDateTime, formatMoney } from "@/lib/format";
 // plano (src/lib/sync/scheduler.ts), desacoplada de la navegación.
 const SOFT_REFRESH_MS = 20_000;
 
+// Paginación en server: tamaño de página del Listado.
+const PAGE_SIZE = 100;
+
 type Tab = "list" | "report";
 
 export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
   const [tab, setTab] = useState<Tab>("list");
   const [movements, setMovements] = useState<TesoreriaMovementDTO[]>([]);
   const [total, setTotal] = useState(0);
+  const [sumVista, setSumVista] = useState("0");
+  const [page, setPage] = useState(0); // 0-based
   const [facets, setFacets] = useState<MovementsResponse["facets"]>({
     sucursales: [],
     cajeros: [],
@@ -89,19 +94,22 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
   async function loadMovements(silent = false) {
     if (!silent) setLoading(true);
     const params = buildParams();
-    params.set("limit", "5000");
+    params.set("limit", String(PAGE_SIZE));
+    params.set("offset", String(page * PAGE_SIZE));
     try {
       const res = await fetch(`/api/tesoreria/movements?${params}`);
       if (!res.ok) {
         if (!silent) {
           setMovements([]);
           setTotal(0);
+          setSumVista("0");
         }
         return;
       }
       const data: MovementsResponse = await res.json();
       setMovements(data.movements);
       setTotal(data.total);
+      setSumVista(data.sum);
       setFacets(data.facets);
     } finally {
       if (!silent) setLoading(false);
@@ -164,6 +172,12 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Cualquier cambio de filtro/búsqueda vuelve a la primera página.
+  useEffect(() => {
+    setPage(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sucursalId, cajero, banco, rubroBanco, rubroSucursal, excepcion, anulado, tipoOperacion, clase, since, until, search]);
+
   // Refresco suave periódico desde la BD (sin spinner, sin API externa). Se
   // re-suscribe cuando cambian filtros/tab para usar siempre el query actual.
   useEffect(() => {
@@ -176,7 +190,7 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, sucursalId, cajero, banco, rubroBanco, rubroSucursal, excepcion, anulado, tipoOperacion, clase, since, until, search, groupBy]);
+  }, [tab, page, sucursalId, cajero, banco, rubroBanco, rubroSucursal, excepcion, anulado, tipoOperacion, clase, since, until, search, groupBy]);
 
   useEffect(() => {
     if (tab === "list") loadMovements();
@@ -195,6 +209,7 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
     since,
     until,
     tab,
+    page,
     groupBy,
   ]);
 
@@ -213,11 +228,6 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
       return () => clearTimeout(t);
     }
   }, [syncBanner]);
-
-  const totalAmount = useMemo(
-    () => movements.reduce((acc, m) => acc + Number(m.monto), 0),
-    [movements]
-  );
 
   const rubroLabelMap = useMemo(() => {
     const map = new Map<number, string>();
@@ -298,7 +308,7 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <Stat label="Total movimientos" value={status?.totalMovements?.toLocaleString("es-CL") ?? "—"} />
         <Stat label="En esta vista" value={total.toLocaleString("es-CL")} />
-        <Stat label="Suma vista" value={formatMoney(totalAmount)} />
+        <Stat label="Suma vista" value={formatMoney(BigInt(sumVista))} />
         <Stat
           label="Excepciones"
           value={status?.totalExcepciones?.toLocaleString("es-CL") ?? "—"}
@@ -710,10 +720,35 @@ export function TesoreriaView({ embedded = false }: { embedded?: boolean }) {
         />
       )}
 
-      {tab === "list" && !loading && total > movements.length && (
-        <div className="text-xs text-text-muted">
-          Mostrando {movements.length.toLocaleString("es-CL")} de{" "}
-          {total.toLocaleString("es-CL")} movimientos. Refina los filtros para acotar.
+      {tab === "list" && !loading && total > 0 && (
+        <div className="flex items-center justify-between gap-3 flex-wrap text-sm">
+          <span className="text-text-muted">
+            Mostrando{" "}
+            <strong>{(page * PAGE_SIZE + 1).toLocaleString("es-CL")}</strong>–
+            <strong>
+              {Math.min(total, (page + 1) * PAGE_SIZE).toLocaleString("es-CL")}
+            </strong>{" "}
+            de <strong>{total.toLocaleString("es-CL")}</strong> movimientos
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              disabled={page === 0}
+              className="rounded-md border border-border-soft px-3 py-1.5 text-sm disabled:opacity-40 hover:bg-bg-soft"
+            >
+              ← Anterior
+            </button>
+            <span className="text-text-muted whitespace-nowrap">
+              Página {page + 1} de {Math.max(1, Math.ceil(total / PAGE_SIZE))}
+            </span>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page + 1 >= Math.ceil(total / PAGE_SIZE)}
+              className="rounded-md border border-border-soft px-3 py-1.5 text-sm disabled:opacity-40 hover:bg-bg-soft"
+            >
+              Siguiente →
+            </button>
+          </div>
         </div>
       )}
 

@@ -30,6 +30,7 @@ export interface TesoreriaMovementDTO {
 
 export interface MovementsResponse {
   total: number;
+  sum: string; // suma monetaria (BigInt como string) de TODO el filtro, no solo la página
   limit: number;
   offset: number;
   movements: TesoreriaMovementDTO[];
