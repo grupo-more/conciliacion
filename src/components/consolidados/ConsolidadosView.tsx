@@ -38,6 +38,8 @@ export function ConsolidadosView() {
   const [period, setPeriod] = useState<Period>("month");
   const [statusFilter, setStatusFilter] = useState<Set<ConsolidadoStatus>>(new Set());
   const [bancoFilter, setBancoFilter] = useState<string>("");
+  const [sucursalFilter, setSucursalFilter] = useState<string>("");
+  const [tipoFilter, setTipoFilter] = useState<"" | "INGRESO" | "EGRESO">("");
   const [search, setSearch] = useState("");
 
   const [data, setData] = useState<OverviewResponse | null>(null);
@@ -77,6 +79,8 @@ export function ConsolidadosView() {
         p.set("status", Array.from(statusFilter).join(","));
       }
       if (bancoFilter) p.set("banco", bancoFilter);
+      if (sucursalFilter) p.set("sucursalId", sucursalFilter);
+      if (tipoFilter) p.set("tipoOperacion", tipoFilter);
       if (search.trim()) p.set("q", search.trim());
       const res = await fetch(`/api/consolidados/overview?${p}`);
       if (!res.ok) {
@@ -112,7 +116,7 @@ export function ConsolidadosView() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [period, bancoFilter]);
+  }, [period, bancoFilter, sucursalFilter, tipoFilter]);
 
   useEffect(() => {
     load();
@@ -137,6 +141,33 @@ export function ConsolidadosView() {
       return next;
     });
   }
+
+  const hasFilters =
+    statusFilter.size > 0 ||
+    bancoFilter !== "" ||
+    sucursalFilter !== "" ||
+    tipoFilter !== "" ||
+    search.trim() !== "";
+  function clearFilters() {
+    setStatusFilter(new Set());
+    setBancoFilter("");
+    setSucursalFilter("");
+    setTipoFilter("");
+    setSearch("");
+  }
+
+  // Resumen legible del filtro activo: "Egresos · PATRONATO · Sin match".
+  const filterBits: string[] = [];
+  if (tipoFilter) filterBits.push(tipoFilter === "EGRESO" ? "Egresos" : "Ingresos");
+  if (sucursalFilter) {
+    const s = data?.facets.sucursales.find((x) => String(x.id) === sucursalFilter);
+    filterBits.push(s?.name ?? `Sucursal #${sucursalFilter}`);
+  }
+  if (bancoFilter) filterBits.push(bancoFilter);
+  if (statusFilter.size > 0) {
+    filterBits.push(Array.from(statusFilter).map((s) => STATUS_LABELS[s]).join(" / "));
+  }
+  if (search.trim()) filterBits.push(`"${search.trim()}"`);
 
   return (
     <div className="space-y-4">
@@ -272,6 +303,27 @@ export function ConsolidadosView() {
           {/* Filtros extra */}
           <div className="flex flex-wrap gap-2 items-center">
             <select
+              value={tipoFilter}
+              onChange={(e) => setTipoFilter(e.target.value as "" | "INGRESO" | "EGRESO")}
+              className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white"
+            >
+              <option value="">Ingresos y egresos</option>
+              <option value="INGRESO">Solo ingresos</option>
+              <option value="EGRESO">Solo egresos</option>
+            </select>
+            <select
+              value={sucursalFilter}
+              onChange={(e) => setSucursalFilter(e.target.value)}
+              className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white"
+            >
+              <option value="">Todas las sucursales</option>
+              {data?.facets.sucursales.map((s) => (
+                <option key={s.id} value={String(s.id)}>
+                  {s.name ?? `#${s.id}`}
+                </option>
+              ))}
+            </select>
+            <select
               value={bancoFilter}
               onChange={(e) => setBancoFilter(e.target.value)}
               className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white"
@@ -290,7 +342,43 @@ export function ConsolidadosView() {
               onChange={(e) => setSearch(e.target.value)}
               className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white flex-1 min-w-[200px]"
             />
+            {hasFilters && (
+              <button
+                onClick={clearFilters}
+                className="rounded-md border border-border-soft px-3 py-1.5 text-sm text-text-muted hover:bg-bg-soft whitespace-nowrap"
+                title="Quitar status, banco y búsqueda"
+              >
+                × Limpiar filtros
+              </button>
+            )}
           </div>
+
+          {/* Resumen del filtro activo */}
+          {!loading && data && data.rows.length > 0 && (
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-sm">
+              <span className="text-text-muted">Viendo:</span>
+              <span className="font-medium">
+                {filterBits.length > 0 ? filterBits.join(" · ") : "Todos los movimientos"}
+              </span>
+              <span className="text-text-dim">·</span>
+              <span className="text-text-muted">
+                {data.filteredTotal.toLocaleString("es-CL")} mov
+                {data.filteredTotal === 1 ? "" : "s"}
+              </span>
+              <span className="text-text-dim">·</span>
+              <span className="text-text-muted">
+                suma{" "}
+                <span
+                  className={
+                    "font-mono font-medium " +
+                    (BigInt(data.filteredSum) < 0n ? "text-rose-600" : "text-emerald-700")
+                  }
+                >
+                  {formatMoney(BigInt(data.filteredSum))}
+                </span>
+              </span>
+            </div>
+          )}
 
           {/* Tabla */}
           <div className="rounded-lg border border-border-soft bg-white overflow-hidden">
@@ -303,18 +391,19 @@ export function ConsolidadosView() {
               </div>
             )}
             {!loading && data && data.rows.length > 0 && (
-              <div className="overflow-x-auto">
+              <div className="max-h-[70vh] overflow-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-bg-soft text-xs uppercase tracking-wider text-text-muted">
+                  <thead className="sticky top-0 z-10 bg-bg-soft text-xs uppercase tracking-wider text-text-muted shadow-[0_1px_0_0_rgba(0,0,0,0.06)]">
                     <tr>
                       <th className="px-3 py-2 text-left">Fecha</th>
                       <th className="px-3 py-2 text-left">Sucursal</th>
                       <th className="px-3 py-2 text-left">Banco</th>
                       <th className="px-3 py-2 text-right">Monto</th>
+                      <th className="px-3 py-2 text-center">Tipo</th>
                       <th className="px-3 py-2 text-left">Cliente</th>
                       <th className="px-3 py-2 text-left">Glosa</th>
                       <th className="px-3 py-2 text-left">Estado</th>
-                      <th className="px-3 py-2 text-right">Score</th>
+                      <th className="px-3 py-2 text-center">Score</th>
                       <th className="px-3 py-2 text-center w-20">Acciones</th>
                     </tr>
                   </thead>
@@ -332,6 +421,20 @@ export function ConsolidadosView() {
               </div>
             )}
           </div>
+
+          {!loading && data && data.rows.length > 0 && (
+            <div className="text-xs text-text-muted">
+              Mostrando {data.rows.length.toLocaleString("es-CL")} de{" "}
+              {data.filteredTotal.toLocaleString("es-CL")} movimiento
+              {data.filteredTotal === 1 ? "" : "s"}.
+              {data.rows.length >= 500 && (
+                <span className="text-amber-700">
+                  {" "}
+                  Límite de 500 alcanzado — refiná los filtros para ver el resto.
+                </span>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -402,10 +505,13 @@ function Row({
     status === "MANUAL" ||
     status === "SUGGESTED" ||
     status === "REVIEW";
+  const montoBig = BigInt(row.monto);
+  const esEgreso = row.tipoOperacion === "EGRESO" || montoBig < 0n;
+  const absMonto = montoBig < 0n ? -montoBig : montoBig;
   return (
     <tr
       onClick={onClick}
-      className="border-t border-border-soft/60 hover:bg-bg-soft/60 cursor-pointer transition-colors"
+      className="border-t border-border-soft/60 odd:bg-white even:bg-bg-soft/40 hover:bg-bg-soft/70 cursor-pointer transition-colors"
     >
       <td className="px-3 py-2 whitespace-nowrap">{formatDate(row.fecha)}</td>
       <td className="px-3 py-2 whitespace-nowrap">
@@ -419,8 +525,25 @@ function Row({
           </span>
         )}
       </td>
-      <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
-        {formatMoney(BigInt(row.monto))}
+      <td
+        className={
+          "px-3 py-2 text-right font-mono whitespace-nowrap font-medium " +
+          (esEgreso ? "text-rose-600" : "text-emerald-700")
+        }
+      >
+        {esEgreso ? `-${formatMoney(absMonto)}` : formatMoney(montoBig)}
+      </td>
+      <td className="px-3 py-2 text-center whitespace-nowrap">
+        <span
+          className={
+            "inline-block rounded-full text-[10px] font-bold px-2 py-0.5 " +
+            (esEgreso
+              ? "bg-rose-500/15 text-rose-600"
+              : "bg-emerald-500/15 text-emerald-600")
+          }
+        >
+          {esEgreso ? "EGRESO" : "INGRESO"}
+        </span>
       </td>
       <td className="px-3 py-2 max-w-[200px] truncate" title={row.clienteName ?? ""}>
         {row.clienteName ?? "—"}
@@ -445,8 +568,8 @@ function Row({
           </span>
         )}
       </td>
-      <td className="px-3 py-2 text-right font-mono text-xs">
-        {row.consolidado?.score ?? "—"}
+      <td className="px-3 py-2 text-center">
+        <ScoreBadge score={row.consolidado?.score ?? null} />
       </td>
       <td className="px-3 py-2 text-center">
         {canUndo ? (
@@ -471,6 +594,24 @@ function Row({
         )}
       </td>
     </tr>
+  );
+}
+
+function ScoreBadge({ score }: { score: number | null }) {
+  if (score === null) return <span className="text-text-dim text-xs">—</span>;
+  const tone =
+    score >= 80
+      ? "bg-emerald-100 text-emerald-800"
+      : score >= 50
+      ? "bg-amber-100 text-amber-800"
+      : "bg-rose-100 text-rose-800";
+  return (
+    <span
+      className={"inline-block rounded-full text-[11px] font-bold px-2 py-0.5 font-mono " + tone}
+      title="Score de confianza del match (0–100)"
+    >
+      {score}
+    </span>
   );
 }
 

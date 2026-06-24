@@ -30,20 +30,30 @@ export async function GET(req: Request) {
   const accountId = url.searchParams.get("accountId");
   const banco = (url.searchParams.get("banco") || "").trim();
   const search = (url.searchParams.get("q") || "").trim();
+  const tipoOperacionRaw = (url.searchParams.get("tipoOperacion") || "").trim();
+  const tipoOperacion =
+    tipoOperacionRaw === "INGRESO" || tipoOperacionRaw === "EGRESO" ? tipoOperacionRaw : null;
+  const sucursalIdRaw = url.searchParams.get("sucursalId");
+  const sucursalId =
+    sucursalIdRaw && /^\d+$/.test(sucursalIdRaw) ? parseInt(sucursalIdRaw, 10) : null;
 
   const range = getPeriodRange(period);
+
+  // Alcance base compartido por los chips (counts) y las filas: período, banco,
+  // tipo (ingreso/egreso), sucursal y exclusión de TBK (se cuadra en Cruce
+  // Transbank). NO incluye status ni búsqueda — esos son propios del listado.
+  const baseScope = {
+    fecha: { gte: range.start, lt: range.end },
+    claseOperacion: { not: "TBK" as const },
+    ...(banco ? { banco: { contains: banco, mode: "insensitive" as const } } : {}),
+    ...(tipoOperacion ? { tipoOperacion } : {}),
+    ...(sucursalId !== null ? { sucursalId } : {}),
+  };
 
   // Counts globales (no filtrados por status) para que los chips muestren totales
   const countsRaw = await prisma.consolidado.groupBy({
     by: ["status"],
-    where: {
-      tesoreriaMovement: {
-        fecha: { gte: range.start, lt: range.end },
-        // TBK se cuadra en "Cruce Transbank", no acá: fuera de los conteos.
-        claseOperacion: { not: "TBK" },
-        ...(banco ? { banco: { contains: banco, mode: "insensitive" as const } } : {}),
-      },
-    },
+    where: { tesoreriaMovement: baseScope },
     _count: { _all: true },
   });
   const counts: Record<string, number> = {
@@ -61,60 +71,54 @@ export async function GET(req: Request) {
   // Tesoreria sin Consolidado (no procesado) — también lo contamos. Los
   // anulados no cuentan como pendiente aunque aún no tengan Consolidado.
   const unprocessed = await prisma.tesoreriaMovement.count({
-    where: {
-      fecha: { gte: range.start, lt: range.end },
-      consolidado: null,
-      estadoActual: { not: "ANU" },
-      // TBK no es pendiente de conciliación acá (se cuadra en Cruce Transbank).
-      claseOperacion: { not: "TBK" },
-      ...(banco ? { banco: { contains: banco, mode: "insensitive" as const } } : {}),
-    },
+    where: { ...baseScope, consolidado: null, estadoActual: { not: "ANU" as const } },
   });
   counts.UNPROCESSED = unprocessed;
 
-  // Rows: TesoreriaMovements con su Consolidado + link
-  const tesorerias = await prisma.tesoreriaMovement.findMany({
-    where: {
-      fecha: { gte: range.start, lt: range.end },
-      // TBK se cuadra en "Cruce Transbank": no se lista en Consolidados.
-      claseOperacion: { not: "TBK" },
-      ...(banco ? { banco: { contains: banco, mode: "insensitive" as const } } : {}),
-      ...(statusFilter
-        ? statusFilter.includes("UNPROCESSED")
-          ? statusFilter.length === 1
-            ? { consolidado: null }
-            : {
-                OR: [
-                  { consolidado: null },
-                  {
-                    consolidado: {
-                      status: { in: statusFilter.filter((s) => s !== "UNPROCESSED") },
-                    },
+  // Filtro completo del listado: alcance base + status + cuenta + búsqueda.
+  const rowsWhere = {
+    ...baseScope,
+    ...(statusFilter
+      ? statusFilter.includes("UNPROCESSED")
+        ? statusFilter.length === 1
+          ? { consolidado: null }
+          : {
+              OR: [
+                { consolidado: null },
+                {
+                  consolidado: {
+                    status: { in: statusFilter.filter((s) => s !== "UNPROCESSED") },
                   },
-                ],
-              }
-          : { consolidado: { status: { in: statusFilter } } }
-        : {}),
-      ...(accountId
-        ? { consolidado: { resolvedAccountId: accountId } }
-        : {}),
-      ...(search
-        ? {
-            OR: [
-              { glosa: { contains: search, mode: "insensitive" as const } },
-              { clienteName: { contains: search, mode: "insensitive" as const } },
-              { clienteRut: { contains: search, mode: "insensitive" as const } },
-              { sucursalName: { contains: search, mode: "insensitive" as const } },
-              // Si el termino es numerico (con o sin separadores de miles),
-              // matcheamos por PREFIJO de monto. "700000" matchea cualquier
-              // monto cuya representacion decimal empieza con 700000 — esto
-              // incluye 700000, 7000000, 70000000, etc. Se arma con rangos
-              // [X·10^k, (X+1)·10^k) para que Prisma lo resuelva en SQL.
-              ...searchAmountRanges(search).map((r) => ({ monto: r })),
-            ],
-          }
-        : {}),
-    },
+                },
+              ],
+            }
+        : { consolidado: { status: { in: statusFilter } } }
+      : {}),
+    ...(accountId ? { consolidado: { resolvedAccountId: accountId } } : {}),
+    ...(search
+      ? {
+          OR: [
+            { glosa: { contains: search, mode: "insensitive" as const } },
+            { clienteName: { contains: search, mode: "insensitive" as const } },
+            { clienteRut: { contains: search, mode: "insensitive" as const } },
+            { sucursalName: { contains: search, mode: "insensitive" as const } },
+            // Si el termino es numerico (con o sin separadores de miles),
+            // matcheamos por PREFIJO de monto. "700000" matchea cualquier
+            // monto cuya representacion decimal empieza con 700000 — esto
+            // incluye 700000, 7000000, 70000000, etc. Se arma con rangos
+            // [X·10^k, (X+1)·10^k) para que Prisma lo resuelva en SQL.
+            ...searchAmountRanges(search).map((r) => ({ monto: r })),
+          ],
+        }
+      : {}),
+  };
+
+  // Rows + total + suma monetaria del filtro actual. El total/suma se calculan
+  // sobre TODO el filtro (no solo las 500 filas que se listan), para el footer
+  // "X de Y" y el resumen "N movs · suma $X".
+  const [tesorerias, filteredTotal, sumAgg] = await Promise.all([
+    prisma.tesoreriaMovement.findMany({
+    where: rowsWhere,
     include: {
       consolidado: {
         include: {
@@ -142,7 +146,11 @@ export async function GET(req: Request) {
     },
     orderBy: { fecha: "desc" },
     take: 500,
-  });
+    }),
+    prisma.tesoreriaMovement.count({ where: rowsWhere }),
+    prisma.tesoreriaMovement.aggregate({ _sum: { monto: true }, where: rowsWhere }),
+  ]);
+  const filteredSum = (sumAgg._sum.monto ?? 0n).toString();
 
   const rows = tesorerias.map((t) => ({
     id: t.id,
@@ -196,11 +204,26 @@ export async function GET(req: Request) {
     .filter((b): b is string => !!b)
     .sort();
 
+  // Sucursales del período (para el dropdown). Independiente de los filtros
+  // activos, así siempre se puede cambiar de sucursal.
+  const periodScope = {
+    fecha: { gte: range.start, lt: range.end },
+    claseOperacion: { not: "TBK" as const },
+  };
+  const sucursalesRaw = await prisma.tesoreriaMovement.groupBy({
+    by: ["sucursalId", "sucursalName"],
+    where: periodScope,
+    orderBy: { sucursalId: "asc" },
+  });
+  const sucursales = sucursalesRaw.map((s) => ({ id: s.sucursalId, name: s.sucursalName }));
+
   return NextResponse.json({
     period,
     counts,
     rows,
-    facets: { bancos },
+    filteredTotal,
+    filteredSum,
+    facets: { bancos, sucursales },
   });
 }
 

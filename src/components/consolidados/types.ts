@@ -44,6 +44,7 @@ export interface ConsolidadoRow {
   externalId: string;
   fecha: string;
   monto: string;
+  tipoOperacion: string; // dirección: INGRESO | EGRESO
   sucursalId: number;
   sucursalName: string | null;
   banco: string | null;
@@ -65,7 +66,12 @@ export interface OverviewResponse {
   period: "day" | "week" | "month";
   counts: Record<string, number>;
   rows: ConsolidadoRow[];
-  facets: { bancos: string[] };
+  filteredTotal: number; // total de movimientos del filtro (no solo las 500 listadas)
+  filteredSum: string; // suma monetaria (BigInt como string) del filtro actual
+  facets: {
+    bancos: string[];
+    sucursales: Array<{ id: number; name: string | null }>;
+  };
 }
 
 export interface CandidateDTO {
