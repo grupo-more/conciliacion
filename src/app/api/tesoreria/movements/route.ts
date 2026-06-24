@@ -136,6 +136,7 @@ export async function GET(req: Request) {
           fecha: true,
           fechaCarga: true,
           esExcepcion: true,
+          estadoOriginal: true,
           estadoActual: true,
           anulado: true,
           items: true,
