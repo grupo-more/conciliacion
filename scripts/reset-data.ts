@@ -6,13 +6,16 @@
  * usuarios). Es lo que normalmente querés para "reimportar todo de nuevo".
  *
  * Borra (data):
- *   ConsolidadoLink, Consolidado, BankMovement, StatementImport,
- *   TransbankSale, TransbankImport, TesoreriaMovement, TesoreriaSyncRun,
- *   TbkTesoreria, EgresoMovement
+ *   ConsolidadoLink, Consolidado, EgresoConciliacionLink, EgresoConciliacion,
+ *   AsientoManualLinea, AsientoManual, CuadraturaTransbankItem,
+ *   CuadraturaTransbank, CuadraturaTransbankApartado, CruceTransbankLink,
+ *   BankMovement, StatementImport, TransbankSale, TransbankImport,
+ *   TesoreriaMovement, TesoreriaSyncRun, TbkTesoreria, EgresoMovement
  *
  * Conserva (config):
  *   User, BankAccount, BankAccountAlias, RubroLabel, EntidadInterna,
- *   DifMenorSettings
+ *   DifMenorSettings, Sucursal, AsientoManualSettings,
+ *   CuadraturaTransbankSettings
  *
  * Flags:
  *   (sin flags)        → DRY-RUN: solo muestra cuántas filas borraría.
@@ -42,6 +45,14 @@ async function counts() {
   const [
     consolidadoLink,
     consolidado,
+    egresoConciliacionLink,
+    egresoConciliacion,
+    asientoManualLinea,
+    asientoManual,
+    cuadraturaTransbankItem,
+    cuadraturaTransbank,
+    cuadraturaTransbankApartado,
+    cruceTransbankLink,
     bankMovement,
     statementImport,
     transbankSale,
@@ -59,6 +70,14 @@ async function counts() {
   ] = await Promise.all([
     prisma.consolidadoLink.count(),
     prisma.consolidado.count(),
+    prisma.egresoConciliacionLink.count(),
+    prisma.egresoConciliacion.count(),
+    prisma.asientoManualLinea.count(),
+    prisma.asientoManual.count(),
+    prisma.cuadraturaTransbankItem.count(),
+    prisma.cuadraturaTransbank.count(),
+    prisma.cuadraturaTransbankApartado.count(),
+    prisma.cruceTransbankLink.count(),
     prisma.bankMovement.count(),
     prisma.statementImport.count(),
     prisma.transbankSale.count(),
@@ -77,6 +96,14 @@ async function counts() {
   return {
     consolidadoLink,
     consolidado,
+    egresoConciliacionLink,
+    egresoConciliacion,
+    asientoManualLinea,
+    asientoManual,
+    cuadraturaTransbankItem,
+    cuadraturaTransbank,
+    cuadraturaTransbankApartado,
+    cruceTransbankLink,
     bankMovement,
     statementImport,
     transbankSale,
@@ -108,8 +135,11 @@ async function main() {
     console.log(
       "\nDRY-RUN. No se borró nada. Agregá --apply para ejecutar.\n" +
         "  Data transaccional que se borraría: ConsolidadoLink, Consolidado,\n" +
-        "  BankMovement, StatementImport, TransbankSale, TransbankImport,\n" +
-        "  TesoreriaMovement, TesoreriaSyncRun, TbkTesoreria, EgresoMovement.\n" +
+        "  EgresoConciliacionLink, EgresoConciliacion, AsientoManualLinea,\n" +
+        "  AsientoManual, CuadraturaTransbankItem, CuadraturaTransbank,\n" +
+        "  CuadraturaTransbankApartado, CruceTransbankLink, BankMovement,\n" +
+        "  StatementImport, TransbankSale, TransbankImport, TesoreriaMovement,\n" +
+        "  TesoreriaSyncRun, TbkTesoreria, EgresoMovement.\n" +
         (WIPE_CONFIG
           ? "  + CONFIG (alias, entidades, rubros, dif-settings, cuentas)" +
             (WIPE_USERS ? " + USUARIOS" : "") +
@@ -122,8 +152,20 @@ async function main() {
   // 1) Data transaccional (orden hijo→padre para respetar FKs).
   console.log("\nBorrando data transaccional…");
   await prisma.$transaction([
+    // hijos que apuntan a BankMovement / Consolidado / Egreso / Asiento / Cuadratura
     prisma.consolidadoLink.deleteMany(),
     prisma.consolidado.deleteMany(),
+    prisma.egresoConciliacionLink.deleteMany(),
+    prisma.egresoConciliacion.deleteMany(),
+    prisma.asientoManualLinea.deleteMany(),
+    prisma.asientoManual.deleteMany(),
+    // tablas de cuadratura/cruce Transbank: SIN FK a TBK/settlement, no se
+    // borran en cascada al limpiar las ventas → hay que borrarlas a mano.
+    prisma.cuadraturaTransbankItem.deleteMany(),
+    prisma.cuadraturaTransbank.deleteMany(),
+    prisma.cuadraturaTransbankApartado.deleteMany(),
+    prisma.cruceTransbankLink.deleteMany(),
+    // padres
     prisma.bankMovement.deleteMany(),
     prisma.statementImport.deleteMany(),
     prisma.transbankSale.deleteMany(),
