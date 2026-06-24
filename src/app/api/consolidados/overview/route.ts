@@ -39,6 +39,8 @@ export async function GET(req: Request) {
     where: {
       tesoreriaMovement: {
         fecha: { gte: range.start, lt: range.end },
+        // TBK se cuadra en "Cruce Transbank", no acá: fuera de los conteos.
+        claseOperacion: { not: "TBK" },
         ...(banco ? { banco: { contains: banco, mode: "insensitive" as const } } : {}),
       },
     },
@@ -63,6 +65,8 @@ export async function GET(req: Request) {
       fecha: { gte: range.start, lt: range.end },
       consolidado: null,
       estadoActual: { not: "ANU" },
+      // TBK no es pendiente de conciliación acá (se cuadra en Cruce Transbank).
+      claseOperacion: { not: "TBK" },
       ...(banco ? { banco: { contains: banco, mode: "insensitive" as const } } : {}),
     },
   });
@@ -72,6 +76,8 @@ export async function GET(req: Request) {
   const tesorerias = await prisma.tesoreriaMovement.findMany({
     where: {
       fecha: { gte: range.start, lt: range.end },
+      // TBK se cuadra en "Cruce Transbank": no se lista en Consolidados.
+      claseOperacion: { not: "TBK" },
       ...(banco ? { banco: { contains: banco, mode: "insensitive" as const } } : {}),
       ...(statusFilter
         ? statusFilter.includes("UNPROCESSED")

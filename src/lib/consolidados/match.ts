@@ -624,7 +624,16 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
       include: { account: true },
       orderBy: { postDate: "asc" },
     }),
-    prisma.tesoreriaMovement.findMany({ orderBy: { fecha: "asc" } }),
+    // Ventas con tarjeta (claseOperacion="TBK") quedan FUERA del motor de
+    // ingresos: llegan duplicadas desde /api/dynatech, pero su cuadre real es
+    // POS↔settlement en la tab "Cruce Transbank" (tablas TbkTesoreria/
+    // TransbankSale, aparte). Incluirlas generaba ruido NO_MATCH y, peor, riesgo
+    // de doble asiento si una coincidía por monto/fecha con la cartola.
+    // (`not` deja pasar los null, así que las clases vacías se mantienen.)
+    prisma.tesoreriaMovement.findMany({
+      where: { claseOperacion: { not: "TBK" } },
+      orderBy: { fecha: "asc" },
+    }),
     preserveManual
       ? prisma.consolidado.findMany({
           where: { status: "MANUAL" },
