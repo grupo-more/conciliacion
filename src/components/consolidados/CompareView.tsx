@@ -246,6 +246,25 @@ export function CompareView({
     );
   }, [data, search]);
 
+  // Listas de despliegue: los SELECCIONADOS van fijos arriba y se muestran
+  // siempre, aunque no matcheen el filtro/búsqueda actual. Así, al limpiar el
+  // buscador (o cambiar el filtro) no se pierde de vista lo que ya elegiste.
+  const displayBank = useMemo(() => {
+    if (!data) return [];
+    const sel = data.bankMovements.filter((b) => selectedBankIds.has(b.id));
+    const rest = filteredBank.filter((b) => !selectedBankIds.has(b.id));
+    return [...sel, ...rest];
+  }, [data, filteredBank, selectedBankIds]);
+
+  const displayTesoreria = useMemo(() => {
+    if (!data) return [];
+    const sel = data.tesoreriaMovements.filter((t) =>
+      selectedTesoreriaIds.has(t.id)
+    );
+    const rest = filteredTesoreria.filter((t) => !selectedTesoreriaIds.has(t.id));
+    return [...sel, ...rest];
+  }, [data, filteredTesoreria, selectedTesoreriaIds]);
+
   // Suma de seleccionados para validar match
   const selectedBankSum = useMemo(() => {
     if (!data) return 0n;
@@ -851,12 +870,12 @@ export function CompareView({
             {loading && (
               <div className="text-center py-8 text-sm text-text-muted">Cargando…</div>
             )}
-            {!loading && filteredBank.length === 0 && (
+            {!loading && displayBank.length === 0 && (
               <div className="text-center py-8 text-sm text-text-muted">
                 Sin cartolas en este filtro.
               </div>
             )}
-            {filteredBank.map((bm) => (
+            {displayBank.map((bm) => (
               <BankCard
                 key={bm.id}
                 bm={bm}
@@ -884,12 +903,12 @@ export function CompareView({
             {loading && (
               <div className="text-center py-8 text-sm text-text-muted">Cargando…</div>
             )}
-            {!loading && filteredTesoreria.length === 0 && (
+            {!loading && displayTesoreria.length === 0 && (
               <div className="text-center py-8 text-sm text-text-muted">
                 Sin Tesorería en este filtro.
               </div>
             )}
-            {filteredTesoreria.map((t) => (
+            {displayTesoreria.map((t) => (
               <TesoreriaCard
                 key={t.id}
                 t={t}
