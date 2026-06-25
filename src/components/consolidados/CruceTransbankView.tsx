@@ -397,7 +397,6 @@ export function CruceTransbankView() {
       {posFicticioTarget && (
         <PosFicticioModal
           sett={posFicticioTarget}
-          sucursales={data?.facets.sucursales ?? []}
           onClose={() => setPosFicticioTarget(null)}
           onCreated={() => {
             setPosFicticioTarget(null);
@@ -414,15 +413,29 @@ export function CruceTransbankView() {
 
 function PosFicticioModal({
   sett,
-  sucursales,
   onClose,
   onCreated,
 }: {
   sett: CruceRow;
-  sucursales: { id: number; name: string | null }[];
   onClose: () => void;
   onCreated: () => void;
 }) {
+  // Sucursales del MAESTRO (código + nombre limpio). NO usamos las facetas del
+  // cruce: el código debe ser un código real de sucursal y el nombre el oficial
+  // (no la dirección del abono).
+  const [sucMaster, setSucMaster] = useState<{ codigo: number; nombre: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/sucursales")
+      .then((r) => r.json())
+      .then((d) => {
+        const list = ((d.sucursales ?? []) as Array<{ codigo: number | null; nombre: string; active?: boolean }>)
+          .filter((s) => s.codigo != null && s.active !== false)
+          .map((s) => ({ codigo: s.codigo as number, nombre: s.nombre }));
+        setSucMaster(list);
+      })
+      .catch(() => setSucMaster([]));
+  }, []);
+
   // Pre-cargado desde el abono (settlement). El monto por defecto es el bruto del
   // abono = parte tarjeta (lo contablemente correcto para que cuadre exacto).
   const [sucursalId, setSucursalId] = useState<string>(sett.sucursalId != null ? String(sett.sucursalId) : "");
@@ -499,8 +512,8 @@ function PosFicticioModal({
             <span className="block text-text-muted">Sucursal</span>
             <select value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} className="input w-full">
               <option value="">— Elegí —</option>
-              {sucursales.map((s) => (
-                <option key={s.id} value={s.id}>{s.name ?? `#${s.id}`}</option>
+              {sucMaster.map((s) => (
+                <option key={s.codigo} value={s.codigo}>{s.codigo} · {s.nombre}</option>
               ))}
             </select>
           </label>

@@ -41,15 +41,24 @@ export async function POST(req: Request) {
 
   const sett = await prisma.transbankSale.findUnique({
     where: { id: transbankSaleId },
-    select: { id: true, nombreLocal: true },
+    select: { id: true },
   });
   if (!sett) return NextResponse.json({ error: "Abono Transbank no encontrado" }, { status: 404 });
 
-  // Nombre de sucursal desde el maestro (código = sucursalId de Dynatech).
+  // Nombre de sucursal SOLO desde el maestro (código = sucursalId de Dynatech).
+  // NO usamos el nombreLocal del settlement: ese es la dirección y, al quedar como
+  // sucursalName del POS, pisaba el nombre real de la sucursal en las facetas y el
+  // agrupado del cruce. Si no está en el maestro, queda null y las vistas resuelven.
   const suc = await prisma.sucursal.findFirst({
     where: { codigo: sucursalId },
     select: { nombre: true },
   });
+  if (!suc) {
+    return NextResponse.json(
+      { error: `La sucursal (código ${sucursalId}) no está en el maestro. Elegí una sucursal válida.` },
+      { status: 400 },
+    );
+  }
 
   const [y, m, dd] = fecha.split("-").map(Number);
   const fechaDate = new Date(y, m - 1, dd, 12, 0, 0, 0);
@@ -65,7 +74,7 @@ export async function POST(req: Request) {
         data: {
           externalId,
           sucursalId,
-          sucursalName: suc?.nombre ?? sett.nombreLocal ?? null,
+          sucursalName: suc.nombre,
           glosa: glosa?.trim() || "POS MANUAL (ficticio)",
           opNumber: opNumber?.trim() || null,
           fecha: fechaDate,
