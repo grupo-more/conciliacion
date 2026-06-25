@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { excluirFueraAlcanceWhere } from "@/lib/consolidados/scope";
 
 /**
  * GET /api/consolidados/overview?period=day|week|month
@@ -45,6 +46,8 @@ export async function GET(req: Request) {
   const baseScope = {
     fecha: { gte: range.start, lt: range.end },
     claseOperacion: { not: "TBK" as const },
+    // Fuera de alcance (COMPRA CUENTA APP MORE GIROS): excluidos de counts y filas.
+    ...excluirFueraAlcanceWhere,
     ...(banco ? { banco: { contains: banco, mode: "insensitive" as const } } : {}),
     ...(tipoOperacion ? { tipoOperacion } : {}),
     ...(sucursalId !== null ? { sucursalId } : {}),
@@ -209,6 +212,7 @@ export async function GET(req: Request) {
   const periodScope = {
     fecha: { gte: range.start, lt: range.end },
     claseOperacion: { not: "TBK" as const },
+    ...excluirFueraAlcanceWhere,
   };
   const sucursalesRaw = await prisma.tesoreriaMovement.groupBy({
     by: ["sucursalId", "sucursalName"],

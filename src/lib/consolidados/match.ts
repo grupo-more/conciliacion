@@ -36,6 +36,7 @@ import { normalizeRut } from "@/lib/cartolas/normalize";
 import { parseGlosa } from "@/lib/consolidados/glosa";
 import { isUsoParcialAccount } from "@/lib/cuentas/uso-parcial";
 import { matchGlosaRoute } from "@/lib/consolidados/glosa-routing";
+import { excluirFueraAlcanceWhere } from "@/lib/consolidados/scope";
 import type {
   BankAccount,
   BankAccountAlias,
@@ -631,7 +632,9 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
     // de doble asiento si una coincidía por monto/fecha con la cartola.
     // (`not` deja pasar los null, así que las clases vacías se mantienen.)
     prisma.tesoreriaMovement.findMany({
-      where: { claseOperacion: { not: "TBK" } },
+      // Excluye TBK (cuadra en Cruce Transbank) y los fuera-de-alcance
+      // (COMPRA CUENTA APP MORE GIROS): no entran al motor.
+      where: { claseOperacion: { not: "TBK" }, ...excluirFueraAlcanceWhere },
       orderBy: { fecha: "asc" },
     }),
     preserveManual

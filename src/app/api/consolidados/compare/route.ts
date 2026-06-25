@@ -6,6 +6,7 @@ import { getDifMenorSettings } from "@/lib/dif-menor/detect";
 import { parseGlosa } from "@/lib/consolidados/glosa";
 import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
 import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
+import { excluirFueraAlcanceWhere } from "@/lib/consolidados/scope";
 
 /** Ventana de fechas para considerar dos tesorerías parte del mismo
  *  depósito agrupado. Match estricto: misma semana. */
@@ -155,6 +156,8 @@ export async function GET(req: Request) {
     // del lado banco, donde se excluyen los abonos Transbank de la cartola.
     // (En Prisma, `not` deja pasar los null, así que las clases vacías se mantienen.)
     claseOperacion: { not: "TBK" },
+    // Fuera de alcance (COMPRA CUENTA APP MORE GIROS): no se muestran ni cuadran.
+    ...excluirFueraAlcanceWhere,
     ...(banco ? { banco } : {}),
     ...(onlyUnmatched
       ? {
