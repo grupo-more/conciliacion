@@ -45,20 +45,25 @@ export async function POST(req: Request) {
   });
   if (!sett) return NextResponse.json({ error: "Abono Transbank no encontrado" }, { status: 404 });
 
-  // Nombre de sucursal SOLO desde el maestro (código = sucursalId de Dynatech).
-  // NO usamos el nombreLocal del settlement: ese es la dirección y, al quedar como
-  // sucursalName del POS, pisaba el nombre real de la sucursal en las facetas y el
-  // agrupado del cruce. Si no está en el maestro, queda null y las vistas resuelven.
-  const suc = await prisma.sucursal.findFirst({
-    where: { codigo: sucursalId },
-    select: { nombre: true },
-  });
-  if (!suc) {
-    return NextResponse.json(
-      { error: `La sucursal (código ${sucursalId}) no está en el maestro. Elegí una sucursal válida.` },
-      { status: 400 },
-    );
-  }
+  // sucursalId es la convención POS/settlement (2-10), NO el código del maestro.
+  // El nombre limpio se toma de un registro REAL de esa sucursalId (POS real o
+  // Tesorería); NUNCA del nombreLocal del settlement (es la dirección) ni del
+  // maestro (otra convención + mezcla rubros). Si no hay, queda null y las vistas
+  // lo resuelven por sucName.
+  const refName =
+    (
+      await prisma.tbkTesoreria.findFirst({
+        where: { sucursalId, manual: false, sucursalName: { not: null } },
+        select: { sucursalName: true },
+      })
+    )?.sucursalName ??
+    (
+      await prisma.tesoreriaMovement.findFirst({
+        where: { sucursalId, sucursalName: { not: null } },
+        select: { sucursalName: true },
+      })
+    )?.sucursalName ??
+    null;
 
   const [y, m, dd] = fecha.split("-").map(Number);
   const fechaDate = new Date(y, m - 1, dd, 12, 0, 0, 0);
@@ -74,7 +79,7 @@ export async function POST(req: Request) {
         data: {
           externalId,
           sucursalId,
-          sucursalName: suc.nombre,
+          sucursalName: refName,
           glosa: glosa?.trim() || "POS MANUAL (ficticio)",
           opNumber: opNumber?.trim() || null,
           fecha: fechaDate,
