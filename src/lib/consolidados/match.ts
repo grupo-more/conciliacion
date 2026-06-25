@@ -784,6 +784,16 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
       }
     }
 
+    // Ruteo por glosa (ej. CRYPTOMKT): NUNCA auto-concilia. Las liquidaciones
+    // netean en montos distintos a los abonos bancarios y un auto-match por
+    // coincidencia de monto es riesgoso. Se cap a SUGGESTED (propuesta) para que
+    // se cuadre SIEMPRE a mano (eligiendo el/los abonos correctos, con ajuste).
+    if (identityMarker !== undefined) {
+      for (const c of cands) {
+        if (c.status === "AUTO_MATCHED") c.status = "SUGGESTED";
+      }
+    }
+
     allCandidates.push(...cands);
   }
 
