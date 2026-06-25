@@ -140,15 +140,19 @@ export function CuadraturaTransbankView({
   const [detalle, setDetalle] = useState<{ cuadratura: Cuadratura; asiento: Asiento } | null>(null);
   const [apartados, setApartados] = useState<Apartado[] | null>(null);
 
-  const loadPreview = useCallback(async () => {
-    setLoading(true);
+  // silent=true refresca los datos SIN el spinner de carga, para no desmontar la
+  // tabla (así no se colapsa la sucursal abierta ni se pierde el scroll al
+  // apartar una fila). El spinner solo se muestra en la carga inicial / cambios
+  // de filtro.
+  const loadPreview = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const p = new URLSearchParams({ from, to, mode: "preview" });
       if (sucursalId) p.set("sucursalId", sucursalId);
       const res = await fetch(`/api/consolidados/cruce-transbank/asiento?${p}`);
       setData(res.ok ? await res.json() : null);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [from, to, sucursalId]);
 
@@ -212,7 +216,7 @@ export function CuadraturaTransbankView({
       if (!res.ok) setBanner({ kind: "err", msg: j.error || "Error al apartar" });
       else {
         setBanner({ kind: "ok", msg: "Movimiento enviado a la papelera." });
-        loadPreview();
+        loadPreview(true); // refresco silencioso: no colapsa la tabla ni mueve el scroll
       }
     } catch {
       setBanner({ kind: "err", msg: "Error de red al apartar" });
