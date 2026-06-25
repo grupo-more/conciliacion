@@ -74,6 +74,21 @@ async function main() {
           },
         },
         _count: { select: { consolidadoLinks: true } },
+        // Resolución de EGRESO: vínculo contra gasto operativo (EgresoMovement)
+        // y asiento manual generado. Sin esto, los OUT resueltos por esas vías
+        // se contaban como "sin resolver".
+        egresoConciliacionLinks: {
+          select: {
+            conciliacion: {
+              select: {
+                status: true,
+                matchType: true,
+                egresoMovement: { select: { externalId: true, glosa: true, monto: true, rubroNombre: true } },
+              },
+            },
+          },
+        },
+        asientoManual: { select: { estado: true, tipo: true, montoBruto: true, glosa: true } },
       },
     }),
     prisma.consolidado.findMany({
@@ -101,7 +116,12 @@ async function main() {
     prisma.tesoreriaSyncRun.findMany({ take: 15, orderBy: { startedAt: "desc" } }),
     prisma.tbkTesoreria.findMany({ take: TAKE, orderBy: { fecha: "desc" } }),
     prisma.transbankSale.findMany({ take: TAKE, orderBy: { fechaVenta: "desc" } }),
-    prisma.egresoMovement.findMany({ take: TAKE, orderBy: { fecha: "desc" } }),
+    prisma.egresoMovement.findMany({
+      take: TAKE,
+      orderBy: { fecha: "desc" },
+      // Estado de conciliación del gasto operativo contra banco (Egresos a terceros).
+      include: { conciliacion: { select: { status: true, matchType: true } } },
+    }),
     loadEntidadesInternas(prisma),
   ]);
 
@@ -225,6 +245,8 @@ async function main() {
       tesoreriaAnulados: anuladosTM,
       bankMovements: bankMovementsRaw.length,
       bankMovementsOUT: bankMovementsRaw.filter((b) => b.direction === "OUT").length,
+      bankConAsientoManual: bankMovementsRaw.filter((b) => b.asientoManual?.estado === "GENERADO").length,
+      bankConEgresoConc: bankMovementsRaw.filter((b) => b.egresoConciliacionLinks.length > 0).length,
       consolidados: consolidadosRaw.length,
       consolidadosConLink: consolidadosRaw.filter((c) => c.links.length > 0).length,
       tbkTesoreria: tbkRaw.length,
@@ -256,15 +278,33 @@ async function main() {
     // 4: raw (todos los campos)
     raw: {
       tesoreria: tesoreriaRaw,
-      bankMovements: bankMovementsRaw.map((b) => ({
-        ...b,
-        linkCount: b._count.consolidadoLinks,
-        isTransbank: isTransbank({
-          description: b.description,
-          direction: b.direction,
-        }),
-        _count: undefined,
-      })),
+      bankMovements: bankMovementsRaw.map((b) => {
+        const eConc = b.egresoConciliacionLinks[0]?.conciliacion ?? null;
+        return {
+          ...b,
+          linkCount: b._count.consolidadoLinks,
+          isTransbank: isTransbank({
+            description: b.description,
+            direction: b.direction,
+          }),
+          // Resolución por otras vías (para clasificar OUT correctamente):
+          asientoManualEstado: b.asientoManual?.estado ?? null,
+          egresoConcStatus: eConc?.status ?? null,
+          egresoConc: eConc
+            ? {
+                status: eConc.status,
+                matchType: eConc.matchType,
+                egresoExternalId: eConc.egresoMovement.externalId.toString(),
+                egresoGlosa: eConc.egresoMovement.glosa,
+                egresoMonto: eConc.egresoMovement.monto.toString(),
+                rubroNombre: eConc.egresoMovement.rubroNombre,
+              }
+            : null,
+          _count: undefined,
+          egresoConciliacionLinks: undefined,
+          asientoManual: undefined,
+        };
+      }),
       tbkTesoreria: tbkRaw,
       transbankSale: salesRaw,
       egresoMovement: egresoRaw,
