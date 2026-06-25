@@ -673,10 +673,11 @@ export function CompareView({
                     tiene que hacer click conscientemente. */}
                 {suggestedRubroLabel !== null &&
                   overrideRubroBanco !== suggestedRubroFromBanks && (
-                    <div className="mt-1.5 text-xs text-text-muted flex items-center gap-2 flex-wrap">
-                      <span>
-                        💡 Según el historial de esta cuenta, el rubro suele ser{" "}
-                        <span className="font-mono font-semibold text-text">
+                    <div className="mt-2 flex items-center justify-between gap-3 flex-wrap rounded-md border border-amber-300 bg-amber-50 px-3 py-2">
+                      <span className="text-sm text-amber-900">
+                        <span className="mr-1 text-base">💡</span>
+                        Según el historial de esta cuenta, el rubro suele ser{" "}
+                        <span className="font-mono font-bold text-amber-950">
                           {suggestedRubroLabel}
                         </span>
                       </span>
@@ -685,7 +686,7 @@ export function CompareView({
                         onClick={() =>
                           setOverrideRubroBanco(suggestedRubroFromBanks)
                         }
-                        className="text-xs text-brand hover:underline font-semibold"
+                        className="shrink-0 rounded-md bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
                       >
                         Usar este
                       </button>
