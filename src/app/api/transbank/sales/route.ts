@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
+import { matchCruce } from "@/lib/transbank/cruce";
 
 /**
  * GET /api/transbank/sales — lista TransbankSale (settlement "Abonos por día"
@@ -46,29 +47,25 @@ export async function GET(req: Request) {
   const soloSinConciliar = url.searchParams.get("soloSinConciliar") === "true";
 
   // Cargamos TODO el rango (son pocos) para poder marcar conciliación contra el
-  // POS y filtrar/paginar en memoria.
-  const [allRows, sucursales, posRows] = await Promise.all([
+  // POS y filtrar/paginar en memoria. Para la conciliación usamos TODO el
+  // universo POS + settlement (no solo el filtro), porque "conciliado" es una
+  // propiedad global del abono, no de la vista.
+  const [allRows, sucursales, allPos, allSett, manualLinks] = await Promise.all([
     prisma.transbankSale.findMany({ where, orderBy: { fechaVenta: "desc" } }),
     prisma.transbankSale.groupBy({ by: ["sucursalId"], orderBy: [{ sucursalId: "asc" }] }),
-    prisma.tbkTesoreria.findMany({ select: { opNumber: true, monto: true } }),
+    prisma.tbkTesoreria.findMany(),
+    prisma.transbankSale.findMany(),
+    prisma.cruceTransbankLink.findMany({ select: { tbkTesoreriaId: true, transbankSaleId: true } }),
   ]);
 
-  // Conciliación: un abono está cuadrado si hay un POS con la misma boleta(=OP)
-  // y monto dentro de la tolerancia (recargo de crédito ~2%). Misma llave que
-  // el motor de Cruce Transbank.
-  const absB = (n: bigint) => (n < 0n ? -n : n);
-  const posByOp = new Map<string, bigint[]>();
-  for (const p of posRows) {
-    if (!p.opNumber) continue;
-    (posByOp.get(p.opNumber) ?? posByOp.set(p.opNumber, []).get(p.opNumber)!).push(p.monto);
-  }
-  const isConciliado = (s: { numeroBoleta: string | null; montoVenta: bigint }) => {
-    if (!s.numeroBoleta) return false;
-    const base = Number(absB(s.montoVenta));
-    return (posByOp.get(s.numeroBoleta) ?? []).some(
-      (m) => base > 0 && Number(absB(m - s.montoVenta)) / base <= 0.05,
-    );
-  };
+  // Conciliación: reusa el MISMO motor que Cruce Transbank (matchCruce: boleta
+  // + sucursal + fecha, con fallback por monto/fecha/sucursal y respetando los
+  // vínculos manuales). Un abono está conciliado si quedó emparejado con un POS
+  // (no está en settlementOnly). Así Cartolas y Cruce Transbank dicen siempre lo
+  // mismo, y no se cruzan boletas recicladas de otra sucursal/fecha.
+  const { settlementOnly } = matchCruce(allPos, allSett, manualLinks);
+  const sinPos = new Set(settlementOnly.map((s) => s.id));
+  const isConciliado = (s: { id: string }) => !sinPos.has(s.id);
 
   const withC = allRows.map((s) => ({ s, conc: isConciliado(s) }));
   const conciliados = withC.filter((x) => x.conc).length;

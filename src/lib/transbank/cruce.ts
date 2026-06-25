@@ -65,6 +65,13 @@ export function matchCruce(
     }
   }
 
+  const dayMs = 86400000;
+  // El N° de boleta (3-4 dígitos) se RECICLA: no es llave única. Para no cruzar
+  // ventas distintas que comparten boleta (ej. SUECIA 02-06 vs VALPARAISO 17-06),
+  // el match por boleta exige además misma sucursal y fecha cercana. Los matches
+  // legítimos caen a 0-1 día; este margen rechaza los reciclados (>7d / otra suc).
+  const BOLETA_WINDOW_DAYS = 3;
+
   // Índice de settlements por boleta(=OP); una OP puede repetirse en POS.
   const settByBoleta = new Map<string, TransbankSale[]>();
   for (const sv of settAll) {
@@ -72,8 +79,8 @@ export function matchCruce(
     (settByBoleta.get(sv.numeroBoleta) ?? settByBoleta.set(sv.numeroBoleta, []).get(sv.numeroBoleta)!).push(sv);
   }
 
-  // Pass 1: por boleta(=OP), elegir el settlement de monto más cercano dentro
-  // de la tolerancia (débito exacto, crédito dentro del recargo).
+  // Pass 1: por boleta(=OP) + sucursal + fecha, elegir el settlement de monto
+  // más cercano dentro de la tolerancia (débito exacto, crédito dentro del recargo).
   const unmatchedPos: TbkTesoreria[] = [];
   for (const pos of posAll) {
     if (usedPos.has(pos.id)) continue; // ya fijado por vínculo manual
@@ -84,6 +91,10 @@ export function matchCruce(
       const base = absB(pos.monto);
       for (const c of settByBoleta.get(op) ?? []) {
         if (usedSett.has(c.id)) continue;
+        // Boleta reciclada: exigir misma sucursal (si el settlement la trae) y
+        // fecha cercana, para no emparejar ventas distintas con igual N° boleta.
+        if (c.sucursalId != null && c.sucursalId !== pos.sucursalId) continue;
+        if (Math.abs(pos.fecha.getTime() - c.fechaVenta.getTime()) > dayMs * BOLETA_WINDOW_DAYS) continue;
         const diff = c.montoVenta - pos.monto;
         if (base > 0n && Number(absB(diff)) / Number(base) > MATCH_TOLERANCE) continue;
         if (best === null || absB(diff) < absB(bestDiff)) {
@@ -110,7 +121,6 @@ export function matchCruce(
   //       sucursal solo es confiable cuando no hay ambigüedad. Si hay 2+ dentro
   //       de tolerancia, NO se toca (queda "sin settlement" para revisión manual).
   // La diferencia (recargo) queda visible y va al rubro 1403 en el asiento.
-  const dayMs = 86400000;
   for (const pos of unmatchedPos) {
     const base = absB(pos.monto);
     const cands = settAll.filter(
