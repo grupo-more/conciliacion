@@ -106,7 +106,13 @@ function defaultUntil(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function CompareView() {
+export function CompareView({
+  direction = "IN",
+}: {
+  /** IN  → Comparar Ingresos: cartola IN ↔ Tesorería INGRESO (default).
+   *  OUT → Comparar Egresos:  cartola OUT ↔ Tesorería EGRESO (Dynatech). */
+  direction?: "IN" | "OUT";
+} = {}) {
   // Si se llega aca desde Cartolas (atajo "Conciliar pendientes"), trae el
   // accountId en el query string para pre-filtrar.
   const searchParams = useSearchParams();
@@ -195,6 +201,7 @@ export function CompareView() {
       if (banco) params.set("banco", banco);
       params.set("onlyUnmatched", String(onlyUnmatched));
       params.set("hideInternal", String(hideInternal));
+      params.set("direction", direction);
       const res = await fetch(`/api/consolidados/compare?${params}`);
       if (res.ok) {
         setData(await res.json());
@@ -209,7 +216,7 @@ export function CompareView() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [since, until, accountId, banco, onlyUnmatched, hideInternal]);
+  }, [since, until, accountId, banco, onlyUnmatched, hideInternal, direction]);
 
   // Filtros client-side por search
   const filteredBank = useMemo(() => {
@@ -546,7 +553,7 @@ export function CompareView() {
         </label>
         <label
           className="flex items-center gap-2 text-sm whitespace-nowrap"
-          title="Oculta los IN cuya contraparte es una entidad interna (ya se ven en Traspasos internos)."
+          title={`Oculta los ${direction} cuya contraparte es una entidad interna (ya se ven en Traspasos internos).`}
         >
           <input
             type="checkbox"

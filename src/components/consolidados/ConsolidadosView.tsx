@@ -25,6 +25,7 @@ type Period = "day" | "week" | "month";
 type Tab =
   | "list"
   | "compare"
+  | "compare-egresos"
   | "ok"
   | "abono-transbank"
   | "cruce-transbank"
@@ -209,7 +210,13 @@ export function ConsolidadosView() {
             Lista
           </TabButton>
           <TabButton active={tab === "compare"} onClick={() => setTab("compare")}>
-            Comparar
+            Comparar Ingresos
+          </TabButton>
+          <TabButton
+            active={tab === "compare-egresos"}
+            onClick={() => setTab("compare-egresos")}
+          >
+            Comparar Egresos
           </TabButton>
           <TabButton active={tab === "ok"} onClick={() => setTab("ok")}>
             OK
@@ -254,7 +261,8 @@ export function ConsolidadosView() {
       </div>
 
       {/* Contenido por tab */}
-      {tab === "compare" && <CompareView />}
+      {tab === "compare" && <CompareView direction="IN" />}
+      {tab === "compare-egresos" && <CompareView direction="OUT" />}
       {tab === "ok" && <OKView />}
       {tab === "abono-transbank" && <AbonoTransbankView />}
       {tab === "cruce-transbank" && <CruceTransbankView />}

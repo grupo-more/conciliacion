@@ -52,6 +52,13 @@ export async function GET(req: Request) {
   const banco = (url.searchParams.get("banco") || "").trim();
   const onlyUnmatched = url.searchParams.get("onlyUnmatched") !== "false";
   const hideInternal = url.searchParams.get("hideInternal") !== "false";
+  // Dirección del banco de trabajo:
+  //   IN  (default) → Comparar Ingresos: cartola IN ↔ Tesorería INGRESO.
+  //   OUT           → Comparar Egresos:  cartola OUT ↔ Tesorería EGRESO (Dynatech).
+  // Los montos de OUT y EGRESO se guardan con el MISMO signo (ver
+  // match-dynatech-terceros.ts), así que el balance de manual-link cuadra igual.
+  const direction = url.searchParams.get("direction") === "OUT" ? "OUT" : "IN";
+  const tipoOperacion = direction === "OUT" ? "EGRESO" : "INGRESO";
 
   // Default: ultimos 30 dias
   const now = new Date();
@@ -68,7 +75,7 @@ export async function GET(req: Request) {
   // contra Tesorería, así que no tienen nada que comparar acá.
   const difSettings = await getDifMenorSettings();
   const bankWhere: Prisma.BankMovementWhereInput = {
-    direction: "IN",
+    direction,
     postDate: { gte: since, lte: until },
     ...(accountId ? { accountId } : {}),
     // Cuentas de uso parcial: no quedan disponibles para matchear acá (solo
@@ -138,7 +145,7 @@ export async function GET(req: Request) {
   // las tabs de egresos internos/terceros, asi que no se mezclan aca.
   const tesoreriaWhere = {
     fecha: { gte: since, lte: until },
-    tipoOperacion: "INGRESO",
+    tipoOperacion,
     // Anulados en origen no son candidatos para comparar/conciliar.
     estadoActual: { not: "ANU" },
     // Ventas con tarjeta (claseOperacion="TBK"): NO se concilian acá. Llegan
