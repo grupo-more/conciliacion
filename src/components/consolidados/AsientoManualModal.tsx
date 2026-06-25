@@ -68,6 +68,10 @@ export function AsientoManualModal({
   const [retMode, setRetMode] = useState<"tasa" | "monto">("tasa");
   const [retTasa, setRetTasa] = useState(0);
   const [retMonto, setRetMonto] = useState(0);
+  // Glosa del asiento (detalle). Se pre-carga con la descripción del movimiento
+  // al elegir "proveedor" y el usuario puede editarla. Si queda vacía, el backend
+  // usa la descripción del movimiento por defecto.
+  const [glosa, setGlosa] = useState("");
 
   useEffect(() => setMounted(true), []);
 
@@ -94,6 +98,8 @@ export function AsientoManualModal({
     setTipo("PROVEEDOR");
     // Arranca sin ninguna sucursal seleccionada; el usuario elige cuáles.
     setSel(new Map());
+    // Pre-cargar la glosa con la descripción del movimiento (editable).
+    setGlosa(data?.bankMovement.description ?? "");
   }
 
   function seleccionarTodas() {
@@ -161,6 +167,7 @@ export function AsientoManualModal({
       const body = {
         bankMovementId,
         tipo: "PROVEEDOR" as const,
+        glosa: glosa.trim() || null,
         retencion: useRet
           ? retMode === "monto"
             ? { monto: Math.max(0, Math.round(retMonto)) }
@@ -278,6 +285,26 @@ export function AsientoManualModal({
             {/* Proveedor: builder */}
             {!yaGenerado && tipo === "PROVEEDOR" && (
               <div className="space-y-4">
+                {/* Glosa del asiento (detalle del pago a proveedor) */}
+                <div>
+                  <label className="block text-sm font-semibold mb-1">
+                    Glosa del asiento{" "}
+                    <span className="text-text-muted font-normal">(detalle del pago)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={glosa}
+                    onChange={(e) => setGlosa(e.target.value)}
+                    maxLength={500}
+                    placeholder="Ej: Pago honorarios Juan Pérez junio 2026"
+                    className="w-full rounded-md border border-border-soft px-3 py-2 text-sm"
+                  />
+                  <p className="mt-1 text-xs text-text-muted">
+                    Se guarda en el asiento. Si la dejás vacía, se usa la descripción del
+                    movimiento bancario.
+                  </p>
+                </div>
+
                 {/* Retención */}
                 <div className="rounded-md border border-border-soft p-3">
                   <label className="flex items-center gap-2 text-sm font-semibold">
@@ -459,6 +486,11 @@ function GeneradoView({
     <div className="space-y-3">
       <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm">
         <div className="font-semibold text-emerald-800">Asiento generado · {asiento.tipo}</div>
+        {asiento.glosa && (
+          <div className="text-xs mt-0.5">
+            <span className="text-text-muted">Glosa:</span> {asiento.glosa}
+          </div>
+        )}
         <div className="text-xs text-text-muted mt-0.5">
           Líquido {formatMoney(BigInt(asiento.montoNeto))}
           {BigInt(asiento.montoRetencion) > 0n && (
