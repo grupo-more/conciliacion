@@ -189,7 +189,8 @@ export function CruceTransbankView() {
             </div>
             <div className="text-xs">
               Neto cuadrado: ${formatMoney(BigInt(k.totalNeto))}
-              {k.conRecargo > 0 && ` · ${k.conRecargo} c/recargo (+$${formatMoney(BigInt(k.totalRecargo))})`}
+              {k.conRecargo > 0 &&
+                ` · ${k.conRecargo} con recargo Transbank (crédito, +$${formatMoney(BigInt(k.totalRecargo))})`}
             </div>
           </div>
         )}
@@ -233,7 +234,12 @@ export function CruceTransbankView() {
                   <th className="px-3 py-2 text-left">OP / Boleta</th>
                   <th className="px-3 py-2 text-left">Medio</th>
                   <th className="px-3 py-2 text-right">Monto POS</th>
-                  <th className="px-3 py-2 text-right">Dif (recargo)</th>
+                  <th
+                    className="px-3 py-2 text-right"
+                    title="Recargo de crédito de Transbank (~2% sobre la boleta): bruto del settlement − monto base del POS. En débito es 0."
+                  >
+                    Recargo TBK
+                  </th>
                   <th className="px-3 py-2 text-right">Comisión</th>
                   <th className="px-3 py-2 text-right">Neto</th>
                   <th className="px-3 py-2 text-left">Glosa / Local</th>
@@ -261,9 +267,14 @@ export function CruceTransbankView() {
                     </td>
                     <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
                       {r.diferencia && r.diferencia !== "0" ? (
-                        <span className="text-amber-700" title="Recargo de crédito (settlement − base POS)">
+                        <span
+                          className="text-amber-700"
+                          title="Recargo de crédito de Transbank (~2% sobre la boleta): bruto del settlement − monto base del POS. No es un error: es lo que Transbank suma en crédito."
+                        >
                           +${formatMoney(BigInt(r.diferencia))}
-                          {r.diferenciaPct != null && <span className="text-xs"> ({r.diferenciaPct}%)</span>}
+                          {r.diferenciaPct != null && (
+                            <span className="text-xs"> ({r.diferenciaPct}% recargo TBK)</span>
+                          )}
                         </span>
                       ) : (
                         <span className="text-text-dim">—</span>
@@ -431,8 +442,9 @@ function VincularModal({
 
         <p className="text-xs text-text-muted mb-2">
           Elegí el abono que corresponde. Ordenados por sucursal, monto más cercano y fecha. El monto <b>no tiene que
-          ser exacto</b>: si Transbank liquidó distinto a la boleta, esa diferencia se registra
-          automáticamente en el <b>rubro 1403 (Diferencia)</b> al generar el asiento.
+          ser exacto</b>: en crédito, Transbank liquida la boleta <b>+ ~2% de recargo</b>. Esa diferencia es el{" "}
+          <b>recargo de crédito de Transbank</b> y se registra automáticamente en el asiento (rubro comisión/recargo{" "}
+          <b>708</b> y, donde aplica, <b>1403 Diferencia</b>) al generar la cuadratura.
         </p>
 
         <div className="rounded-lg border border-border-soft max-h-[50vh] overflow-auto">

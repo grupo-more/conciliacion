@@ -100,20 +100,41 @@ export function matchCruce(
     }
   }
 
-  // Pass 2: fallback por monto exacto + fecha (±1.5d) para los sin boleta.
-  const freeSett = settAll.filter((s) => !usedSett.has(s.id));
+  // Pass 2: fallback SIN boleta, por sucursal + fecha (±1.5d). Dos etapas:
+  //   2a) monto EXACTO → match (máxima confianza, débito sin recargo).
+  //   2b) sin exacto, match tolerante: la diferencia esperada es el RECARGO DE
+  //       CRÉDITO DE TRANSBANK (~2% que Transbank suma sobre la boleta; débito
+  //       = 0). Se acepta dentro de MATCH_TOLERANCE PERO solo si hay UN único
+  //       candidato dentro de la tolerancia en esa sucursal+fecha.
+  //       La unicidad es la garantía de seguridad: sin boleta, el monto+fecha+
+  //       sucursal solo es confiable cuando no hay ambigüedad. Si hay 2+ dentro
+  //       de tolerancia, NO se toca (queda "sin settlement" para revisión manual).
+  // La diferencia (recargo) queda visible y va al rubro 1403 en el asiento.
   const dayMs = 86400000;
   for (const pos of unmatchedPos) {
-    const cand = freeSett.find(
+    const base = absB(pos.monto);
+    const cands = settAll.filter(
       (s) =>
         !usedSett.has(s.id) &&
-        s.montoVenta === pos.monto &&
         Math.abs(pos.fecha.getTime() - s.fechaVenta.getTime()) <= dayMs * 1.5 &&
         (s.sucursalId == null || s.sucursalId === pos.sucursalId),
     );
-    if (cand) {
-      usedSett.add(cand.id);
-      pairs.push({ pos, sett: cand, diff: 0n });
+    // 2a) exacto
+    let chosen = cands.find((s) => s.montoVenta === pos.monto) ?? null;
+    let diff = 0n;
+    // 2b) tolerante con candidato único
+    if (!chosen && base > 0n) {
+      const within = cands.filter(
+        (s) => Number(absB(s.montoVenta - pos.monto)) / Number(base) <= MATCH_TOLERANCE,
+      );
+      if (within.length === 1) {
+        chosen = within[0];
+        diff = chosen.montoVenta - pos.monto;
+      }
+    }
+    if (chosen) {
+      usedSett.add(chosen.id);
+      pairs.push({ pos, sett: chosen, diff });
     } else {
       pairs.push({ pos, sett: null, diff: 0n });
     }
