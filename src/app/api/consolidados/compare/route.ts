@@ -82,7 +82,18 @@ export async function GET(req: Request) {
     // Cuentas de uso parcial: no quedan disponibles para matchear acá (solo
     // importan sus traspasos internos).
     account: { isNot: usoParcialAccountWhere },
-    ...(onlyUnmatched ? { consolidadoLinks: { none: {} } } : {}),
+    // "Solo sin matchear": un movimiento de banco está RESUELTO (y sale de
+    // Comparar) no solo por un link del motor, sino también si tiene un asiento
+    // manual generado o ya está conciliado como egreso a tercero. Alineado con
+    // la definición de "resuelto" de banco-compute.ts (Reportes / Asientos
+    // manuales), para que no aparezca acá lo que en otro lado ya se dio por OK.
+    ...(onlyUnmatched
+      ? {
+          consolidadoLinks: { none: {} },
+          egresoConciliacionLinks: { none: {} },
+          asientoManual: { is: null },
+        }
+      : {}),
     NOT: [
       {
         AND: [
@@ -113,6 +124,10 @@ export async function GET(req: Request) {
         select: { consolidadoId: true },
         take: 1,
       },
+      // Para el badge cuando "Solo sin matchear" está apagado: marcar los ya
+      // resueltos por otra vía (asiento manual / egreso a tercero).
+      asientoManual: { select: { estado: true } },
+      egresoConciliacionLinks: { select: { conciliacionId: true }, take: 1 },
     },
     orderBy: [{ postDate: "desc" }, { amount: "desc" }],
     take: 1000,
@@ -442,6 +457,14 @@ export async function GET(req: Request) {
           suggestedRubro: suggestedRubroByAccount.get(bm.accountId) ?? null,
         },
         isLinked: bm.consolidadoLinks.length > 0,
+        // Resuelto por otra vía (visible cuando se muestran todos): asiento
+        // manual generado o egreso a tercero ya conciliado.
+        resueltoPor:
+          bm.asientoManual?.estado === "GENERADO"
+            ? ("asiento" as const)
+            : bm.egresoConciliacionLinks.length > 0
+              ? ("egreso" as const)
+              : null,
         suggestedSplit: sg
           ? {
               tesoreriaIds: sg.tesoreriaIds,

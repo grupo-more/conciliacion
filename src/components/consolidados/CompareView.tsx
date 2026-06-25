@@ -24,6 +24,10 @@ interface BankMovementDTO {
     suggestedRubro?: number | null;
   };
   isLinked: boolean;
+  /** Resuelto por otra vía (no por match contra Tesorería): asiento manual
+   *  generado o egreso a tercero conciliado. Solo aparece cuando se muestran
+   *  todos (con "Solo sin matchear" apagado). */
+  resueltoPor?: "asiento" | "egreso" | null;
 }
 
 interface TesoreriaCompareDTO {
@@ -939,8 +943,10 @@ function BankCard({
   highlightAmount: boolean;
   onClick: () => void;
 }) {
+  // Resuelto = vinculado al motor O por otra vía (asiento manual / egreso).
+  const resuelto = bm.isLinked || !!bm.resueltoPor;
   // Color de la barra lateral según estado
-  //   verde   = vinculado (conciliado)
+  //   verde   = vinculado/resuelto (conciliado)
   //   ámbar   = sin matchear (pendiente de acción)
   //   brand   = seleccionado
   //   esmeralda = highlight de match potencial (mismo monto que la T° seleccionada)
@@ -948,14 +954,14 @@ function BankCard({
     ? "bg-brand"
     : highlightAmount
     ? "bg-emerald-500"
-    : bm.isLinked
+    : resuelto
     ? "bg-success/70"
     : "bg-warn/70";
   const cardBgCls = selected
     ? "border-brand bg-brand/10 shadow-soft"
     : highlightAmount
     ? "border-emerald-400 bg-emerald-50/50 hover:bg-emerald-50"
-    : bm.isLinked
+    : resuelto
     ? "border-border-soft bg-zinc-50 opacity-70 hover:opacity-100"
     : "border-warn/30 bg-warn/[0.04] hover:bg-warn/[0.07]";
 
@@ -985,6 +991,14 @@ function BankCard({
             {bm.isLinked ? (
               <span className="badge border-success/40 bg-success/10 text-success">
                 ✓ vinculado
+              </span>
+            ) : bm.resueltoPor === "asiento" ? (
+              <span className="badge border-success/40 bg-success/10 text-success">
+                📝 asiento generado
+              </span>
+            ) : bm.resueltoPor === "egreso" ? (
+              <span className="badge border-success/40 bg-success/10 text-success">
+                ✓ egreso a tercero
               </span>
             ) : (
               <span className="badge border-warn/40 bg-warn/10 text-warn">
