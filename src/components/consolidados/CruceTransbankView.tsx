@@ -24,6 +24,7 @@ interface CruceRow {
   tbkTesoreriaId: string | null;
   transbankSaleId: string | null;
   manual: boolean;
+  ficticio: boolean;
 }
 
 interface CruceResponse {
@@ -62,6 +63,7 @@ export function CruceTransbankView() {
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [linkTarget, setLinkTarget] = useState<CruceRow | null>(null);
+  const [posFicticioTarget, setPosFicticioTarget] = useState<CruceRow | null>(null);
 
   async function onDesvincular(row: CruceRow) {
     if (!row.tbkTesoreriaId) return;
@@ -75,6 +77,25 @@ export function CruceTransbankView() {
       else {
         const j = await res.json().catch(() => ({}));
         setBanner({ kind: "err", msg: j.error || "Error al desvincular" });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Borra un POS ficticio (y su vínculo). El abono vuelve a "sin POS".
+  async function onBorrarFicticio(row: CruceRow) {
+    if (!row.tbkTesoreriaId) return;
+    if (!confirm("Borrar este POS ficticio? El abono volverá a quedar sin POS.")) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/consolidados/cruce-transbank/pos-ficticio?tbkTesoreriaId=${row.tbkTesoreriaId}`, {
+        method: "DELETE",
+      });
+      if (res.ok) load();
+      else {
+        const j = await res.json().catch(() => ({}));
+        setBanner({ kind: "err", msg: j.error || "Error al borrar el POS ficticio" });
       }
     } finally {
       setBusy(false);
@@ -288,7 +309,15 @@ export function CruceTransbankView() {
                     </td>
                     <td className="px-3 py-2 max-w-[280px] truncate" title={r.glosa ?? ""}>
                       {r.glosa ?? ""}
-                      {r.manual && (
+                      {r.ficticio && (
+                        <span
+                          className="ml-1.5 inline-block rounded-full bg-violet-100 text-violet-800 border border-violet-200 text-[10px] px-1.5 py-0.5 font-bold align-middle"
+                          title="POS ficticio (insertado a mano, no viene de la API)"
+                        >
+                          FICTICIO
+                        </span>
+                      )}
+                      {r.manual && !r.ficticio && (
                         <span
                           className="ml-1.5 inline-block rounded-full bg-sky-100 text-sky-800 border border-sky-200 text-[10px] px-1.5 py-0.5 font-bold align-middle"
                           title="Vinculado manualmente"
@@ -307,7 +336,26 @@ export function CruceTransbankView() {
                           Vincular
                         </button>
                       )}
-                      {r.estado === "cuadrado" && r.manual && (
+                      {r.estado === "settlement_sin_pos" && (
+                        <button
+                          onClick={() => setPosFicticioTarget(r)}
+                          className="text-brand hover:underline text-xs"
+                          title="Crear un POS ficticio (manual) para cuadrar este abono"
+                        >
+                          Crear POS
+                        </button>
+                      )}
+                      {r.estado === "cuadrado" && r.ficticio && (
+                        <button
+                          onClick={() => onBorrarFicticio(r)}
+                          disabled={busy}
+                          className="text-rose-700 hover:underline text-xs disabled:opacity-50"
+                          title="Borrar el POS ficticio (el abono vuelve a quedar sin POS)"
+                        >
+                          Borrar POS
+                        </button>
+                      )}
+                      {r.estado === "cuadrado" && r.manual && !r.ficticio && (
                         <button
                           onClick={() => onDesvincular(r)}
                           disabled={busy}
@@ -345,6 +393,164 @@ export function CruceTransbankView() {
           }}
         />
       )}
+
+      {posFicticioTarget && (
+        <PosFicticioModal
+          sett={posFicticioTarget}
+          sucursales={data?.facets.sucursales ?? []}
+          onClose={() => setPosFicticioTarget(null)}
+          onCreated={() => {
+            setPosFicticioTarget(null);
+            setBanner({ kind: "ok", msg: "POS ficticio creado. El abono quedó cuadrado." });
+            load();
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ===================== Modal POS ficticio ===================== */
+
+function PosFicticioModal({
+  sett,
+  sucursales,
+  onClose,
+  onCreated,
+}: {
+  sett: CruceRow;
+  sucursales: { id: number; name: string | null }[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  // Pre-cargado desde el abono (settlement). El monto por defecto es el bruto del
+  // abono = parte tarjeta (lo contablemente correcto para que cuadre exacto).
+  const [sucursalId, setSucursalId] = useState<string>(sett.sucursalId != null ? String(sett.sucursalId) : "");
+  const [fecha, setFecha] = useState<string>(sett.fecha.slice(0, 10));
+  const [monto, setMonto] = useState<string>(String(Math.abs(Number(sett.montoBruto))));
+  const [opNumber, setOpNumber] = useState<string>(sett.boleta ?? "");
+  const [glosa, setGlosa] = useState<string>(
+    `POS MANUAL${sett.glosa ? ` - ${sett.glosa}` : ""}`,
+  );
+  const [nota, setNota] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const montoNum = Math.round(Number(monto) || 0);
+  const dif = montoNum - Math.abs(Number(sett.montoBruto));
+
+  async function crear() {
+    if (!sucursalId) { setErr("Elegí la sucursal."); return; }
+    if (montoNum <= 0) { setErr("El monto debe ser mayor a 0."); return; }
+    setBusy(true);
+    setErr(null);
+    try {
+      const res = await fetch(`/api/consolidados/cruce-transbank/pos-ficticio`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transbankSaleId: sett.transbankSaleId,
+          sucursalId: Number(sucursalId),
+          fecha,
+          monto: montoNum,
+          opNumber: opNumber.trim() || null,
+          glosa: glosa.trim() || null,
+          medioPago: sett.medioPago,
+          nota: nota.trim() || null,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) setErr(j.error || "Error al crear el POS ficticio");
+      else onCreated();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel max-w-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold tracking-tight">Crear POS ficticio</h2>
+          <button onClick={onClose} className="btn-ghost text-sm">Cerrar</button>
+        </div>
+
+        <div className="rounded-md border border-border-soft bg-bg-soft p-3 text-sm mb-3">
+          <div className="text-text-muted text-xs uppercase tracking-wide mb-1">Abono Transbank a cuadrar</div>
+          <div className="flex flex-wrap gap-x-6 gap-y-1">
+            <span><b>{formatDate(sett.fecha)}</b></span>
+            <span>{sett.sucursalName ?? (sett.sucursalId ? `#${sett.sucursalId}` : "—")}</span>
+            <span className="font-mono">Boleta {sett.boleta ?? "—"}</span>
+            <span>{sett.medioPago ?? "—"}</span>
+            <span className="font-mono">Bruto ${formatMoney(BigInt(sett.montoBruto))}</span>
+          </div>
+        </div>
+
+        <p className="text-xs text-text-muted mb-3">
+          Crea un movimiento POS <b>ficticio</b> (no viene de la API) y lo vincula a este abono. Útil cuando
+          la venta no la registró la API (ej. pago parte tarjeta + parte efectivo). El monto por defecto es la
+          <b> parte tarjeta</b> (= bruto del abono); el efectivo se registra aparte.
+        </p>
+
+        {err && <div className="rounded-md bg-rose-50 text-rose-800 border border-rose-200 px-3 py-2 text-sm mb-2">{err}</div>}
+
+        <div className="grid grid-cols-2 gap-3">
+          <label className="text-sm">
+            <span className="block text-text-muted">Sucursal</span>
+            <select value={sucursalId} onChange={(e) => setSucursalId(e.target.value)} className="input w-full">
+              <option value="">— Elegí —</option>
+              {sucursales.map((s) => (
+                <option key={s.id} value={s.id}>{s.name ?? `#${s.id}`}</option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="block text-text-muted">Fecha</span>
+            <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="input w-full" />
+          </label>
+          <label className="text-sm">
+            <span className="block text-text-muted">N° operación / boleta</span>
+            <input
+              type="text"
+              value={opNumber}
+              onChange={(e) => setOpNumber(e.target.value)}
+              placeholder="N° de operación (editable)"
+              className="input w-full font-mono"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="block text-text-muted">Monto (bruto)</span>
+            <input type="number" step="1" value={monto} onChange={(e) => setMonto(e.target.value)} className="input w-full font-mono" />
+          </label>
+          <label className="text-sm col-span-2">
+            <span className="block text-text-muted">Glosa</span>
+            <input type="text" value={glosa} onChange={(e) => setGlosa(e.target.value)} maxLength={500} className="input w-full" />
+          </label>
+          <label className="text-sm col-span-2">
+            <span className="block text-text-muted">Nota (opcional)</span>
+            <input type="text" value={nota} onChange={(e) => setNota(e.target.value)} maxLength={500} placeholder="ej: pago $X tarjeta + $Y efectivo" className="input w-full" />
+          </label>
+        </div>
+
+        {dif !== 0 && (
+          <div className="mt-3 rounded-md border border-amber-300 bg-amber-50 text-amber-800 px-3 py-2 text-xs">
+            ⚠ El monto difiere del bruto del abono en <b>${formatMoney(BigInt(Math.abs(dif)))}</b>. Esa diferencia
+            se registrará como recargo/diferencia (rubro 1403/708) en el asiento. Para cuadre exacto, dejá el monto
+            igual al bruto.
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 mt-4">
+          <button onClick={onClose} disabled={busy} className="btn-ghost text-sm">Cancelar</button>
+          <button
+            onClick={crear}
+            disabled={busy}
+            className="rounded-md bg-brand text-white px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? "Creando…" : "Crear y vincular"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

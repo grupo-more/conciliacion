@@ -16,6 +16,7 @@ interface TbkRow {
   clienteRut: string | null;
   comisionMonto: string | null;
   comisionPorcentaje: number | null;
+  manual?: boolean;
 }
 interface Resp {
   total: number;
@@ -144,7 +145,17 @@ export function TbkMovView() {
                   )}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap text-xs">{m.cajeroName ?? "—"}</td>
-                <td className="px-3 py-2 max-w-md truncate" title={m.glosa}>{m.glosa}</td>
+                <td className="px-3 py-2 max-w-md truncate" title={m.glosa}>
+                  {m.glosa}
+                  {m.manual && (
+                    <span
+                      className="ml-1.5 inline-block rounded-full bg-violet-100 text-violet-800 border border-violet-200 text-[10px] px-1.5 py-0.5 font-bold align-middle"
+                      title="POS ficticio (insertado a mano, no viene de la API). No suma al total."
+                    >
+                      FICTICIO
+                    </span>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

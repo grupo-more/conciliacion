@@ -464,6 +464,15 @@ model TbkTesoreria {
   rawJson        Json     @map("raw_json")
   syncedAt       DateTime @default(now()) @map("synced_at")
 
+  // POS FICTICIO: insertado a mano (no viene de la API) para vincular un abono
+  // Transbank sin POS (ej. venta pagada parte tarjeta + parte efectivo que la
+  // API no registró). externalId queda NEGATIVO (la API manda positivos, así el
+  // sync nunca lo pisa). manual=true permite badgearlo y excluirlo de los
+  // totales de "ventas POS reales".
+  manual         Boolean  @default(false)
+  manualNota     String?  @map("manual_nota") @db.Text
+  createdById    String?  @map("created_by_id")
+
   @@index([sucursalId, fecha])
   @@index([opNumber])
   @@index([monto])

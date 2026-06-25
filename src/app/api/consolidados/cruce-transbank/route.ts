@@ -74,6 +74,7 @@ export async function GET(req: Request) {
     tbkTesoreriaId: string | null;
     transbankSaleId: string | null;
     manual: boolean;
+    ficticio: boolean; // POS insertado a mano (TbkTesoreria.manual)
   };
   const rows: Row[] = [];
 
@@ -98,6 +99,7 @@ export async function GET(req: Request) {
         tbkTesoreriaId: p.pos.id,
         transbankSaleId: p.sett.id,
         manual: manualPosIds.has(p.pos.id),
+        ficticio: p.pos.manual,
       });
     } else {
       rows.push({
@@ -118,6 +120,7 @@ export async function GET(req: Request) {
         tbkTesoreriaId: p.pos.id,
         transbankSaleId: null,
         manual: false,
+        ficticio: p.pos.manual,
       });
     }
   }
@@ -140,6 +143,7 @@ export async function GET(req: Request) {
       tbkTesoreriaId: null,
       transbankSaleId: s.id,
       manual: false,
+      ficticio: false,
     });
   }
 

@@ -46,7 +46,9 @@ export async function GET(req: Request) {
     prisma.tbkTesoreria.findMany({ where, orderBy: { fecha: "desc" }, take: limit, skip: offset }),
     prisma.tbkTesoreria.count({ where }),
     prisma.tbkTesoreria.groupBy({ by: ["sucursalId", "sucursalName"], orderBy: [{ sucursalId: "asc" }] }),
-    prisma.tbkTesoreria.aggregate({ where, _sum: { monto: true } }),
+    // SUMA de ventas POS reales: excluye los ficticios (manual=true), que son
+    // entradas a mano para cuadrar abonos sin POS y distorsionarían el total.
+    prisma.tbkTesoreria.aggregate({ where: { ...where, manual: false }, _sum: { monto: true } }),
   ]);
 
   return NextResponse.json({
@@ -71,6 +73,7 @@ export async function GET(req: Request) {
       fechaCarga: m.fechaCarga?.toISOString() ?? null,
       comisionMonto: m.comisionMonto != null ? m.comisionMonto.toString() : null,
       comisionPorcentaje: m.comisionPorcentaje != null ? Number(m.comisionPorcentaje) : null,
+      manual: m.manual,
     })),
     facets: {
       sucursales: sucursales.map((s) => ({ id: s.sucursalId, name: s.sucursalName })),
