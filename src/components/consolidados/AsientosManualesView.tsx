@@ -55,6 +55,7 @@ export function AsientosManualesView() {
   const [gen, setGen] = useState<GeneradoAsiento[]>([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [q, setQ] = useState("");
 
   async function load() {
     setLoading(true);
@@ -81,6 +82,49 @@ export function AsientosManualesView() {
   }, [from, to, accountId, mode]);
 
   const totalMonto = useMemo(() => (pend ? BigInt(pend.totals.monto) : 0n), [pend]);
+
+  // Debounce del término: filtra 180ms después del último tecleo.
+  const [debouncedQ, setDebouncedQ] = useState("");
+  useEffect(() => {
+    const h = setTimeout(() => setDebouncedQ(q), 180);
+    return () => clearTimeout(h);
+  }, [q]);
+
+  // Búsqueda client-side sobre los pendientes (ya vienen todos cargados).
+  // Tolerante a tipeo: ignora tildes/mayúsculas/puntuación, hace match por
+  // palabras (orden libre) y aguanta 1 letra de diferencia por palabra (≥4).
+  // El monto matchea por dígitos. RUT con o sin puntos/guion.
+  const filteredRows = useMemo(() => {
+    if (!pend) return [];
+    const tokens = norm(debouncedQ).split(" ").filter(Boolean);
+    if (tokens.length === 0) return pend.rows;
+    return pend.rows.filter((r) => {
+      const hay = norm(
+        [
+          r.counterpartyName,
+          r.counterpartyRut,
+          r.description,
+          r.bankName,
+          r.holderName,
+          r.accountNumber,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      );
+      const words = hay.split(" ");
+      const digits = [r.monto, r.counterpartyRut, r.accountNumber]
+        .filter(Boolean)
+        .join(" ")
+        .replace(/[^0-9kK]/g, "");
+      // Todos los tokens deben matchear (AND).
+      return tokens.every((t) => {
+        if (/^[0-9kK]+$/.test(t)) return digits.includes(t);
+        if (hay.includes(t)) return true;
+        if (t.length >= 4) return words.some((w) => withinEdit1(w, t));
+        return false;
+      });
+    });
+  }, [pend, debouncedQ]);
 
   return (
     <div className="space-y-4">
@@ -115,9 +159,19 @@ export function AsientosManualesView() {
             <option key={a.id} value={a.id}>{a.label}</option>
           ))}
         </select>
+        {mode === "pendientes" && (
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Buscar contraparte / RUT / glosa / monto…"
+            className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white flex-1 min-w-[220px]"
+          />
+        )}
         {mode === "pendientes" && pend && (
-          <span className="text-xs text-text-muted">
-            {pend.totals.count} sin conciliar · <span className="font-mono">{formatMoney(totalMonto)}</span>
+          <span className="text-xs text-text-muted whitespace-nowrap">
+            {debouncedQ.trim() ? `${filteredRows.length} de ${pend.totals.count}` : `${pend.totals.count} sin conciliar`} ·{" "}
+            <span className="font-mono">{formatMoney(totalMonto)}</span>
           </span>
         )}
       </div>
@@ -129,6 +183,8 @@ export function AsientosManualesView() {
         <div className="rounded-lg border border-border-soft bg-white overflow-hidden">
           {!pend || pend.rows.length === 0 ? (
             <div className="text-center py-8 text-sm text-text-muted">No hay movimientos sin conciliar en este filtro.</div>
+          ) : filteredRows.length === 0 ? (
+            <div className="text-center py-8 text-sm text-text-muted">Sin resultados para “{q}”.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -144,7 +200,7 @@ export function AsientosManualesView() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pend.rows.map((r) => (
+                  {filteredRows.map((r) => (
                     <tr key={r.id} onClick={() => setSelected(r.id)} className="border-t border-border-soft/60 hover:bg-bg-soft/40 cursor-pointer">
                       <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.fecha)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">
@@ -217,6 +273,36 @@ export function AsientosManualesView() {
       )}
     </div>
   );
+}
+
+/** Normaliza para búsqueda: sin tildes, minúsculas, solo alfanumérico + espacios. */
+function norm(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9k]+/g, " ")
+    .trim();
+}
+
+/** True si la distancia de edición entre a y b es ≤ 1 (sustitución, inserción
+ *  o borrado de un solo carácter). Tolera un error de tipeo por palabra. */
+function withinEdit1(a: string, b: string): boolean {
+  if (a === b) return true;
+  const la = a.length, lb = b.length;
+  if (Math.abs(la - lb) > 1) return false;
+  if (la > lb) return withinEdit1(b, a); // asegurar a la más corta
+  let i = 0, j = 0, edits = 0;
+  while (i < la && j < lb) {
+    if (a[i] === b[j]) { i++; j++; }
+    else {
+      if (++edits > 1) return false;
+      if (la === lb) { i++; j++; } // sustitución
+      else { j++; } // inserción en b
+    }
+  }
+  if (j < lb) edits += lb - j;
+  return edits <= 1;
 }
 
 function todayIso(): string {
