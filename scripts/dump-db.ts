@@ -125,6 +125,14 @@ async function main() {
     loadEntidadesInternas(prisma),
   ]);
 
+  // Movimientos de caja (deposito/retiro/traspaso) con su estado de cuadre vs
+  // cartola. Fetch separado para no acoplar la inferencia del Promise.all de
+  // arriba. (movimientoCaja existe tras `prisma generate` con el schema nuevo.)
+  const movimientosCajaRaw = await prisma.movimientoCaja.findMany({
+    take: TAKE,
+    orderBy: { fecha: "desc" },
+  });
+
   /* ----------------------- 1. matches (joined) ----------------------- */
   // Cada consolidado con ambos lados. Incluye TODOS los status (matcheado,
   // conciliado, propuesto, anulado, etc.) para ver "cualquier junte".
@@ -233,6 +241,37 @@ async function main() {
   const anuladosTM = tesoreriaRaw.filter((t) => t.estadoActual === "ANU").length;
   const anuladosTbk = tbkRaw.filter((t) => t.estadoActual === "ANU").length;
 
+  /* ----------------------- movimientos de caja (CAJA_BANCO/BANCO_BANCO) ----------------------- */
+  // Cada movimiento con su contraparte de cartola (si cuadró). bankMovementId no
+  // tiene FK, así que enriquecemos a mano contra el map de bankMovements.
+  const bmById = new Map(bankMovementsRaw.map((b) => [b.id, b]));
+  const movimientosCajaPorStatus = countBy(
+    movimientosCajaRaw.map((m: { status: string }) => m.status),
+  );
+  const movimientosCajaPorCategoria = countBy(
+    movimientosCajaRaw.map((m: { categoria: string }) => m.categoria),
+  );
+  const movimientosCaja = movimientosCajaRaw.map(
+    (m: { bankMovementId: string | null; [k: string]: unknown }) => {
+      const bm = m.bankMovementId ? bmById.get(m.bankMovementId) : null;
+      return {
+        ...m,
+        cartola: bm
+          ? {
+              id: bm.id,
+              postDate: bm.postDate,
+              amount: bm.amount,
+              direction: bm.direction,
+              description: bm.description,
+              counterpartyName: bm.counterpartyName,
+              counterpartyRut: bm.counterpartyRut,
+              accountId: bm.accountId,
+            }
+          : null,
+      };
+    },
+  );
+
   const dump = {
     generatedAt: new Date().toISOString(),
     counts: {
@@ -259,9 +298,12 @@ async function main() {
       cruceCuadrados: cruceTbk.filter((r) => r.estado === "cuadrado").length,
       crucePosSinSett: cruceTbk.filter((r) => r.estado === "pos_sin_settlement").length,
       cruceSettSinPos: cruceTbk.filter((r) => r.estado === "settlement_sin_pos").length,
+      movimientosCaja: movimientosCajaRaw.length,
     },
     consolidadosPorStatus: countBy(consolidadosRaw.map((c) => c.status)),
     egresosPorStatus,
+    movimientosCajaPorStatus,
+    movimientosCajaPorCategoria,
 
     // config
     bankAccounts,
@@ -274,6 +316,9 @@ async function main() {
     matches,
     internos,
     cruceTbk,
+
+    // Movimientos de caja (CAJA_BANCO/BANCO_BANCO) con su contraparte de cartola.
+    movimientosCaja,
 
     // 4: raw (todos los campos)
     raw: {
@@ -326,6 +371,8 @@ async function main() {
   console.log(JSON.stringify(dump.consolidadosPorStatus, null, 2));
   console.log("\nEgresos por estado de conciliación:");
   console.log(JSON.stringify(egresosPorStatus, null, 2));
+  console.log("\nMovimientos de caja (CAJA_BANCO/BANCO_BANCO) por status:");
+  console.log(JSON.stringify(movimientosCajaPorStatus, null, 2));
   console.log(`\nArchivo: ${outPath}`);
   console.log("\nCopia ese JSON a la carpeta dumps/ de tu máquina local y avisame.");
 
