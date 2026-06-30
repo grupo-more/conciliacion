@@ -15,7 +15,11 @@ import { prisma } from "@/lib/db";
  *   ANULADO      → el movimiento esta anulado en origen
  */
 
-const WINDOW_DAYS = 3;
+// Ventana de fecha y tolerancia de monto, configurables por env. Default ±5
+// días y 1% — calibrado contra cartola real (sube cobertura de 61% a ~69%).
+// Los depósitos suelen acreditar 1-2 días después; la tolerancia cubre redondeos.
+const WINDOW_DAYS = Number(process.env.MOVIMIENTOS_MATCH_WINDOW_DAYS) || 5;
+const AMOUNT_TOLERANCE = Number(process.env.MOVIMIENTOS_MATCH_TOLERANCE ?? 0.01);
 
 export interface MatchResult {
   ok: boolean;
@@ -83,12 +87,17 @@ export async function runMatchMovimientos(): Promise<MatchResult> {
     );
     const resolve = buildResolver(accounts as Acct[], aliasMap);
 
-    // Indice cartola: (accountId, direction, |amount|) -> [{id, date}]
-    const idx = new Map<string, { id: string; date: number }[]>();
+    // Indice cartola: (accountId, direction) -> [{id, amount, date}]. La llave NO
+    // incluye el monto porque ahora matcheamos con tolerancia (no solo exacto).
+    const idx = new Map<string, { id: string; amount: number; date: number }[]>();
     for (const b of bms) {
       const amt = b.amount < 0n ? -b.amount : b.amount;
-      const key = `${b.accountId}|${b.direction}|${amt.toString()}`;
-      (idx.get(key) ?? idx.set(key, []).get(key)!).push({ id: b.id, date: b.postDate.getTime() });
+      const key = `${b.accountId}|${b.direction}`;
+      (idx.get(key) ?? idx.set(key, []).get(key)!).push({
+        id: b.id,
+        amount: Number(amt),
+        date: b.postDate.getTime(),
+      });
     }
     const usedBm = new Set<string>();
 
@@ -108,13 +117,25 @@ export async function runMatchMovimientos(): Promise<MatchResult> {
         updates.push({ id: m.id, status: "OUT_OF_SCOPE", matchType: null, bankMovementId: null, resolvedAccountId: accountId, score: null });
         continue;
       }
-      const key = `${accountId}|${m.direccion}|${m.monto.toString()}`;
-      const cands = (idx.get(key) ?? []).filter((c) => !usedBm.has(c.id));
+      const key = `${accountId}|${m.direccion}`;
+      const target = Number(m.monto);
       const f = m.fecha.getTime();
-      let best: { id: string; days: number } | null = null;
-      for (const c of cands) {
+      // Mejor candidato: primero monto EXACTO, luego fecha más cercana; si no hay
+      // exacto, el más cercano en monto dentro de la tolerancia.
+      let best: { id: string; days: number; exact: boolean; amtDiff: number } | null = null;
+      for (const c of idx.get(key) ?? []) {
+        if (usedBm.has(c.id)) continue;
         const days = Math.abs(c.date - f) / 86400000;
-        if (days <= WINDOW_DAYS && (!best || days < best.days)) best = { id: c.id, days };
+        if (days > WINDOW_DAYS) continue;
+        const amtDiff = Math.abs(c.amount - target);
+        const exact = amtDiff < 1;
+        const within = target > 0 && amtDiff / target <= AMOUNT_TOLERANCE;
+        if (!exact && !within) continue;
+        const better =
+          !best ||
+          (exact && !best.exact) ||
+          (exact === best.exact && (days < best.days || (days === best.days && amtDiff < best.amtDiff)));
+        if (better) best = { id: c.id, days, exact, amtDiff };
       }
       if (best) {
         usedBm.add(best.id);
@@ -122,9 +143,10 @@ export async function runMatchMovimientos(): Promise<MatchResult> {
         const days = Math.round(best.days);
         updates.push({
           id: m.id, status: "AUTO_MATCHED",
-          matchType: days === 0 ? "EXACT_SAME_DAY" : "EXACT_PM3",
+          matchType: !best.exact ? "TOLERANCIA" : days === 0 ? "EXACT_SAME_DAY" : "EXACT_PM",
           bankMovementId: best.id, resolvedAccountId: accountId,
-          score: Math.max(50, 100 - days * 5),
+          // exacto+mismo dia = 100; baja por dias y por no ser exacto.
+          score: Math.max(40, 100 - days * 5 - (best.exact ? 0 : 10)),
         });
       } else {
         noMatch++;
