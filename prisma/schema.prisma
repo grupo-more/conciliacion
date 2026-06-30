@@ -754,3 +754,58 @@ model CuadraturaTransbankApartado {
 
   @@index([expiresAt])
 }
+
+// ===========================================================================
+// Movimientos internos de caja (feed /api/movimientos de movimientos-api).
+//
+// Son los DEPOSITOS/RETIROS FISICOS al banco (CAJA_BANCO) y traspasos entre
+// cuentas propias (BANCO_BANCO). A diferencia de las operaciones FX (dynatech),
+// ESTOS sí cuadran 1:1 contra el abono/cargo de la cartola: el abono del banco
+// es el deposito fisico agregado, no cada venta de moneda.
+//
+// status: AUTO_MATCHED | SUGGESTED | NO_MATCH | OUT_OF_SCOPE | ANULADO
+// bankMovementId: sin FK a proposito (el sync/import puede recrear filas).
+// ===========================================================================
+model MovimientoCaja {
+  id            String   @id @default(uuid())
+  externalId    BigInt   @unique @map("external_id")   // Id central (unico)
+  mcjId         BigInt   @map("mcj_id")                 // id de operacion en sucursal
+
+  categoria     String                                  // CAJA_BANCO | BANCO_BANCO
+  rubro         Int
+  banco         String?
+  rubroBanco    Int?     @map("rubro_banco")
+  rubroSucursal Int?     @map("rubro_sucursal")
+  direccion     String?                                 // IN | OUT (perspectiva banco)
+  mcjES         String?  @map("mcj_es")                 // S=salida / E=entrada de efectivo
+
+  monto         BigInt                                  // magnitud (positivo)
+  fecha         DateTime
+  glosa         String   @db.Text
+
+  sucursalId     Int     @map("sucursal_id")
+  sucursalName   String? @map("sucursal_name")
+  cajeroUsername String? @map("cajero_username")
+  cajeroName     String? @map("cajero_name")
+
+  estadoActual  String?  @map("estado_actual")
+  anulado       Boolean  @default(false)
+  fechaCarga    DateTime? @map("fecha_carga")
+
+  // Resultado de la conciliacion contra cartola (BankMovement).
+  status         String   @default("NO_MATCH")
+  matchType      String?  @map("match_type")            // EXACT_SAME_DAY | EXACT_PM3 | MANUAL
+  bankMovementId String?  @map("bank_movement_id")
+  resolvedAccountId String? @map("resolved_account_id")
+  score          Int?
+  matchedAt      DateTime? @map("matched_at")
+
+  syncedAt      DateTime @default(now()) @map("synced_at")
+
+  @@index([categoria])
+  @@index([fecha])
+  @@index([banco])
+  @@index([status])
+  @@index([bankMovementId])
+  @@index([sucursalId])
+}

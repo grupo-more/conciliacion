@@ -59,17 +59,34 @@ export function startSyncScheduler() {
   // Import diferido: estos modulos tocan Prisma/fetch y solo deben cargarse en
   // runtime Node (no en build ni edge). El register() ya garantiza nodejs.
   void (async () => {
-    const [{ runTesoreriaSync }, { runTbkTesoreriaSync }, { runEgresosSync }] =
-      await Promise.all([
-        import("@/lib/tesoreria/sync"),
-        import("@/lib/transbank/sync-tbk"),
-        import("@/lib/egresos/sync-egresos"),
-      ]);
+    const [
+      { runTesoreriaSync },
+      { runTbkTesoreriaSync },
+      { runEgresosSync },
+      { runMovimientosSync },
+      { runMatchMovimientos },
+    ] = await Promise.all([
+      import("@/lib/tesoreria/sync"),
+      import("@/lib/transbank/sync-tbk"),
+      import("@/lib/egresos/sync-egresos"),
+      import("@/lib/movimientos/sync-movimientos"),
+      import("@/lib/movimientos/match-movimientos"),
+    ]);
 
     const runners: Runner[] = [
       { name: "tesoreria", run: runTesoreriaSync, running: false },
       { name: "tbk", run: runTbkTesoreriaSync, running: false },
       { name: "egresos", run: runEgresosSync, running: false },
+      // Movimientos de caja: ingiere CAJA_BANCO/BANCO_BANCO y los cruza contra
+      // la cartola en la misma corrida.
+      {
+        name: "movimientos",
+        run: async () => {
+          await runMovimientosSync();
+          return runMatchMovimientos();
+        },
+        running: false,
+      },
     ];
 
     runners.forEach((r, i) => {
