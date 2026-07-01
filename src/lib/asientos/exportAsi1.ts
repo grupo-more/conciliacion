@@ -88,9 +88,14 @@ export function exportAsi1Xls(opts: Asi1Options, filename: string): void {
     addr: string,
     v: string | number,
     t: "s" | "n" = typeof v === "number" ? "n" : "s",
+    z?: string,
   ) => {
-    ws[addr] = { t, v } as XLSX.CellObject;
+    ws[addr] = z ? ({ t, v, z } as XLSX.CellObject) : ({ t, v } as XLSX.CellObject);
   };
+
+  // Formato contable para los montos MN: miles con separador y "-" en el cero,
+  // igual que el archivo de ejemplo (29.560.349 / -).
+  const MN_FMT = '#,##0;-#,##0;"-"';
 
   // Fila 1: numeración de columnas 1..13 (A..M)
   for (let c = 0; c < 13; c++) {
@@ -98,7 +103,7 @@ export function exportAsi1Xls(opts: Asi1Options, filename: string): void {
   }
   // Fila 2: FECHA / Tipo de Asiento / Sucursal
   set("B2", "FECHA:");
-  set("C2", toExcelSerial(fecha), "n");
+  set("C2", toExcelSerial(fecha), "n", "dd-mm-yyyy");
   set("F2", "Tipo de Asiento");
   set("G2", tipoAsiento, "n");
   set("I2", "Sucursal:");
@@ -131,8 +136,8 @@ export function exportAsi1Xls(opts: Asi1Options, filename: string): void {
     set(`F${rr}`, 1, "n"); // Cotización
     set(`G${rr}`, 0, "n"); // Debe ME
     set(`H${rr}`, 0, "n"); // Haber ME
-    set(`I${rr}`, num(l.debe), "n"); // Debe MN
-    set(`J${rr}`, num(l.haber), "n"); // Haber MN
+    set(`I${rr}`, num(l.debe), "n", MN_FMT); // Debe MN
+    set(`J${rr}`, num(l.haber), "n", MN_FMT); // Haber MN
   });
   const lastRow = row + Math.max(lineas.length, 1);
 
