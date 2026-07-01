@@ -7,6 +7,8 @@ import { parseRange } from "@/lib/reportes/classify";
 import { computeBancoSinConciliar } from "@/lib/reportes/banco-compute";
 import { getAsientoSettings } from "@/lib/asientos/settings";
 import { prorratear, calcRetencion } from "@/lib/asientos/prorrateo";
+import { loadEntidadesInternas } from "@/lib/internos/detect";
+import { buildRubroMap, type AccountForRubro } from "@/lib/internos/rubro-resolver";
 
 /**
  * Módulo "Asientos manuales": movimientos de cartola sin contraparte en el
@@ -37,11 +39,32 @@ export async function GET(req: Request) {
       },
       include: {
         bankMovement: { include: { account: true } },
-        lineas: { orderBy: { monto: "desc" } },
+        lineas: { orderBy: { monto: "desc" }, include: { sucursal: { select: { codigo: true } } } },
       },
       orderBy: { createdAt: "desc" },
       take: 5000,
     });
+
+    // Rubro del banco (HABER del neto) resuelto con la misma cascada que usa
+    // Traspasos internos: nombre de cuenta ↔ RubroLabel, o rubro de la entidad.
+    const [rubros, entidades] = await Promise.all([
+      prisma.rubroLabel.findMany({ where: { isDifference: false }, select: { rubro: true, name: true } }),
+      loadEntidadesInternas(prisma),
+    ]);
+    const accountsForRubro: AccountForRubro[] = [];
+    const seenAcc = new Set<string>();
+    for (const a of asientos) {
+      const acc = a.bankMovement.account;
+      if (!seenAcc.has(acc.id)) {
+        seenAcc.add(acc.id);
+        accountsForRubro.push({ id: acc.id, bankName: acc.bankName, holderName: acc.holderName, holderRut: acc.holderRut });
+      }
+    }
+    const rubroMap = buildRubroMap(
+      accountsForRubro,
+      rubros,
+      entidades.map((e) => ({ rutCanonico: e.rutCanonico, rubro: e.rubro })),
+    );
 
     return NextResponse.json({
       from: from.toISOString(),
@@ -54,6 +77,8 @@ export async function GET(req: Request) {
         bankName: a.bankMovement.account.bankName,
         holderName: a.bankMovement.account.holderName,
         accountNumber: a.bankMovement.account.displayNumber || a.bankMovement.account.accountNumber,
+        // Rubro contable del banco (HABER del neto), o null si no se pudo resolver.
+        bancoRubro: rubroMap.get(a.bankMovement.account.id) ?? null,
         counterpartyName: a.bankMovement.counterpartyName,
         glosa: a.glosa,
         montoNeto: a.montoNeto.toString(),
@@ -63,6 +88,8 @@ export async function GET(req: Request) {
         montoBruto: a.montoBruto.toString(),
         lineas: a.lineas.map((l) => ({
           sucursalNombre: l.sucursalNombre,
+          // El "código de sucursal" ES el rubro de gestión del DEBE (así se define en el modal).
+          rubro: l.sucursal.codigo,
           personas: Number(l.personas),
           porcentaje: Number(l.porcentaje),
           monto: l.monto.toString(),

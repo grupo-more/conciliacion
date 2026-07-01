@@ -1,8 +1,8 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useState } from "react";
-import * as XLSX from "xlsx";
 import { formatDate, formatMoney } from "@/lib/format";
+import { exportAsi1Xls } from "@/lib/asientos/exportAsi1";
 
 type AsientoSide = "DEBE" | "HABER";
 
@@ -384,7 +384,10 @@ function PreviewBlock({
   const hasRows = a.sucursales.length > 0;
 
   function exportXlsx() {
-    exportAsientoXlsx(a, `cuadratura_transbank_${from}_${to}`);
+    exportAsientoXlsx(a, `cuadratura_transbank_${from}_${to}`, {
+      fecha: to,
+      descripcion: `Cuadratura Transbank ${formatDate(from)} al ${formatDate(to)}`,
+    });
   }
 
   return (
@@ -907,7 +910,12 @@ function CuadraturaModal({
               PDF
             </button>
             <button
-              onClick={() => exportAsientoXlsx(asiento, `cuadratura_${c.id.slice(0, 8)}`)}
+              onClick={() =>
+                exportAsientoXlsx(asiento, `cuadratura_${c.id.slice(0, 8)}`, {
+                  fecha: c.hasta,
+                  descripcion: `Cuadratura Transbank ${formatDate(c.desde)} al ${formatDate(c.hasta)}`,
+                })
+              }
               className="btn-ghost text-sm"
             >
               Excel
@@ -928,34 +936,25 @@ function CuadraturaModal({
 
 /* ============================ Export Excel ============================ */
 
-function exportAsientoXlsx(a: Asiento, filename: string) {
-  const aoa: (string | number)[][] = [["Sucursal", "Rubro", "Lado", "Detalle", "Debe", "Haber"]];
-  for (const s of a.sucursales) {
-    s.lineas.forEach((l, idx) => {
-      aoa.push([
-        idx === 0 ? s.sucursalName ?? `#${s.sucursalId}` : "",
-        l.rubro,
-        l.side,
-        l.detalle,
-        l.debe ? Number(l.debe) : "",
-        l.haber ? Number(l.haber) : "",
-      ]);
-    });
-  }
-  aoa.push(["", "", "", "TOTAL", Number(a.totals.debe), Number(a.totals.haber)]);
-  aoa.push([]);
-  aoa.push(["CONSOLIDACIÓN", "", "", "", "", ""]);
-  aoa.push(["Rubro/Sucursal", "Rubro", "Lado", "Detalle", "Debe", "Haber"]);
-  for (const l of a.consolidacion.lineas) {
-    aoa.push([l.cuenta ?? "", l.rubro, l.side, l.detalle, l.debe ? Number(l.debe) : "", l.haber ? Number(l.haber) : ""]);
-  }
-  aoa.push(["", "", "", "TOTAL", Number(a.consolidacion.totalDebe), Number(a.consolidacion.totalHaber)]);
-
-  const sheet = XLSX.utils.aoa_to_sheet(aoa);
-  sheet["!cols"] = [{ wch: 20 }, { wch: 8 }, { wch: 8 }, { wch: 22 }, { wch: 14 }, { wch: 14 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheet, "Cuadratura");
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+function exportAsientoXlsx(
+  a: Asiento,
+  filename: string,
+  opts: { fecha: string; descripcion: string },
+) {
+  // Un solo asiento consolidado (rubros 17/200/708/1403) → formato ASI1 gestión.
+  exportAsi1Xls(
+    {
+      fecha: opts.fecha,
+      descripcion: opts.descripcion,
+      lineas: a.consolidacion.lineas.map((l) => ({
+        rubro: l.rubro,
+        detalle: l.detalle,
+        debe: l.debe,
+        haber: l.haber,
+      })),
+    },
+    filename,
+  );
 }
 
 /* ============================ Export PDF (imprimible) ============================ */

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
+import { exportAsi1Xls, type Asi1Linea } from "@/lib/asientos/exportAsi1";
 import { AsientoManualModal } from "./AsientoManualModal";
 
 interface PendienteRow {
@@ -37,7 +38,9 @@ interface GeneradoAsiento {
   montoRetencion: string;
   retencionRubro: number | null;
   montoBruto: string;
-  lineas: Array<{ sucursalNombre: string; personas: number; porcentaje: number; monto: string }>;
+  /** Rubro contable del banco (HABER del neto), o null si no se resolvió. */
+  bancoRubro: number | null;
+  lineas: Array<{ sucursalNombre: string; rubro: number | null; personas: number; porcentaje: number; monto: string }>;
 }
 
 /**
@@ -82,6 +85,37 @@ export function AsientosManualesView() {
   }, [from, to, accountId, mode]);
 
   const totalMonto = useMemo(() => (pend ? BigInt(pend.totals.monto) : 0n), [pend]);
+
+  // Exporta TODOS los asientos generados del rango como un solo asiento ASI1
+  // (mismo criterio que el resto de las tabs). Por cada asiento manual:
+  //   DEBE: prorrateo por rubro-sucursal (código de sucursal).
+  //   HABER: banco por el neto (rubro resuelto) + retención (rubro 26).
+  function exportXlsx() {
+    if (gen.length === 0) return;
+    const lineas: Asi1Linea[] = [];
+    for (const a of gen) {
+      const detalle = a.glosa || a.counterpartyName || `${a.bankName} ${a.holderName}`;
+      for (const l of a.lineas) {
+        lineas.push({ rubro: l.rubro ?? "", detalle, debe: l.monto });
+      }
+      lineas.push({ rubro: a.bancoRubro ?? "", detalle, haber: a.montoNeto });
+      if (BigInt(a.montoRetencion) > 0n) {
+        lineas.push({
+          rubro: a.retencionRubro ?? "",
+          detalle: `Retención honorarios · ${detalle}`,
+          haber: a.montoRetencion,
+        });
+      }
+    }
+    exportAsi1Xls(
+      {
+        fecha: to,
+        descripcion: `Asientos manuales ${formatDate(from)} al ${formatDate(to)}`,
+        lineas,
+      },
+      `asientos_manuales_${from}_${to}`,
+    );
+  }
 
   // Debounce del término: filtra 180ms después del último tecleo.
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -173,6 +207,14 @@ export function AsientosManualesView() {
             {debouncedQ.trim() ? `${filteredRows.length} de ${pend.totals.count}` : `${pend.totals.count} sin conciliar`} ·{" "}
             <span className="font-mono">{formatMoney(totalMonto)}</span>
           </span>
+        )}
+        {mode === "generados" && gen.length > 0 && (
+          <button
+            onClick={exportXlsx}
+            className="ml-auto rounded-md bg-brand text-white text-sm font-semibold px-3 py-1.5 hover:opacity-90"
+          >
+            Descargar Excel
+          </button>
         )}
       </div>
 

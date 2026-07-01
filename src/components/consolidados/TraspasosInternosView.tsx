@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import { formatDate, formatMoney } from "@/lib/format";
+import { exportAsi1Xls } from "@/lib/asientos/exportAsi1";
 
 type Side = "DEBE" | "HABER";
 type IntraFilter = "include" | "exclude" | "only";
@@ -125,54 +125,19 @@ export function TraspasosInternosView() {
 
   function exportXlsx() {
     if (!data || data.rows.length === 0) return;
-    const aoa: (string | number)[][] = [
-      [
-        "Fecha",
-        "Rubro",
-        "Detalle cuenta",
-        "Contraparte",
-        "Glosa",
-        "Debe",
-        "Haber",
-        "Tipo",
-      ],
-    ];
-    for (const r of data.rows) {
-      aoa.push([
-        formatDate(r.fecha),
-        r.rubro ?? "",
-        r.detalle,
-        r.contraparte,
-        r.glosa,
-        r.debe ? Number(r.debe) : "",
-        r.haber ? Number(r.haber) : "",
-        r.intraEntidad ? "Intra-entidad" : "Cross-entidad",
-      ]);
-    }
-    aoa.push([
-      "",
-      "",
-      "",
-      "",
-      "TOTAL",
-      Number(totals.debe),
-      Number(totals.haber),
-      "",
-    ]);
-    const sheet = XLSX.utils.aoa_to_sheet(aoa);
-    sheet["!cols"] = [
-      { wch: 12 },
-      { wch: 8 },
-      { wch: 38 },
-      { wch: 22 },
-      { wch: 40 },
-      { wch: 14 },
-      { wch: 14 },
-      { wch: 14 },
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, sheet, "Traspasos internos");
-    XLSX.writeFile(wb, `traspasos_internos_${from}_${to}.xlsx`);
+    exportAsi1Xls(
+      {
+        fecha: to,
+        descripcion: `Traspasos internos ${formatDate(from)} al ${formatDate(to)}`,
+        lineas: data.rows.map((r) => ({
+          rubro: r.rubro ?? "",
+          detalle: r.detalle,
+          debe: r.debe,
+          haber: r.haber,
+        })),
+      },
+      `traspasos_internos_${from}_${to}`,
+    );
   }
 
   const hasRows = data && data.rows.length > 0;

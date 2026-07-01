@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
 import { formatDate, formatMoney } from "@/lib/format";
+import { exportAsi1Xls } from "@/lib/asientos/exportAsi1";
 import type { OKResponse, OKRow } from "./types";
 
 /**
@@ -79,44 +79,19 @@ export function OKView() {
 
   function exportXlsx() {
     if (!data || data.rows.length === 0) return;
-    const aoa: (string | number)[][] = [
-      ["Fecha", "Rubro", "Detalle", "Cliente", "Glosa", "Debe", "Haber"],
-    ];
-    for (const r of data.rows) {
-      aoa.push([
-        formatDate(r.fecha),
-        r.rubro ?? "—",
-        r.detalle,
-        r.cliente,
-        r.glosa,
-        r.debe ? Number(r.debe) : "",
-        r.haber ? Number(r.haber) : "",
-      ]);
-    }
-    aoa.push([
-      "",
-      "",
-      "",
-      "",
-      "TOTAL",
-      Number(totals.debe),
-      Number(totals.haber),
-    ]);
-    const sheet = XLSX.utils.aoa_to_sheet(aoa);
-    // Anchos sugeridos
-    sheet["!cols"] = [
-      { wch: 12 }, // Fecha
-      { wch: 8 }, // Rubro
-      { wch: 22 }, // Detalle
-      { wch: 32 }, // Cliente
-      { wch: 40 }, // Glosa
-      { wch: 14 }, // Debe
-      { wch: 14 }, // Haber
-    ];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, sheet, "Asiento");
-    const fname = `asiento_${from}_${to}.xlsx`;
-    XLSX.writeFile(wb, fname);
+    exportAsi1Xls(
+      {
+        fecha: to,
+        descripcion: `Conciliados ${formatDate(from)} al ${formatDate(to)}`,
+        lineas: data.rows.map((r) => ({
+          rubro: r.rubro ?? "",
+          detalle: r.detalle,
+          debe: r.debe,
+          haber: r.haber,
+        })),
+      },
+      `asiento_${from}_${to}`,
+    );
   }
 
   const hasRows = data && data.rows.length > 0;
