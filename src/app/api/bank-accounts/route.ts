@@ -24,6 +24,9 @@ export async function GET() {
   // Conteo de movimientos por cuenta (para badges)
   const counts = await prisma.bankMovement.groupBy({
     by: ["accountId"],
+    // Los descartados no cuentan: la lista de Cartolas también los excluye,
+    // así el número del sidebar cuadra con lo que se ve.
+    where: { descartadoAt: null },
     _count: { _all: true },
   });
   const countByAccount = new Map(counts.map((c) => [c.accountId, c._count._all]));

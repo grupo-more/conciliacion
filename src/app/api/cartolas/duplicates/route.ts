@@ -40,7 +40,8 @@ export async function GET(req: Request) {
   const accountId = url.searchParams.get("accountId");
 
   const movements = await prisma.bankMovement.findMany({
-    where: accountId ? { accountId } : {},
+    // Los descartados quedan fuera de la detección de duplicados.
+    where: { descartadoAt: null, ...(accountId ? { accountId } : {}) },
     include: {
       account: {
         select: { id: true, bankName: true, accountNumber: true, holderName: true },

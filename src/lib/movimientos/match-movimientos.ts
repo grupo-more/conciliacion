@@ -78,6 +78,8 @@ export async function runMatchMovimientos(): Promise<MatchResult> {
       prisma.bankAccount.findMany({ select: { id: true, bankName: true, holderName: true } }),
       prisma.bankAccountAlias.findMany({ select: { bancoString: true, accountId: true } }),
       prisma.bankMovement.findMany({
+        // Los descartados no son targets: no corresponden al sistema.
+        where: { descartadoAt: null },
         select: { id: true, accountId: true, amount: true, direction: true, postDate: true },
       }),
     ]);

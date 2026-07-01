@@ -44,13 +44,23 @@ export async function POST(req: Request) {
     },
   });
 
+  // Movimientos matcheados por la conciliación de caja (MovimientoCaja). No es
+  // un ConsolidadoLink, es una referencia suelta por bankMovementId, así que se
+  // consulta aparte. Si está matcheado, también está "resuelto".
+  const cajaMatched = await prisma.movimientoCaja.findMany({
+    where: { bankMovementId: { in: movementIds }, status: { in: ["AUTO_MATCHED", "MANUAL"] } },
+    select: { bankMovementId: true },
+  });
+  const cajaMatchedSet = new Set(cajaMatched.map((c) => c.bankMovementId));
+
   // Un movimiento está "resuelto" si tiene link del motor, link de egreso a
-  // tercero o un asiento manual generado. Esos se bloquean: hay que deshacer
-  // primero. El resto (sin vínculos y no descartado aún) se puede descartar.
+  // tercero, un asiento manual generado o un match de caja. Esos se bloquean:
+  // hay que deshacer primero. El resto se puede descartar.
   const resuelto = (m: (typeof movements)[number]) =>
     m._count.consolidadoLinks > 0 ||
     m._count.egresoConciliacionLinks > 0 ||
-    m.asientoManual != null;
+    m.asientoManual != null ||
+    cajaMatchedSet.has(m.id);
   const bloqueados = movements.filter(resuelto);
   const aDescartar = movements.filter((m) => !resuelto(m) && !m.descartadoAt);
 
