@@ -64,7 +64,9 @@ export async function computeBancoSinConciliar(
   // Traemos TODO el rango (sin filtros de fila) para: (a) correr matchMirror
   // sobre el universo completo, (b) clasificar de forma estable.
   const all = await prisma.bankMovement.findMany({
-    where: { postDate: { gte: from, lt: to } },
+    // Excluye descartados: no corresponden al sistema (no cuentan como sin
+    // conciliar ni aparecen como pendientes de asiento manual).
+    where: { postDate: { gte: from, lt: to }, descartadoAt: null },
     include: {
       account: {
         select: {

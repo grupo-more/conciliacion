@@ -621,7 +621,8 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
     prisma.bankMovement.findMany({
       // IN para conciliar ingresos, OUT para egresos. Se rutea por cuenta +
       // direccion mas abajo segun tipoOperacion de cada Tesoreria.
-      where: { direction: { in: ["IN", "OUT"] } },
+      // Excluye los descartados: no corresponden al sistema, no deben conciliar.
+      where: { direction: { in: ["IN", "OUT"] }, descartadoAt: null },
       include: { account: true },
       orderBy: { postDate: "asc" },
     }),

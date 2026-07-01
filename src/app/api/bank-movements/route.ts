@@ -44,6 +44,9 @@ export async function GET(req: Request) {
   const minAmount = url.searchParams.get("minAmount");
   const maxAmount = url.searchParams.get("maxAmount");
   const onlyUnmatched = url.searchParams.get("onlyUnmatched") === "true";
+  // Vista "Movimientos descartados": "only" muestra solo los descartados;
+  // por defecto se excluyen de todas las listas.
+  const descartadosView = url.searchParams.get("descartados") === "only";
   const includeSummary = url.searchParams.get("includeSummary") === "true";
   const limit = clampInt(url.searchParams.get("limit"), 1, 500, 200);
   const offset = clampInt(url.searchParams.get("offset"), 0, 100000, 0);
@@ -56,6 +59,9 @@ export async function GET(req: Request) {
   const where: Prisma.BankMovementWhereInput = {};
   if (accountId) where.accountId = accountId;
   if (direction === "IN" || direction === "OUT") where.direction = direction;
+
+  // Descartados: por defecto fuera; con ?descartados=only, solo ellos.
+  where.descartadoAt = descartadosView ? { not: null } : null;
 
   if (since || until) {
     where.postDate = {};
@@ -236,6 +242,7 @@ export async function GET(req: Request) {
             COALESCE(SUM(CASE WHEN direction='OUT' THEN ABS(amount) ELSE 0 END), 0)::bigint AS out_sum
           FROM "BankMovement" bm
           WHERE bm.account_id = ${accountId}
+            AND bm.descartado_at IS NULL
         `
       : await prisma.$queryRaw<
           Array<{
@@ -322,6 +329,7 @@ export async function GET(req: Request) {
           FROM "BankMovement" bm
           JOIN "BankAccount" ba ON ba.id = bm.account_id
           WHERE ba.account_number NOT LIKE '_UNASSIGNED_%'
+            AND bm.descartado_at IS NULL
             AND NOT (${Prisma.raw(USO_PARCIAL_SQL)})
         `;
     const a = accountAggs[0];
@@ -401,6 +409,7 @@ export async function GET(req: Request) {
         transbank: isTransbank(m),
         difMenor: !isTransbank(m) && isDifMenor(m, difThreshold),
         noRelevante: isUsoParcialAccount(m.account),
+        descartadoAt: m.descartadoAt?.toISOString() ?? null,
       };
     }),
     summary,

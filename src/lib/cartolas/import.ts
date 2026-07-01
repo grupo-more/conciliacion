@@ -178,6 +178,15 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
   });
   const existingSet = new Set(existingInAccount.map((m) => m.dedupKey));
 
+  // Movimientos ya descartados (registro durable). Si vuelven a importarse
+  // porque su fila fue borrada, se reinsertan pero ya marcados como descartados
+  // — nunca vuelven a conciliar ni a contar como pendientes.
+  const descartadosRows = await prisma.movimientoDescartado.findMany({
+    where: { accountId: resolved.id, dedupKey: { in: dedupKeys } },
+    select: { dedupKey: true },
+  });
+  const descartadoSet = new Set(descartadosRows.map((d) => d.dedupKey));
+
   // 5) Cross-check intra-banco (otras cuentas del mismo banco) — match perfecto
   // Solo aplica para los movimientos que aún no están duplicados en la cuenta destino.
   const otherBankAccountIds = await prisma.bankAccount
@@ -409,6 +418,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
           txType: it.movement.txType,
           dedupKey: it.dedupKey,
           rawRow: it.movement.rawRow as object,
+          // Si ya estaba descartado, reentra directo a "Movimientos descartados".
+          descartadoAt: descartadoSet.has(it.dedupKey) ? new Date() : null,
         })),
         skipDuplicates: true,
       });

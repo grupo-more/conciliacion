@@ -39,6 +39,9 @@ export function CartolasView() {
   const [since, setSince] = useState("");
   const [until, setUntil] = useState("");
   const [onlyUnmatched, setOnlyUnmatched] = useState(false);
+  // Vista "Movimientos descartados": muestra solo los descartados y habilita restaurar.
+  const [descartadosView, setDescartadosView] = useState(false);
+  const [descartando, setDescartando] = useState(false);
 
   // Modales
   const [importOpen, setImportOpen] = useState(false);
@@ -81,6 +84,7 @@ export function CartolasView() {
     if (since) params.set("since", since);
     if (until) params.set("until", until);
     if (onlyUnmatched) params.set("onlyUnmatched", "true");
+    if (descartadosView) params.set("descartados", "only");
 
     try {
       const res = await fetch(`/api/bank-movements?${params}`);
@@ -107,7 +111,7 @@ export function CartolasView() {
   useEffect(() => {
     loadMovements();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAccountId, direction, since, until, onlyUnmatched]);
+  }, [selectedAccountId, direction, since, until, onlyUnmatched, descartadosView]);
 
   // Buscar con debounce ligero
   useEffect(() => {
@@ -157,7 +161,59 @@ export function CartolasView() {
     }
   }
 
-  const showCheckboxes = selectedAccount?.isUnassigned ?? false;
+  // Checkboxes disponibles en cualquier vista de movimientos (para descartar /
+  // restaurar / reasignar). Reasignar sigue restringido a "Sin asignar".
+  const showCheckboxes =
+    selectedAccountId !== null && !isTransbankView;
+  const canReassign = (selectedAccount?.isUnassigned ?? false) && !descartadosView;
+
+  async function descartarSelected() {
+    if (selectedIds.size === 0) return;
+    if (
+      !confirm(
+        `¿Enviar ${selectedIds.size} movimiento(s) a "Movimientos descartados"? ` +
+          `Quedan fuera de conciliación y no se reinsertan al reimportar la cartola.`,
+      )
+    )
+      return;
+    const razon = window.prompt("Motivo (opcional):", "") || null;
+    setDescartando(true);
+    try {
+      const res = await fetch("/api/bank-movements/descartar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ movementIds: Array.from(selectedIds), razon }),
+      });
+      const j = await res.json().catch(() => null);
+      if (!res.ok) {
+        alert(j?.error ?? "No se pudieron descartar.");
+        return;
+      }
+      if (j?.mensaje) alert(j.mensaje);
+      await loadMovements();
+    } finally {
+      setDescartando(false);
+    }
+  }
+
+  async function restaurarSelected() {
+    if (selectedIds.size === 0) return;
+    setDescartando(true);
+    try {
+      const res = await fetch("/api/bank-movements/descartar", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ movementIds: Array.from(selectedIds) }),
+      });
+      if (!res.ok) {
+        alert("No se pudieron restaurar.");
+        return;
+      }
+      await loadMovements();
+    } finally {
+      setDescartando(false);
+    }
+  }
 
   // Agrupar cuentas por banco para sidebar
   const groupedAccounts = useMemo(() => {
@@ -384,6 +440,24 @@ export function CartolasView() {
                   <span className="ml-1 font-bold">{summary.inPending}</span>
                 )}
               </button>
+              <button
+                onClick={() =>
+                  setDescartadosView((v) => {
+                    const next = !v;
+                    if (next) setOnlyUnmatched(false);
+                    return next;
+                  })
+                }
+                className={
+                  "rounded-full border px-3 py-1 text-xs font-semibold transition-all " +
+                  (descartadosView
+                    ? "border-rose-400 bg-rose-50 text-rose-800 ring-2 ring-offset-1 ring-rose-300"
+                    : "border-border-soft bg-white text-text-muted hover:bg-bg-soft")
+                }
+                title="Movimientos que no corresponden al sistema (fuera de conciliación)"
+              >
+                {descartadosView ? "✓ " : ""}Movimientos descartados
+              </button>
               {/* Leyenda */}
               <div className="hidden md:flex items-center gap-2 text-[11px] text-text-muted ml-3">
                 <span className="inline-flex items-center gap-1">
@@ -426,18 +500,36 @@ export function CartolasView() {
             )}
           </div>
 
-          {/* Acciones masivas (solo en Sin asignar) */}
+          {/* Acciones masivas sobre la selección */}
           {showCheckboxes && selectedIds.size > 0 && (
             <div className="card flex items-center justify-between bg-warn/5 border-warn/40">
               <div className="text-sm">
                 {selectedIds.size} seleccionado{selectedIds.size === 1 ? "" : "s"}
               </div>
-              <button
-                onClick={() => setReassignOpen(true)}
-                className="btn-primary"
-              >
-                Reasignar a cuenta…
-              </button>
+              <div className="flex items-center gap-2">
+                {canReassign && (
+                  <button onClick={() => setReassignOpen(true)} className="btn-ghost">
+                    Reasignar a cuenta…
+                  </button>
+                )}
+                {descartadosView ? (
+                  <button
+                    onClick={restaurarSelected}
+                    disabled={descartando}
+                    className="btn-primary"
+                  >
+                    {descartando ? "Restaurando…" : "Restaurar"}
+                  </button>
+                ) : (
+                  <button
+                    onClick={descartarSelected}
+                    disabled={descartando}
+                    className="rounded-md bg-rose-600 text-white text-sm font-semibold px-3 py-1.5 hover:opacity-90 disabled:opacity-50"
+                  >
+                    {descartando ? "Enviando…" : "Enviar a descartados"}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -647,6 +739,18 @@ interface RowStatus {
 }
 
 function computeRowStatus(m: MovementDTO): RowStatus {
+  // Descartado explícitamente: no corresponde al sistema, fuera de conciliación.
+  if (m.descartadoAt) {
+    return {
+      label: "Descartado",
+      title:
+        "Movimiento enviado a 'Movimientos descartados': no corresponde al sistema, no concilia ni cuenta como pendiente.",
+      borderCls: "w-[3px] bg-rose-500",
+      badgeCls: "border-rose-400/40 bg-rose-50 text-rose-700",
+      rowBg: "bg-rose-50/20",
+    };
+  }
+
   // Cuenta de uso parcial: solo sus traspasos internos importan (viven en
   // Traspasos internos). Todo lo demás es "No relevante" — no cuenta como
   // sin conciliar en ningún lado.

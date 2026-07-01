@@ -38,6 +38,7 @@ export async function GET(req: Request) {
       ...transbankPrismaWhere,
       postDate: { gte: from, lt: to },
       ...(accountId ? { accountId } : {}),
+      descartadoAt: null,
     },
     include: {
       account: {
@@ -126,6 +127,7 @@ export async function GET(req: Request) {
     where: {
       ...transbankPrismaWhere,
       postDate: { gte: from, lt: to },
+      descartadoAt: null,
     },
     select: { accountId: true },
     distinct: ["accountId"],

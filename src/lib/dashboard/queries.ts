@@ -157,6 +157,7 @@ async function sumInOut(start: Date, end: Date): Promise<{ in: number; out: numb
     JOIN "BankAccount" ba ON ba.id = bm.account_id
     WHERE bm.post_date >= ${start} AND bm.post_date < ${end}
       AND ba.account_number NOT LIKE '_UNASSIGNED_%'
+      AND bm.descartado_at IS NULL
   `;
   return {
     in: Number(r[0]?.in_sum ?? 0),
@@ -335,6 +336,7 @@ export async function computeAccountBalances(
       WHERE bm.account_id = ${a.id}
         AND bm.post_date >= ${range.start}
         AND bm.post_date < ${range.end}
+        AND bm.descartado_at IS NULL
     `;
     const agg = periodAggs[0];
     const inSum = Number(agg?.in_sum ?? 0);
@@ -442,6 +444,7 @@ export async function computeFlows(range: PeriodRange): Promise<FlowsBucket[]> {
     JOIN "BankAccount" ba ON ba.id = bm.account_id
     WHERE bm.post_date >= ${range.start} AND bm.post_date < ${range.end}
       AND ba.account_number NOT LIKE '_UNASSIGNED_%'
+      AND bm.descartado_at IS NULL
     GROUP BY DATE(bm.post_date)
     ORDER BY d ASC
   `;

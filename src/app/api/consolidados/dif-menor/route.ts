@@ -42,6 +42,7 @@ export async function GET(req: Request) {
       amount: { gt: 0n, lte: BigInt(settings.threshold) },
       postDate: { gte: from, lt: to },
       ...(accountId ? { accountId } : {}),
+      descartadoAt: null,
       // Cuentas de uso parcial: fuera de scope.
       account: { isNot: usoParcialAccountWhere },
       // Excluir Transbank por consistencia (aunque nunca son < threshold).
@@ -145,6 +146,7 @@ export async function GET(req: Request) {
       direction: "IN",
       amount: { gt: 0n, lte: BigInt(settings.threshold) },
       postDate: { gte: from, lt: to },
+      descartadoAt: null,
       account: { isNot: usoParcialAccountWhere },
       NOT: [{ AND: transbankPrismaWhere.AND }],
     },

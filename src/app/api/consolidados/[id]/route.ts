@@ -104,6 +104,7 @@ export async function GET(
           accountId: { in: Array.from(searchIds) },
           postDate: { gte: lower, lte: upper },
           consolidadoLinks: { none: {} },
+          descartadoAt: null,
           // Cuentas de uso parcial: no se ofrecen como candidatas.
           account: { isNot: usoParcialAccountWhere },
         },

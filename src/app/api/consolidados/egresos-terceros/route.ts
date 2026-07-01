@@ -57,6 +57,7 @@ export async function GET(req: Request) {
       direction: "OUT",
       postDate: { gte: from, lt: to },
       ...(accountId ? { accountId } : {}),
+      descartadoAt: null,
       // Cuentas de uso parcial: fuera de scope (solo importan sus traspasos).
       account: { isNot: usoParcialAccountWhere },
     },

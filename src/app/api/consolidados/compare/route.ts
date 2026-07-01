@@ -79,6 +79,8 @@ export async function GET(req: Request) {
     direction,
     postDate: { gte: since, lte: until },
     ...(accountId ? { accountId } : {}),
+    // Descartados: no corresponden al sistema, no se comparan acá.
+    descartadoAt: null,
     // Cuentas de uso parcial: no quedan disponibles para matchear acá (solo
     // importan sus traspasos internos).
     account: { isNot: usoParcialAccountWhere },

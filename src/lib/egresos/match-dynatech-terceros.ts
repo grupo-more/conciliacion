@@ -71,7 +71,7 @@ async function doRun(opts: { dryRun?: boolean }): Promise<DynatechEgresosSummary
 
   const [allBms, egresos, entidades, manualEgresoConcs, consLinks] = await Promise.all([
     prisma.bankMovement.findMany({
-      where: { direction: { in: ["IN", "OUT"] } },
+      where: { direction: { in: ["IN", "OUT"] }, descartadoAt: null },
       include: { account: true },
       orderBy: { postDate: "asc" },
     }),

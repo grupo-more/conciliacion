@@ -168,7 +168,7 @@ async function doRun(opts: { dryRun?: boolean; preserveManual?: boolean }): Prom
   const [egresos, allBms, entidades, manualConcs] = await Promise.all([
     prisma.egresoMovement.findMany({ orderBy: { fecha: "asc" } }),
     prisma.bankMovement.findMany({
-      where: { direction: { in: ["IN", "OUT"] } },
+      where: { direction: { in: ["IN", "OUT"] }, descartadoAt: null },
       include: { account: true },
       orderBy: { postDate: "asc" },
     }),

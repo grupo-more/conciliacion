@@ -51,6 +51,8 @@ export interface MovementDTO {
   /** True si la cuenta es de "uso parcial": solo sus traspasos internos importan
    *  (viven en Traspasos internos). El resto NO cuenta como sin conciliar. */
   noRelevante: boolean;
+  /** Fecha en que se envió a "Movimientos descartados" (null = activo). */
+  descartadoAt: string | null;
 }
 
 export interface CartolaSummary {

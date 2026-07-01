@@ -35,6 +35,7 @@ model BankAccount {
   imports     StatementImport[]
   movements   BankMovement[]
   aliases     BankAccountAlias[]
+  descartados MovimientoDescartado[]
 
   @@unique([bankCode, accountNumber])
   @@index([active])
@@ -111,6 +112,12 @@ model BankMovement {
 
   createdAt DateTime @default(now()) @map("created_at")
 
+  // Movimiento enviado a "Movimientos descartados": no corresponde al sistema
+  // y no debe conciliar ni contar como pendiente en ninguna vista. Se marca
+  // (no se borra) para que el re-import lo salte por dedup. El registro durable
+  // vive en MovimientoDescartado (sobrevive aunque se borre esta fila).
+  descartadoAt DateTime? @map("descartado_at")
+
   consolidadoLinks    ConsolidadoLink[]
   egresoConciliacionLinks EgresoConciliacionLink[]
   asientoManual       AsientoManual?
@@ -118,6 +125,25 @@ model BankMovement {
   @@unique([accountId, dedupKey])
   @@index([accountId, postDate])
   @@index([externalId])
+  @@index([descartadoAt])
+}
+
+// Registro durable de un movimiento descartado, por (cuenta, dedupKey). Es la
+// fuente de verdad que sobrevive aunque se borre el BankMovement (ej. merge de
+// duplicados): el import consulta esta tabla para NO reinsertar un movimiento
+// que ya fue descartado. Restaurar = borrar el registro de acá.
+model MovimientoDescartado {
+  id        String   @id @default(uuid())
+  accountId String   @map("account_id")
+  account   BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  dedupKey  String   @map("dedup_key")
+
+  razon          String?  @db.Text
+  descartadoById String?  @map("descartado_by_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@unique([accountId, dedupKey])
+  @@index([accountId])
 }
 
 // Movimiento de Tesoreria - viene del endpoint /api/banco/conciliacion.

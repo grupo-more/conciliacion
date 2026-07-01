@@ -53,6 +53,7 @@ export async function GET(req: Request) {
   const movements = await prisma.bankMovement.findMany({
     where: {
       postDate: { gte: from, lt: to },
+      descartadoAt: null,
     },
     include: {
       account: {
