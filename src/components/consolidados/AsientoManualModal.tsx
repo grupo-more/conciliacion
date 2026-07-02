@@ -72,6 +72,8 @@ export function AsientoManualModal({
   // al elegir "proveedor" y el usuario puede editarla. Si queda vacía, el backend
   // usa la descripción del movimiento por defecto.
   const [glosa, setGlosa] = useState("");
+  // Cliente: una sola sucursal seleccionada (su código = rubro del ingreso).
+  const [clienteSucursalId, setClienteSucursalId] = useState("");
 
   useEffect(() => setMounted(true), []);
 
@@ -99,6 +101,12 @@ export function AsientoManualModal({
     // Arranca sin ninguna sucursal seleccionada; el usuario elige cuáles.
     setSel(new Map());
     // Pre-cargar la glosa con la descripción del movimiento (editable).
+    setGlosa(data?.bankMovement.description ?? "");
+  }
+
+  function startCliente() {
+    setTipo("CLIENTE");
+    setClienteSucursalId("");
     setGlosa(data?.bankMovement.description ?? "");
   }
 
@@ -192,6 +200,35 @@ export function AsientoManualModal({
     }
   }
 
+  // Cliente: banco ↔ sucursal (una sola), sin impuestos.
+  async function generarCliente() {
+    if (!clienteSucursalId) {
+      alert("Elegí una sucursal.");
+      return;
+    }
+    setActing(true);
+    try {
+      const body = {
+        bankMovementId,
+        tipo: "CLIENTE" as const,
+        glosa: glosa.trim() || null,
+        sucursales: [{ sucursalId: clienteSucursalId, personas: 0 }],
+      };
+      const res = await fetch("/api/consolidados/asientos-manuales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const j = await res.json().catch(() => null);
+      if (res.ok) {
+        onChanged();
+        onClose();
+      } else alert(j?.error ?? "No se pudo generar el asiento");
+    } finally {
+      setActing(false);
+    }
+  }
+
   async function deshacer() {
     setActing(true);
     try {
@@ -259,24 +296,80 @@ export function AsientoManualModal({
                   <button onClick={startProveedor} className="rounded-md bg-brand text-white text-sm font-semibold px-4 py-2 hover:opacity-90">
                     Pago a proveedor
                   </button>
-                  <button onClick={() => setTipo("CLIENTE")} className="rounded-md border border-border-soft text-sm font-semibold px-4 py-2 hover:bg-bg-soft">
+                  <button onClick={startCliente} className="rounded-md border border-border-soft text-sm font-semibold px-4 py-2 hover:bg-bg-soft">
                     Pago a cliente
                   </button>
                 </div>
               </div>
             )}
 
-            {/* Cliente: por ahora solo pendiente */}
+            {/* Cliente: banco ↔ sucursal (una sola), sin impuestos */}
             {!yaGenerado && tipo === "CLIENTE" && (
-              <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm">
-                <p className="text-amber-800">
-                  Los pagos a cliente por ahora se <strong>dejan pendientes</strong> — todavía no generan asiento.
-                  El movimiento queda en la lista hasta que definamos qué hacer con estos casos.
-                </p>
-                <div className="flex justify-end gap-2 mt-3">
-                  <button onClick={() => setTipo(null)} className="btn-ghost text-sm">Volver</button>
-                  <button onClick={onClose} className="rounded-md bg-brand text-white text-sm font-semibold px-3 py-1.5">
-                    Dejar pendiente
+              <div className="space-y-4">
+                <div className="rounded-md border border-border-soft bg-bg-soft/40 p-3 text-sm text-text-muted">
+                  Ingreso de cliente: se arma el asiento <b>banco ↔ sucursal</b> (1:1, sin
+                  impuestos). Elegí a qué sucursal corresponde este movimiento.
+                </div>
+
+                {/* Glosa */}
+                <div>
+                  <label className="block text-sm font-semibold mb-1">
+                    Glosa del asiento{" "}
+                    <span className="text-text-muted font-normal">(detalle del ingreso)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={glosa}
+                    onChange={(e) => setGlosa(e.target.value)}
+                    maxLength={500}
+                    placeholder="Ej: Depósito cliente Juan Pérez"
+                    className="w-full rounded-md border border-border-soft px-3 py-2 text-sm"
+                  />
+                </div>
+
+                {/* Sucursal (una) */}
+                <div>
+                  <label className="block text-sm font-semibold mb-1">Sucursal</label>
+                  {sucursales.length === 0 ? (
+                    <span className="text-xs text-rose-700">
+                      No hay sucursales. Cargalas en Configuración.
+                    </span>
+                  ) : (
+                    <select
+                      value={clienteSucursalId}
+                      onChange={(e) => setClienteSucursalId(e.target.value)}
+                      className="w-full rounded-md border border-border-soft px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="">— Elegí una sucursal —</option>
+                      {sucursalesOrdenadas.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.codigo ? `${s.codigo} · ` : ""}
+                          {s.nombre}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <p className="mt-1 text-xs text-text-muted">
+                    El código de la sucursal es el rubro que se usa en el asiento.
+                  </p>
+                </div>
+
+                {/* Resumen: banco (DEBE) ↔ sucursal (HABER) */}
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <Box label="Debe · Banco" value={formatMoney(montoNeto)} />
+                  <Box label="Haber · Sucursal" value={formatMoney(montoNeto)} strong />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setTipo(null)} disabled={acting} className="btn-ghost text-sm">
+                    Volver
+                  </button>
+                  <button
+                    onClick={generarCliente}
+                    disabled={acting || !clienteSucursalId}
+                    className="rounded-md bg-brand text-white text-sm font-semibold px-4 py-2 hover:opacity-90 disabled:opacity-50"
+                  >
+                    {acting ? "Generando…" : "Generar asiento"}
                   </button>
                 </div>
               </div>
@@ -482,6 +575,7 @@ function GeneradoView({
   onDeshacer: () => void;
   acting: boolean;
 }) {
+  const isCliente = asiento.tipo === "CLIENTE";
   return (
     <div className="space-y-3">
       <div className="rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm">
@@ -492,29 +586,35 @@ function GeneradoView({
           </div>
         )}
         <div className="text-xs text-text-muted mt-0.5">
-          Líquido {formatMoney(BigInt(asiento.montoNeto))}
-          {BigInt(asiento.montoRetencion) > 0n && (
-            <> · Retención {formatMoney(BigInt(asiento.montoRetencion))}
-              {asiento.retencionTasa ? ` (${asiento.retencionTasa}%)` : ""} → rubro {asiento.retencionRubro}</>
+          {isCliente ? (
+            <>Ingreso <strong>{formatMoney(BigInt(asiento.montoNeto))}</strong> · banco (DEBE) ↔ sucursal (HABER)</>
+          ) : (
+            <>
+              Líquido {formatMoney(BigInt(asiento.montoNeto))}
+              {BigInt(asiento.montoRetencion) > 0n && (
+                <> · Retención {formatMoney(BigInt(asiento.montoRetencion))}
+                  {asiento.retencionTasa ? ` (${asiento.retencionTasa}%)` : ""} → rubro {asiento.retencionRubro}</>
+              )}
+              {" · "}<strong>Bruto {formatMoney(BigInt(asiento.montoBruto))}</strong> (lo repartido)
+            </>
           )}
-          {" · "}<strong>Bruto {formatMoney(BigInt(asiento.montoBruto))}</strong> (lo repartido)
         </div>
       </div>
       <table className="w-full text-sm">
         <thead className="bg-bg-soft text-xs uppercase tracking-wider text-text-muted">
           <tr>
             <th className="px-2 py-1.5 text-left">Sucursal</th>
-            <th className="px-2 py-1.5 text-right">Personas</th>
-            <th className="px-2 py-1.5 text-right">%</th>
-            <th className="px-2 py-1.5 text-right">Monto (DEBE)</th>
+            {!isCliente && <th className="px-2 py-1.5 text-right">Personas</th>}
+            {!isCliente && <th className="px-2 py-1.5 text-right">%</th>}
+            <th className="px-2 py-1.5 text-right">Monto ({isCliente ? "HABER" : "DEBE"})</th>
           </tr>
         </thead>
         <tbody>
           {asiento.lineas.map((l, i) => (
             <tr key={i} className="border-t border-border-soft/60">
               <td className="px-2 py-1.5">{l.sucursalNombre}</td>
-              <td className="px-2 py-1.5 text-right">{l.personas}</td>
-              <td className="px-2 py-1.5 text-right font-mono">{l.porcentaje}%</td>
+              {!isCliente && <td className="px-2 py-1.5 text-right">{l.personas}</td>}
+              {!isCliente && <td className="px-2 py-1.5 text-right font-mono">{l.porcentaje}%</td>}
               <td className="px-2 py-1.5 text-right font-mono font-semibold">{formatMoney(BigInt(l.monto))}</td>
             </tr>
           ))}

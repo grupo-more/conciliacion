@@ -97,16 +97,25 @@ export function AsientosManualesView() {
     const lineas: Asi1Linea[] = [];
     for (const a of gen) {
       const detalle = a.glosa || a.counterpartyName || `${a.bankName} ${a.holderName}`;
-      for (const l of a.lineas) {
-        lineas.push({ rubro: l.rubro ?? "", detalle, debe: l.monto });
-      }
-      lineas.push({ rubro: a.bancoRubro ?? "", detalle, haber: a.montoNeto });
-      if (BigInt(a.montoRetencion) > 0n) {
-        lineas.push({
-          rubro: a.retencionRubro ?? "",
-          detalle: `Retención honorarios · ${detalle}`,
-          haber: a.montoRetencion,
-        });
+      if (a.tipo === "CLIENTE") {
+        // Ingreso de cliente: DEBE banco / HABER sucursal (1:1, sin impuestos).
+        lineas.push({ rubro: a.bancoRubro ?? "", detalle, debe: a.montoNeto });
+        for (const l of a.lineas) {
+          lineas.push({ rubro: l.rubro ?? "", detalle, haber: l.monto });
+        }
+      } else {
+        // Proveedor: DEBE gasto (prorrateo por sucursal) / HABER banco (+ retención).
+        for (const l of a.lineas) {
+          lineas.push({ rubro: l.rubro ?? "", detalle, debe: l.monto });
+        }
+        lineas.push({ rubro: a.bancoRubro ?? "", detalle, haber: a.montoNeto });
+        if (BigInt(a.montoRetencion) > 0n) {
+          lineas.push({
+            rubro: a.retencionRubro ?? "",
+            detalle: `Retención honorarios · ${detalle}`,
+            haber: a.montoRetencion,
+          });
+        }
       }
     }
     return {
