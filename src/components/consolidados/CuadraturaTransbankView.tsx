@@ -8,7 +8,7 @@ import {
   type Asi1Options,
   type Asi1ZipEntry,
 } from "@/lib/asientos/exportAsi1";
-import { Asi1PreviewModal, printAsi1 } from "./Asi1Preview";
+import { printAsi1 } from "./Asi1Preview";
 
 type AsientoSide = "DEBE" | "HABER";
 
@@ -388,13 +388,6 @@ function PreviewBlock({
 }) {
   const a = data.asiento;
   const hasRows = a.sucursales.length > 0;
-  const [preview, setPreview] = useState(false);
-
-  const asi1Opts = {
-    fecha: to,
-    descripcion: `Cuadratura Transbank ${formatDate(from)} al ${formatDate(to)}`,
-  };
-  const periodo = `${formatDate(from)} al ${formatDate(to)}`;
 
   return (
     <div className="space-y-4">
@@ -411,29 +404,6 @@ function PreviewBlock({
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setPreview(true)}
-            disabled={!hasRows}
-            className="btn-ghost text-sm"
-          >
-            Vista previa
-          </button>
-          <button
-            onClick={() => descargarTodoZip(a, to, periodo, `cuadratura_${from}_${to}`)}
-            disabled={!hasRows}
-            className="btn-ghost text-sm"
-            title="ZIP con un asiento por sucursal + la consolidación (para importar de a uno)"
-          >
-            Descargar todo (ZIP)
-          </button>
-          <button
-            onClick={() => descargarAuditoria(a, to, periodo, `cuadratura_auditoria_${from}_${to}`)}
-            disabled={!hasRows}
-            className="btn-ghost text-sm"
-            title="Un Excel con todas las sucursales + consolidación (para auditar, no para importar)"
-          >
-            Auditar
-          </button>
-          <button
             onClick={onGenerar}
             disabled={!hasRows || busy}
             className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
@@ -444,14 +414,6 @@ function PreviewBlock({
       </div>
 
       {hasRows && <AsientoTable asiento={a} onApartar={onApartar} />}
-
-      {preview && (
-        <Asi1PreviewModal
-          options={buildAsi1Options(a, asi1Opts)}
-          filename={`cuadratura_transbank_${from}_${to}`}
-          onClose={() => setPreview(false)}
-        />
-      )}
     </div>
   );
 }
