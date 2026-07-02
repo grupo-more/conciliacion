@@ -146,6 +146,23 @@ export function matchMirror(
     else if (m.direction === "IN") insInternal.push({ mov: m, entidad: det.entidad });
   }
 
+  // INs claramente EXTERNOS: traen contraparte identificable (nombre o RUT) que
+  // NO matchea ninguna entidad interna (ej. "SOUTH METALS SPA", "PATRICIO MAURO
+  // ZAPATA"). Esos son depósitos externos reales y NO pueden ser el espejo de un
+  // traspaso interno, aunque coincidan monto/fecha/cuenta. Se excluyen como
+  // candidatos. Los INs sin contraparte identificable SÍ siguen siendo elegibles
+  // (para eso existe el pareo por bloque).
+  const externalInIds = new Set<string>();
+  for (const m of movements) {
+    if (m.direction !== "IN") continue;
+    const hasCounterparty = !!(
+      normalizeRut(m.counterpartyRut) || (m.counterpartyName ?? "").trim()
+    );
+    if (hasCounterparty && detectInterno(m, entidades) === null) {
+      externalInIds.add(m.id);
+    }
+  }
+
   // PASE 1 (deterministico): 1:1 cleanos + desambiguados por cierre de circulo.
   // Los OUTs que quedan ambiguos los guardamos para el pase 2 (block).
   const pairs: MirrorPair[] = [];
@@ -173,7 +190,9 @@ export function matchMirror(
         m.direction === "IN" &&
         destAccountIds.has(m.account.id) &&
         absBig(m.amount) === outAbs &&
-        dateDiffDays(m.postDate, out.postDate) <= windowDays,
+        dateDiffDays(m.postDate, out.postDate) <= windowDays &&
+        // El IN no puede ser un depósito claramente externo.
+        !externalInIds.has(m.id),
     );
 
     if (candidates.length === 0) {
