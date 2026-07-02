@@ -6,6 +6,7 @@ import { santanderProvisoriaParser } from "./santander-provisoria";
 import {
   internacionalProvisoriaParser,
   internacionalHistoricaParser,
+  internacionalMensualParser,
 } from "./internacional";
 import { chileMovimientosParser } from "./chile";
 import { chileCartolaParser } from "./chile-cartola";
@@ -28,6 +29,7 @@ export const PARSERS: BankParser[] = [
   santanderMovimientoParser,
   internacionalHistoricaParser,
   internacionalProvisoriaParser,
+  internacionalMensualParser,
   chileMovimientosParser,
   chileCartolaParser,
 ];

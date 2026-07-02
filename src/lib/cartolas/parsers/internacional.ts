@@ -25,7 +25,7 @@ import {
  *   Fila 18+: datos
  */
 function makeInternacionalParser(opts: {
-  code: "INTERNACIONAL_PROVISORIA" | "INTERNACIONAL_HISTORICA";
+  code: "INTERNACIONAL_PROVISORIA" | "INTERNACIONAL_HISTORICA" | "INTERNACIONAL_MENSUAL";
   sheetName: string;
   titleA1Includes: string;
 }): BankParser {
@@ -180,6 +180,14 @@ export const internacionalHistoricaParser = makeInternacionalParser({
   code: "INTERNACIONAL_HISTORICA",
   sheetName: "Cartola Historica",
   titleA1Includes: "cartola historica",
+});
+
+// Tercer sub-formato: hoja "Movimientos del Mes". Layout idéntico al provisorio
+// (Nº de Cuenta fila 8, Desde/Hasta filas 10/11, headers fila 17).
+export const internacionalMensualParser = makeInternacionalParser({
+  code: "INTERNACIONAL_MENSUAL",
+  sheetName: "Movimientos del Mes",
+  titleA1Includes: "movimientos del mes",
 });
 
 const SPANISH_MONTHS: Record<string, number> = {
