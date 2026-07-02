@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
-import { exportAsi1Xls } from "@/lib/asientos/exportAsi1";
+import { exportAsi1Xls, type Asi1Options } from "@/lib/asientos/exportAsi1";
+import { Asi1PreviewModal } from "./Asi1Preview";
 
 interface DifMenorRow {
   groupId: string;
@@ -45,6 +46,7 @@ export function DifMenorView() {
   const [accountId, setAccountId] = useState<string>("");
 
   const [data, setData] = useState<DifMenorResponse | null>(null);
+  const [preview, setPreview] = useState<{ options: Asi1Options; filename: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function load() {
@@ -76,10 +78,10 @@ export function DifMenorView() {
     };
   }, [data]);
 
-  function exportXlsx() {
-    if (!data || data.rows.length === 0) return;
-    exportAsi1Xls(
-      {
+  function buildAsiento(): { options: Asi1Options; filename: string } | null {
+    if (!data || data.rows.length === 0) return null;
+    return {
+      options: {
         fecha: to,
         descripcion: `Diferencias menores ${formatDate(from)} al ${formatDate(to)}`,
         lineas: data.rows.map((r) => ({
@@ -89,8 +91,13 @@ export function DifMenorView() {
           haber: r.haber,
         })),
       },
-      `dif_menor_${from}_${to}`,
-    );
+      filename: `dif_menor_${from}_${to}`,
+    };
+  }
+
+  function exportXlsx() {
+    const a = buildAsiento();
+    if (a) exportAsi1Xls(a.options, a.filename);
   }
 
   const hasRows = data && data.rows.length > 0;
@@ -141,6 +148,13 @@ export function DifMenorView() {
           )}
         </span>
         <div className="flex-1" />
+        <button
+          onClick={() => setPreview(buildAsiento())}
+          disabled={!hasRows}
+          className="rounded-md border border-border-soft px-3 py-1.5 text-sm font-semibold hover:bg-bg-soft disabled:opacity-50"
+        >
+          Vista previa
+        </button>
         <button
           onClick={exportXlsx}
           disabled={!hasRows}
@@ -206,6 +220,14 @@ export function DifMenorView() {
           </div>
         )}
       </div>
+
+      {preview && (
+        <Asi1PreviewModal
+          options={preview.options}
+          filename={preview.filename}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </div>
   );
 }

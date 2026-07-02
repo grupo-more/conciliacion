@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
-import { exportAsi1Xls } from "@/lib/asientos/exportAsi1";
+import { exportAsi1Xls, type Asi1Options } from "@/lib/asientos/exportAsi1";
+import { Asi1PreviewModal } from "./Asi1Preview";
 
 interface AsientoRowDTO {
   groupId: string;
@@ -43,6 +44,7 @@ export function EgresosTercerosAsiento({
   accountId: string;
 }) {
   const [data, setData] = useState<AsientoResp | null>(null);
+  const [preview, setPreview] = useState<{ options: Asi1Options; filename: string } | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -73,10 +75,10 @@ export function EgresosTercerosAsiento({
 
   const hasRows = data && data.rows.length > 0;
 
-  function exportXlsx() {
-    if (!data || data.rows.length === 0) return;
-    exportAsi1Xls(
-      {
+  function buildAsiento(): { options: Asi1Options; filename: string } | null {
+    if (!data || data.rows.length === 0) return null;
+    return {
+      options: {
         fecha: to,
         descripcion: `Egresos a terceros ${formatDate(from)} al ${formatDate(to)}`,
         lineas: data.rows.map((r) => ({
@@ -86,13 +88,25 @@ export function EgresosTercerosAsiento({
           haber: r.haber,
         })),
       },
-      `egresos_terceros_${from}_${to}`,
-    );
+      filename: `egresos_terceros_${from}_${to}`,
+    };
+  }
+
+  function exportXlsx() {
+    const a = buildAsiento();
+    if (a) exportAsi1Xls(a.options, a.filename);
   }
 
   return (
     <div className="rounded-lg border border-border-soft bg-white overflow-hidden">
-      <div className="flex justify-end p-2 border-b border-border-soft">
+      <div className="flex justify-end gap-2 p-2 border-b border-border-soft">
+        <button
+          onClick={() => setPreview(buildAsiento())}
+          disabled={!hasRows}
+          className="rounded-md border border-border-soft px-3 py-1.5 text-sm font-semibold hover:bg-bg-soft disabled:opacity-50"
+        >
+          Vista previa
+        </button>
         <button
           onClick={exportXlsx}
           disabled={!hasRows}
@@ -169,6 +183,14 @@ export function EgresosTercerosAsiento({
             </tfoot>
           </table>
         </div>
+      )}
+
+      {preview && (
+        <Asi1PreviewModal
+          options={preview.options}
+          filename={preview.filename}
+          onClose={() => setPreview(null)}
+        />
       )}
     </div>
   );

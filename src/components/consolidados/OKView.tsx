@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
-import { exportAsi1Xls } from "@/lib/asientos/exportAsi1";
+import { exportAsi1Xls, type Asi1Options } from "@/lib/asientos/exportAsi1";
+import { Asi1PreviewModal } from "./Asi1Preview";
 import type { OKResponse, OKRow } from "./types";
 
 /**
@@ -22,6 +23,7 @@ export function OKView() {
   const [loading, setLoading] = useState(false);
   const [undoTarget, setUndoTarget] = useState<OKRow | null>(null);
   const [undoing, setUndoing] = useState(false);
+  const [preview, setPreview] = useState<{ options: Asi1Options; filename: string } | null>(null);
 
   async function confirmUndo() {
     if (!undoTarget) return;
@@ -77,10 +79,10 @@ export function OKView() {
     };
   }, [data]);
 
-  function exportXlsx() {
-    if (!data || data.rows.length === 0) return;
-    exportAsi1Xls(
-      {
+  function buildAsiento(): { options: Asi1Options; filename: string } | null {
+    if (!data || data.rows.length === 0) return null;
+    return {
+      options: {
         fecha: to,
         descripcion: `Conciliados ${formatDate(from)} al ${formatDate(to)}`,
         lineas: data.rows.map((r) => ({
@@ -90,8 +92,13 @@ export function OKView() {
           haber: r.haber,
         })),
       },
-      `asiento_${from}_${to}`,
-    );
+      filename: `asiento_${from}_${to}`,
+    };
+  }
+
+  function exportXlsx() {
+    const a = buildAsiento();
+    if (a) exportAsi1Xls(a.options, a.filename);
   }
 
   const hasRows = data && data.rows.length > 0;
@@ -143,6 +150,13 @@ export function OKView() {
           ))}
         </select>
         <div className="flex-1" />
+        <button
+          onClick={() => setPreview(buildAsiento())}
+          disabled={!hasRows}
+          className="rounded-md border border-border-soft px-3 py-1.5 text-sm font-semibold hover:bg-bg-soft disabled:opacity-50"
+        >
+          Vista previa
+        </button>
         <button
           onClick={exportXlsx}
           disabled={!hasRows}
@@ -218,6 +232,14 @@ export function OKView() {
           loading={undoing}
           onCancel={() => setUndoTarget(null)}
           onConfirm={confirmUndo}
+        />
+      )}
+
+      {preview && (
+        <Asi1PreviewModal
+          options={preview.options}
+          filename={preview.filename}
+          onClose={() => setPreview(null)}
         />
       )}
     </div>

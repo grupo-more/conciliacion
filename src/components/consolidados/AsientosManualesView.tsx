@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
-import { exportAsi1Xls, type Asi1Linea } from "@/lib/asientos/exportAsi1";
+import { exportAsi1Xls, type Asi1Linea, type Asi1Options } from "@/lib/asientos/exportAsi1";
+import { Asi1PreviewModal } from "./Asi1Preview";
 import { AsientoManualModal } from "./AsientoManualModal";
 
 interface PendienteRow {
@@ -56,6 +57,7 @@ export function AsientosManualesView() {
 
   const [pend, setPend] = useState<PendientesResp | null>(null);
   const [gen, setGen] = useState<GeneradoAsiento[]>([]);
+  const [preview, setPreview] = useState<{ options: Asi1Options; filename: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -90,8 +92,8 @@ export function AsientosManualesView() {
   // (mismo criterio que el resto de las tabs). Por cada asiento manual:
   //   DEBE: prorrateo por rubro-sucursal (código de sucursal).
   //   HABER: banco por el neto (rubro resuelto) + retención (rubro 26).
-  function exportXlsx() {
-    if (gen.length === 0) return;
+  function buildAsiento(): { options: Asi1Options; filename: string } | null {
+    if (gen.length === 0) return null;
     const lineas: Asi1Linea[] = [];
     for (const a of gen) {
       const detalle = a.glosa || a.counterpartyName || `${a.bankName} ${a.holderName}`;
@@ -107,14 +109,19 @@ export function AsientosManualesView() {
         });
       }
     }
-    exportAsi1Xls(
-      {
+    return {
+      options: {
         fecha: to,
         descripcion: `Asientos manuales ${formatDate(from)} al ${formatDate(to)}`,
         lineas,
       },
-      `asientos_manuales_${from}_${to}`,
-    );
+      filename: `asientos_manuales_${from}_${to}`,
+    };
+  }
+
+  function exportXlsx() {
+    const a = buildAsiento();
+    if (a) exportAsi1Xls(a.options, a.filename);
   }
 
   // Debounce del término: filtra 180ms después del último tecleo.
@@ -209,12 +216,20 @@ export function AsientosManualesView() {
           </span>
         )}
         {mode === "generados" && gen.length > 0 && (
-          <button
-            onClick={exportXlsx}
-            className="ml-auto rounded-md bg-brand text-white text-sm font-semibold px-3 py-1.5 hover:opacity-90"
-          >
-            Descargar Excel
-          </button>
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() => setPreview(buildAsiento())}
+              className="rounded-md border border-border-soft text-sm font-semibold px-3 py-1.5 hover:bg-bg-soft"
+            >
+              Vista previa
+            </button>
+            <button
+              onClick={exportXlsx}
+              className="rounded-md bg-brand text-white text-sm font-semibold px-3 py-1.5 hover:opacity-90"
+            >
+              Descargar Excel
+            </button>
+          </div>
         )}
       </div>
 
@@ -311,6 +326,14 @@ export function AsientosManualesView() {
           bankMovementId={selected}
           onClose={() => setSelected(null)}
           onChanged={load}
+        />
+      )}
+
+      {preview && (
+        <Asi1PreviewModal
+          options={preview.options}
+          filename={preview.filename}
+          onClose={() => setPreview(null)}
         />
       )}
     </div>
