@@ -93,9 +93,9 @@ export function exportAsi1Xls(opts: Asi1Options, filename: string): void {
     ws[addr] = z ? ({ t, v, z } as XLSX.CellObject) : ({ t, v } as XLSX.CellObject);
   };
 
-  // Formato contable para los montos MN: miles con separador y "-" en el cero,
-  // igual que el archivo de ejemplo (29.560.349 / -).
-  const MN_FMT = '#,##0;-#,##0;"-"';
+  // Formato de montos: miles con separador y el cero como "0" (gestión NO usa
+  // el "-" contable para el cero).
+  const NUM_FMT = "#,##0";
 
   // Fila 1: numeración de columnas 1..13 (A..M)
   for (let c = 0; c < 13; c++) {
@@ -133,11 +133,12 @@ export function exportAsi1Xls(opts: Asi1Options, filename: string): void {
     set(`B${rr}`, l.rubro);
     set(`C${rr}`, l.cliente ?? 0, "n");
     set(`D${rr}`, l.detalle);
-    set(`F${rr}`, 1, "n"); // Cotización
-    set(`G${rr}`, 0, "n"); // Debe ME
-    set(`H${rr}`, 0, "n"); // Haber ME
-    set(`I${rr}`, num(l.debe), "n", MN_FMT); // Debe MN
-    set(`J${rr}`, num(l.haber), "n", MN_FMT); // Haber MN
+    set(`F${rr}`, 1, "n"); // Cotización (todo CLP)
+    // ME = MN: con cotización 1 el monto va duplicado en moneda extranjera y nacional.
+    set(`G${rr}`, num(l.debe), "n", NUM_FMT); // Debe ME
+    set(`H${rr}`, num(l.haber), "n", NUM_FMT); // Haber ME
+    set(`I${rr}`, num(l.debe), "n", NUM_FMT); // Debe MN
+    set(`J${rr}`, num(l.haber), "n", NUM_FMT); // Haber MN
   });
   const lastRow = row + Math.max(lineas.length, 1);
 
