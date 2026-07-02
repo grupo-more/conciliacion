@@ -36,6 +36,7 @@ model BankAccount {
   movements   BankMovement[]
   aliases     BankAccountAlias[]
   descartados MovimientoDescartado[]
+  rubroLabel  RubroLabel?
 
   @@unique([bankCode, accountNumber])
   @@index([active])
@@ -249,6 +250,12 @@ model RubroLabel {
   // con isDifference=true aparecen en el select del form de ajuste, para
   // evitar elegir por error un rubro de banco/sucursal.
   isDifference Boolean @default(false) @map("is_difference")
+  // Cuenta bancaria (de Cartolas) a la que corresponde este rubro. Enlace
+  // EXPLÍCITO usado para resolver el rubro del banco en los asientos (Asientos
+  // manuales / Traspasos internos), en vez de adivinar por nombre. Único: una
+  // cuenta se asigna a un solo rubro. null para rubros que no son de banco.
+  accountId   String?      @unique @map("account_id")
+  account     BankAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 

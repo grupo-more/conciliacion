@@ -7,6 +7,8 @@ const patchSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
   description: z.string().trim().max(500).optional().nullable(),
   isDifference: z.boolean().optional(),
+  // Cuenta bancaria enlazada. null explícito = desasignar.
+  accountId: z.string().uuid().optional().nullable(),
 });
 
 function parseRubroParam(raw: string): number | null {
@@ -41,6 +43,7 @@ export async function PATCH(
     name?: string;
     description?: string | null;
     isDifference?: boolean;
+    accountId?: string | null;
   } = {};
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.description !== undefined) {
@@ -48,6 +51,9 @@ export async function PATCH(
   }
   if (parsed.data.isDifference !== undefined) {
     data.isDifference = parsed.data.isDifference;
+  }
+  if (parsed.data.accountId !== undefined) {
+    data.accountId = parsed.data.accountId;
   }
   if (Object.keys(data).length === 0) {
     return NextResponse.json(
@@ -66,6 +72,7 @@ export async function PATCH(
       name: updated.name,
       description: updated.description,
       isDifference: updated.isDifference,
+      accountId: updated.accountId,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
     });
@@ -75,6 +82,12 @@ export async function PATCH(
       return NextResponse.json(
         { error: `Rubro ${rubro} no existe` },
         { status: 404 }
+      );
+    }
+    if (code === "P2002") {
+      return NextResponse.json(
+        { error: "Esa cuenta bancaria ya está asignada a otro rubro." },
+        { status: 409 }
       );
     }
     throw e;

@@ -100,7 +100,7 @@ export async function GET(req: Request) {
   }
   const rubros = await prisma.rubroLabel.findMany({
     where: { isDifference: false },
-    select: { rubro: true, name: true },
+    select: { rubro: true, name: true, accountId: true },
   });
   const rubroMap = buildRubroMap(
     accountsForRubro,

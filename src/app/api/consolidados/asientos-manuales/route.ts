@@ -48,7 +48,7 @@ export async function GET(req: Request) {
     // Rubro del banco (HABER del neto) resuelto con la misma cascada que usa
     // Traspasos internos: nombre de cuenta ↔ RubroLabel, o rubro de la entidad.
     const [rubros, entidades] = await Promise.all([
-      prisma.rubroLabel.findMany({ where: { isDifference: false }, select: { rubro: true, name: true } }),
+      prisma.rubroLabel.findMany({ where: { isDifference: false }, select: { rubro: true, name: true, accountId: true } }),
       loadEntidadesInternas(prisma),
     ]);
     const accountsForRubro: AccountForRubro[] = [];

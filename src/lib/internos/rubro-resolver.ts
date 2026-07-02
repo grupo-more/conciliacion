@@ -27,6 +27,8 @@ export interface AccountForRubro {
 export interface RubroLabelLite {
   rubro: number;
   name: string;
+  /** Cuenta bancaria enlazada explícitamente a este rubro (Configuración → Rubros). */
+  accountId?: string | null;
 }
 
 export interface EntidadInternaLiteForRubro {
@@ -61,6 +63,10 @@ export function resolveRubroForAccount(
   rubros: RubroLabelLite[],
   entidades: EntidadInternaLiteForRubro[],
 ): number | null {
+  // 0) Enlace EXPLÍCITO cuenta → rubro (Configuración → Rubros). Fuente de verdad.
+  const explicit = rubros.find((r) => r.accountId && r.accountId === acc.id);
+  if (explicit) return explicit.rubro;
+
   // 1) Exact match de "bankName holderName"
   const accKey = norm(`${acc.bankName} ${acc.holderName}`);
   const exact = rubros.find((r) => norm(r.name) === accKey);
