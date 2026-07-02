@@ -385,8 +385,6 @@ export function CartolasView() {
                 className="input"
                 value={direction}
                 onChange={(e) => setDirection(e.target.value as "" | "IN" | "OUT")}
-                disabled={onlyUnmatched}
-                title={onlyUnmatched ? "El filtro de no conciliados ya implica IN" : undefined}
               >
                 <option value="">Todos</option>
                 <option value="IN">Abonos</option>
@@ -417,28 +415,23 @@ export function CartolasView() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={() =>
-                  setOnlyUnmatched((v) => {
-                    const next = !v;
-                    // "Solo sin conciliar" solo aplica a IN (abonos): el servidor
-                    // fuerza direction=IN. Sincronizamos el estado del cliente para
-                    // que el selector (deshabilitado) refleje lo que se muestra y no
-                    // quede en "Cargos"/"Todos" mostrando abonos.
-                    if (next) setDirection("IN");
-                    return next;
-                  })
-                }
+                onClick={() => setOnlyUnmatched((v) => !v)}
                 className={
                   "rounded-full border px-3 py-1 text-xs font-semibold transition-all " +
                   (onlyUnmatched
                     ? "border-amber-400 bg-amber-50 text-amber-800 ring-2 ring-offset-1 ring-amber-300"
                     : "border-border-soft bg-white text-text-muted hover:bg-bg-soft")
                 }
+                title="Ingresos y egresos sin conciliar (usá el selector Dirección para filtrar abonos/cargos)"
               >
                 {onlyUnmatched ? "✓ " : ""}Solo sin conciliar
-                {summary && (
+                {/* Con el filtro activo: cantidad real mostrada (ambas direcciones).
+                    Sin el filtro: preview de ingresos pendientes. */}
+                {onlyUnmatched ? (
+                  <span className="ml-1 font-bold">{total}</span>
+                ) : summary ? (
                   <span className="ml-1 font-bold">{summary.inPending}</span>
-                )}
+                ) : null}
               </button>
               <button
                 onClick={() =>
@@ -464,7 +457,7 @@ export function CartolasView() {
                   <span className="inline-block w-1 h-3 bg-success rounded-sm" /> Conciliado
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <span className="inline-block w-1 h-3 bg-warn rounded-sm" /> Sin matchear
+                  <span className="inline-block w-1 h-3 bg-warn rounded-sm" /> Sin conciliar
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span className="inline-block w-1 h-3 bg-sky-500 rounded-sm" /> Abono Transbank
@@ -473,7 +466,7 @@ export function CartolasView() {
                   <span className="inline-block w-1 h-3 bg-violet-500 rounded-sm" /> Dif menor
                 </span>
                 <span className="inline-flex items-center gap-1">
-                  <span className="inline-block w-1 h-3 bg-text-muted/30 rounded-sm" /> Egreso (no aplica)
+                  <span className="inline-block w-1 h-3 bg-rose-500 rounded-sm" /> Descartado
                 </span>
                 <span className="inline-flex items-center gap-1">
                   <span className="inline-block w-1 h-3 bg-text-muted/20 rounded-sm" /> No relevante
@@ -765,91 +758,114 @@ function computeRowStatus(m: MovementDTO): RowStatus {
     };
   }
 
-  // Egresos: no aplica conciliación
-  if (m.direction === "OUT") {
+  // ── Conciliado por el motor (Consolidados) — cualquier dirección ──
+  if (m.consolidado) {
+    switch (m.consolidado.status) {
+      case "AUTO_MATCHED":
+        return {
+          label: "Conciliado auto",
+          title: "Vinculado automáticamente por el motor.",
+          borderCls: "w-[3px] bg-success",
+          badgeCls: "border-success/40 bg-success/10 text-success",
+          rowBg: "",
+        };
+      case "MANUAL":
+        return {
+          label: "Conciliado manual",
+          title: "Vinculado manualmente por un operador.",
+          borderCls: "w-[3px] bg-success",
+          badgeCls: "border-success/40 bg-success/10 text-success",
+          rowBg: "",
+        };
+      case "SUGGESTED":
+        return {
+          label: "Sugerido",
+          title: "El motor sugiere este match. Requiere confirmación.",
+          borderCls: "w-[3px] bg-amber-400",
+          badgeCls: "border-amber-400/50 bg-amber-50 text-amber-700",
+          rowBg: "bg-amber-50/30",
+        };
+      case "REVIEW":
+        return {
+          label: "Revisar",
+          title: "Vinculado pero requiere revisión humana.",
+          borderCls: "w-[3px] bg-orange-400",
+          badgeCls: "border-orange-400/50 bg-orange-50 text-orange-700",
+          rowBg: "bg-orange-50/30",
+        };
+      default:
+        return {
+          label: m.consolidado.status,
+          title: "Estado: " + m.consolidado.status,
+          borderCls: "w-[3px] bg-text-muted/30",
+          badgeCls: "border-border-soft bg-bg-soft text-text-muted",
+          rowBg: "",
+        };
+    }
+  }
+
+  // ── Egreso conciliado contra Dynatech (Consolidados → Egresos a terceros) ──
+  if (m.egresoConciliado) {
     return {
-      label: "Egreso",
-      title: "Movimiento de salida — la conciliación no aplica.",
-      borderCls: "w-[3px] bg-text-muted/20",
-      badgeCls: "border-border-soft bg-bg-soft text-text-muted",
+      label: "Conciliado",
+      title: "Egreso conciliado contra Dynatech (Consolidados → Egresos a terceros).",
+      borderCls: "w-[3px] bg-success",
+      badgeCls: "border-success/40 bg-success/10 text-success",
       rowBg: "",
     };
   }
 
-  // IN sin link → puede ser abono Transbank, dif menor (asientos propios) o pendiente
-  if (!m.consolidado) {
-    if (m.transbank) {
-      return {
-        label: "Abono Transbank",
-        title:
-          "Liquidación de Transbank. Tiene asiento propio en Consolidados → tab Abono Transbank.",
-        borderCls: "w-[3px] bg-sky-500",
-        badgeCls: "border-sky-400/40 bg-sky-50 text-sky-700",
-        rowBg: "bg-sky-50/30",
-      };
-    }
-    if (m.difMenor) {
-      return {
-        label: "Dif menor",
-        title:
-          "Transferencia chica (bajo el umbral configurado). Tiene asiento propio en Consolidados → tab Dif menor a 100.",
-        borderCls: "w-[3px] bg-violet-500",
-        badgeCls: "border-violet-400/40 bg-violet-50 text-violet-700",
-        rowBg: "bg-violet-50/30",
-      };
-    }
+  // ── Asiento manual generado ──
+  if (m.asientoManual) {
     return {
-      label: "Sin matchear",
-      title: "Ingreso bancario sin contraparte en Tesorería. Requiere acción.",
+      label: "Asiento manual",
+      title: "Tiene un asiento manual generado (Consolidados → Asientos manuales).",
+      borderCls: "w-[3px] bg-success",
+      badgeCls: "border-success/40 bg-success/10 text-success",
+      rowBg: "",
+    };
+  }
+
+  // ── Egreso (cargo/OUT) sin resolver → pendiente, requiere acción ──
+  if (m.direction === "OUT") {
+    return {
+      label: "Sin conciliar",
+      title:
+        "Cargo (egreso) sin conciliar. Se concilia en Consolidados → Egresos a terceros (o traspaso interno).",
       borderCls: "w-[3px] bg-warn",
       badgeCls: "border-warn/40 bg-warn/10 text-warn",
       rowBg: "bg-warn/[0.03]",
     };
   }
 
-  // IN con link según status del Consolidado
-  switch (m.consolidado.status) {
-    case "AUTO_MATCHED":
-      return {
-        label: "Conciliado auto",
-        title: "Vinculado automáticamente por el motor.",
-        borderCls: "w-[3px] bg-success",
-        badgeCls: "border-success/40 bg-success/10 text-success",
-        rowBg: "",
-      };
-    case "MANUAL":
-      return {
-        label: "Conciliado manual",
-        title: "Vinculado manualmente por un operador.",
-        borderCls: "w-[3px] bg-success",
-        badgeCls: "border-success/40 bg-success/10 text-success",
-        rowBg: "",
-      };
-    case "SUGGESTED":
-      return {
-        label: "Sugerido",
-        title: "El motor sugiere este match. Requiere confirmación.",
-        borderCls: "w-[3px] bg-amber-400",
-        badgeCls: "border-amber-400/50 bg-amber-50 text-amber-700",
-        rowBg: "bg-amber-50/30",
-      };
-    case "REVIEW":
-      return {
-        label: "Revisar",
-        title: "Vinculado pero requiere revisión humana.",
-        borderCls: "w-[3px] bg-orange-400",
-        badgeCls: "border-orange-400/50 bg-orange-50 text-orange-700",
-        rowBg: "bg-orange-50/30",
-      };
-    default:
-      return {
-        label: m.consolidado.status,
-        title: "Estado: " + m.consolidado.status,
-        borderCls: "w-[3px] bg-text-muted/30",
-        badgeCls: "border-border-soft bg-bg-soft text-text-muted",
-        rowBg: "",
-      };
+  // ── Ingreso (IN) sin resolver → Abono Transbank / Dif menor / Sin matchear ──
+  if (m.transbank) {
+    return {
+      label: "Abono Transbank",
+      title:
+        "Liquidación de Transbank. Tiene asiento propio en Consolidados → tab Abono Transbank.",
+      borderCls: "w-[3px] bg-sky-500",
+      badgeCls: "border-sky-400/40 bg-sky-50 text-sky-700",
+      rowBg: "bg-sky-50/30",
+    };
   }
+  if (m.difMenor) {
+    return {
+      label: "Dif menor",
+      title:
+        "Transferencia chica (bajo el umbral configurado). Tiene asiento propio en Consolidados → tab Dif menor a 100.",
+      borderCls: "w-[3px] bg-violet-500",
+      badgeCls: "border-violet-400/40 bg-violet-50 text-violet-700",
+      rowBg: "bg-violet-50/30",
+    };
+  }
+  return {
+    label: "Sin matchear",
+    title: "Ingreso bancario sin contraparte en Tesorería. Requiere acción.",
+    borderCls: "w-[3px] bg-warn",
+    badgeCls: "border-warn/40 bg-warn/10 text-warn",
+    rowBg: "bg-warn/[0.03]",
+  };
 }
 
 function CartolaSummaryStrip({

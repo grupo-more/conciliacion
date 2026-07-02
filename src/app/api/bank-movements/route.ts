@@ -89,10 +89,13 @@ export async function GET(req: Request) {
   }
 
   if (onlyUnmatched) {
-    // Solo IN sin link a ningun Consolidado y que NO sean abonos Transbank
-    // (esos tienen su propio asiento en el tab Abono Transbank de Consolidados).
-    where.direction = "IN";
+    // "Sin conciliar" = sin NINGUNA resolución: sin link del motor, sin
+    // conciliación de egreso a tercero y sin asiento manual. Aplica a ingresos
+    // Y egresos (respeta el filtro de dirección que elija el usuario). Se
+    // excluyen abonos Transbank (tienen su asiento propio) y cuentas de uso parcial.
     where.consolidadoLinks = { none: {} };
+    where.egresoConciliacionLinks = { none: {} };
+    where.asientoManual = { is: null };
     where.NOT = [
       {
         AND: [
@@ -101,7 +104,6 @@ export async function GET(req: Request) {
         ],
       },
     ];
-    // Cuentas de uso parcial: sus movimientos no son "sin conciliar".
     where.account = { isNot: usoParcialAccountWhere };
   }
 
@@ -128,6 +130,13 @@ export async function GET(req: Request) {
           },
           take: 1,
         },
+        // Conciliación de egreso a tercero (para el estado de los cargos/OUT).
+        egresoConciliacionLinks: {
+          include: { conciliacion: { select: { status: true } } },
+          take: 1,
+        },
+        // Asiento manual generado (también cuenta como resuelto).
+        asientoManual: { select: { id: true } },
       },
     }),
     prisma.bankMovement.count({ where }),
@@ -388,6 +397,10 @@ export async function GET(req: Request) {
       const consolidado = link
         ? { id: link.consolidado.id, status: link.consolidado.status }
         : null;
+      const egresoLink = m.egresoConciliacionLinks[0];
+      const egresoConciliado = egresoLink
+        ? { status: egresoLink.conciliacion.status }
+        : null;
       return {
         id: m.id,
         accountId: m.accountId,
@@ -406,6 +419,8 @@ export async function GET(req: Request) {
         branchLabel: m.branchLabel,
         txType: m.txType,
         consolidado,
+        egresoConciliado,
+        asientoManual: m.asientoManual != null,
         transbank: isTransbank(m),
         difMenor: !isTransbank(m) && isDifMenor(m, difThreshold),
         noRelevante: isUsoParcialAccount(m.account),

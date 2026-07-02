@@ -40,6 +40,10 @@ export interface MovementDTO {
   /** Si el BankMovement esta vinculado a un Consolidado, se incluye su id+status.
    *  null = no esta vinculado (sin matchear, abono Transbank, o egreso). */
   consolidado: { id: string; status: string } | null;
+  /** Conciliación de egreso a tercero (cargo OUT ↔ Dynatech EGRESO), o null. */
+  egresoConciliado: { status: string } | null;
+  /** True si el movimiento tiene un asiento manual generado (también = resuelto). */
+  asientoManual: boolean;
   /** True si la glosa matchea el patrón de abono Transbank ("ABN CRD ... TRANSBA").
    *  Estos movimientos no se concilian con Tesorería — tienen su propio asiento
    *  en el tab "Abono Transbank" de Consolidados. */
