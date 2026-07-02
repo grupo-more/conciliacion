@@ -89,11 +89,11 @@ function num(v: number | string | null | undefined): number {
 }
 
 /**
- * Genera y descarga el .xls con el layout ASI1 exacto que importa gestión.
- * @param opts   Datos de cabecera + líneas del asiento.
- * @param filename Nombre del archivo SIN extensión (se agrega .xls).
+ * Construye la hoja ASI1 (worksheet) con el layout exacto que importa gestión.
+ * Reutilizable para: archivo suelto, ZIP (varias hojas en workbooks separados)
+ * y workbook multi-hoja (auditoría).
  */
-export function exportAsi1Xls(opts: Asi1Options, filename: string): void {
+export function buildAsi1Sheet(opts: Asi1Options): XLSX.WorkSheet {
   const { fecha, descripcion, lineas } = opts;
   const sucursal = opts.sucursal ?? 1;
   const tipoAsiento = opts.tipoAsiento ?? 0;
@@ -159,8 +159,84 @@ export function exportAsi1Xls(opts: Asi1Options, filename: string): void {
   const lastRow = row + Math.max(lineas.length, 1);
 
   ws["!ref"] = `A1:S${lastRow}`;
+  return ws;
+}
 
+/**
+ * Genera y descarga el .xls con el layout ASI1 exacto que importa gestión.
+ * @param opts   Datos de cabecera + líneas del asiento.
+ * @param filename Nombre del archivo SIN extensión (se agrega .xls).
+ */
+export function exportAsi1Xls(opts: Asi1Options, filename: string): void {
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "ASI1");
+  XLSX.utils.book_append_sheet(wb, buildAsi1Sheet(opts), "ASI1");
   XLSX.writeFile(wb, `${filename}.xls`, { bookType: "biff8" });
+}
+
+/** Entrada de un asiento para el ZIP: opciones + nombre de archivo (sin ext). */
+export interface Asi1ZipEntry {
+  options: Asi1Options;
+  filename: string;
+}
+
+/**
+ * Descarga un ZIP con un .xls ASI1 por cada entrada (cada uno un workbook
+ * independiente con su hoja "ASI1", listo para importar de a uno).
+ */
+export async function exportAsi1Zip(entries: Asi1ZipEntry[], zipName: string): Promise<void> {
+  const { default: JSZip } = await import("jszip");
+  const zip = new JSZip();
+  const usados = new Set<string>();
+  for (const { options, filename } of entries) {
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, buildAsi1Sheet(options), "ASI1");
+    const buf = XLSX.write(wb, { type: "array", bookType: "biff8" }) as ArrayBuffer;
+    // Evita nombres repetidos dentro del zip.
+    let name = `${filename}.xls`;
+    let n = 2;
+    while (usados.has(name)) name = `${filename} (${n++}).xls`;
+    usados.add(name);
+    zip.file(name, buf);
+  }
+  const blob = await zip.generateAsync({ type: "blob" });
+  triggerDownload(blob, `${zipName}.zip`);
+}
+
+/** Sanea un nombre para hoja de Excel (≤31 chars, sin : \\ / ? * [ ]). */
+function safeSheetName(name: string, taken: Set<string>): string {
+  let base = (name || "Hoja").replace(/[:\\/?*[\]]/g, " ").trim().slice(0, 28) || "Hoja";
+  let n = base;
+  let i = 2;
+  while (taken.has(n)) n = `${base.slice(0, 28)} ${i++}`;
+  taken.add(n);
+  return n;
+}
+
+/**
+ * Descarga UN .xls con varias hojas ASI1 (una por entrada). Para AUDITORÍA:
+ * ver todo el asiento en un archivo. NO sirve para importar (el importador
+ * espera una sola hoja "ASI1"); para eso está exportAsi1Zip.
+ */
+export function exportAsi1MultiSheet(
+  sheets: Array<{ name: string; options: Asi1Options }>,
+  filename: string,
+): void {
+  const wb = XLSX.utils.book_new();
+  const taken = new Set<string>();
+  for (const { name, options } of sheets) {
+    XLSX.utils.book_append_sheet(wb, buildAsi1Sheet(options), safeSheetName(name, taken));
+  }
+  XLSX.writeFile(wb, `${filename}.xls`, { bookType: "biff8" });
+}
+
+/** Dispara la descarga de un Blob en el navegador. */
+function triggerDownload(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }

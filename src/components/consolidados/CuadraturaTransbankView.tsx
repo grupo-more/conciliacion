@@ -2,7 +2,12 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
-import { exportAsi1Xls, type Asi1Options } from "@/lib/asientos/exportAsi1";
+import {
+  exportAsi1Zip,
+  exportAsi1MultiSheet,
+  type Asi1Options,
+  type Asi1ZipEntry,
+} from "@/lib/asientos/exportAsi1";
 import { Asi1PreviewModal, printAsi1 } from "./Asi1Preview";
 
 type AsientoSide = "DEBE" | "HABER";
@@ -389,11 +394,7 @@ function PreviewBlock({
     fecha: to,
     descripcion: `Cuadratura Transbank ${formatDate(from)} al ${formatDate(to)}`,
   };
-  const filename = `cuadratura_transbank_${from}_${to}`;
-
-  function exportXlsx() {
-    exportAsientoXlsx(a, filename, asi1Opts);
-  }
+  const periodo = `${formatDate(from)} al ${formatDate(to)}`;
 
   return (
     <div className="space-y-4">
@@ -416,8 +417,21 @@ function PreviewBlock({
           >
             Vista previa
           </button>
-          <button onClick={exportXlsx} disabled={!hasRows} className="btn-ghost text-sm">
-            Descargar Excel
+          <button
+            onClick={() => descargarTodoZip(a, to, periodo, `cuadratura_${from}_${to}`)}
+            disabled={!hasRows}
+            className="btn-ghost text-sm"
+            title="ZIP con un asiento por sucursal + la consolidación (para importar de a uno)"
+          >
+            Descargar todo (ZIP)
+          </button>
+          <button
+            onClick={() => descargarAuditoria(a, to, periodo, `cuadratura_auditoria_${from}_${to}`)}
+            disabled={!hasRows}
+            className="btn-ghost text-sm"
+            title="Un Excel con todas las sucursales + consolidación (para auditar, no para importar)"
+          >
+            Auditar
           </button>
           <button
             onClick={onGenerar}
@@ -434,7 +448,7 @@ function PreviewBlock({
       {preview && (
         <Asi1PreviewModal
           options={buildAsi1Options(a, asi1Opts)}
-          filename={filename}
+          filename={`cuadratura_transbank_${from}_${to}`}
           onClose={() => setPreview(false)}
         />
       )}
@@ -912,6 +926,8 @@ function CuadraturaModal({
     fecha: c.hasta,
     descripcion: `Cuadratura Transbank ${formatDate(c.desde)} al ${formatDate(c.hasta)}`,
   };
+  const periodo = `${formatDate(c.desde)} al ${formatDate(c.hasta)}`;
+  const stamp = `${c.desde.slice(0, 10)}_${c.hasta.slice(0, 10)}`;
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-panel max-w-4xl" onClick={(e) => e.stopPropagation()}>
@@ -927,10 +943,18 @@ function CuadraturaModal({
               Imprimir
             </button>
             <button
-              onClick={() => exportAsientoXlsx(asiento, `cuadratura_${c.id.slice(0, 8)}`, asi1Opts)}
+              onClick={() => descargarTodoZip(asiento, c.hasta, periodo, `cuadratura_${stamp}`)}
               className="btn-ghost text-sm"
+              title="ZIP con un asiento por sucursal + la consolidación (para importar de a uno)"
             >
-              Excel
+              Descargar todo (ZIP)
+            </button>
+            <button
+              onClick={() => descargarAuditoria(asiento, c.hasta, periodo, `cuadratura_auditoria_${stamp}`)}
+              className="btn-ghost text-sm"
+              title="Un Excel con todas las sucursales + consolidación (para auditar)"
+            >
+              Auditar
             </button>
             <button onClick={onDeshacer} disabled={busy} className="btn-ghost text-sm text-rose-700">
               Deshacer
@@ -965,10 +989,46 @@ function buildAsi1Options(
   };
 }
 
-function exportAsientoXlsx(
-  a: Asiento,
-  filename: string,
-  opts: { fecha: string; descripcion: string },
-) {
-  exportAsi1Xls(buildAsi1Options(a, opts), filename);
+/* ---- Separación por sucursal + consolidación (ZIP) y auditoría (multi-hoja) ---- */
+
+const mapLineas = (lineas: AsientoLinea[]): Asi1Options["lineas"] =>
+  lineas.map((l) => ({ rubro: l.rubro, detalle: l.detalle, debe: l.debe, haber: l.haber }));
+
+/** Opciones ASI1 del asiento de UNA sucursal. */
+function sucursalOptions(s: SucursalAsiento, fecha: string, periodo: string): Asi1Options {
+  const nombre = s.sucursalName ?? `#${s.sucursalId}`;
+  return { fecha, descripcion: `Cuadratura Transbank ${nombre} ${periodo}`, lineas: mapLineas(s.lineas) };
+}
+
+/** Opciones ASI1 del asiento de consolidación. */
+function consolidacionOptions(a: Asiento, fecha: string, periodo: string): Asi1Options {
+  return {
+    fecha,
+    descripcion: `Cuadratura Transbank consolidación ${periodo}`,
+    lineas: mapLineas(a.consolidacion.lineas),
+  };
+}
+
+function slug(s: string): string {
+  return (s || "").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 30) || "sucursal";
+}
+
+/** ZIP: un .xls ASI1 por sucursal + uno de consolidación (para importar de a uno). */
+function descargarTodoZip(a: Asiento, fecha: string, periodo: string, zipName: string) {
+  const entries: Asi1ZipEntry[] = a.sucursales.map((s) => ({
+    options: sucursalOptions(s, fecha, periodo),
+    filename: `sucursal_${s.sucursalCodigo ?? s.sucursalId}_${slug(s.sucursalName ?? "")}`,
+  }));
+  entries.push({ options: consolidacionOptions(a, fecha, periodo), filename: "consolidacion" });
+  return exportAsi1Zip(entries, zipName);
+}
+
+/** Excel multi-hoja (una por sucursal + consolidación) — solo para auditar. */
+function descargarAuditoria(a: Asiento, fecha: string, periodo: string, filename: string) {
+  const sheets = a.sucursales.map((s) => ({
+    name: s.sucursalName ?? `Suc ${s.sucursalId}`,
+    options: sucursalOptions(s, fecha, periodo),
+  }));
+  sheets.push({ name: "Consolidacion", options: consolidacionOptions(a, fecha, periodo) });
+  exportAsi1MultiSheet(sheets, filename);
 }
