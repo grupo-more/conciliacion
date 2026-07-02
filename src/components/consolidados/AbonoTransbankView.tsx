@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
-import { exportAsi1Xls, type Asi1Options } from "@/lib/asientos/exportAsi1";
+import { exportAsi1Xls, pickDescripcion, type Asi1Options } from "@/lib/asientos/exportAsi1";
 import { Asi1PreviewModal } from "./Asi1Preview";
 
 interface AbonoTransbankRow {
@@ -83,7 +83,7 @@ export function AbonoTransbankView() {
         descripcion: `Abono Transbank ${formatDate(from)} al ${formatDate(to)}`,
         lineas: data.rows.map((r) => ({
           rubro: r.rubro,
-          detalle: r.detalle,
+          detalle: pickDescripcion(r.cliente, r.glosa, r.detalle),
           debe: r.debe,
           haber: r.haber,
         })),

@@ -63,6 +63,8 @@ export async function GET(req: Request) {
     detalle: string;
     cuenta: string | null;
     glosa: string;
+    /** Contraparte (proveedor): para la descripción del asiento (contraparte → glosa). */
+    counterparty: string | null;
     debe: string | null;
     haber: string | null;
     status: string;
@@ -86,6 +88,10 @@ export async function GET(req: Request) {
       (tm.sucursalId ? `Sucursal ${tm.sucursalId}` : "Gasto");
     const absTm = tm.monto < 0n ? -tm.monto : tm.monto;
 
+    // Contraparte (proveedor): del documento de Tesorería o de la cartola vinculada.
+    const counterparty =
+      tm.clienteName?.trim() || c.links[0]?.bankMovement.counterpartyName || null;
+
     // Lado GASTO (debe) — uno por consolidado (1 documento de Tesorería).
     rows.push({
       groupId: c.id,
@@ -96,6 +102,7 @@ export async function GET(req: Request) {
       detalle: detalleGasto,
       cuenta: tm.sucursalName,
       glosa: tm.glosa,
+      counterparty,
       debe: absTm.toString(),
       haber: null,
       status: c.status,
@@ -118,6 +125,7 @@ export async function GET(req: Request) {
         detalle: `${bm.account.bankName} ${bm.account.holderName}`,
         cuenta: bm.account.displayNumber || bm.account.accountNumber,
         glosa: bm.counterpartyName || bm.description || "",
+        counterparty: bm.counterpartyName || counterparty,
         debe: null,
         haber: bmAbs.toString(),
         status: c.status,

@@ -46,6 +46,22 @@ export interface Asi1Options {
   lineas: Asi1Linea[];
 }
 
+/**
+ * Descripción de una línea de asiento: cliente/contraparte → si vacío, glosa →
+ * si vacío, fallback (nunca deja la celda en blanco ni con el placeholder "—").
+ */
+export function pickDescripcion(
+  primary: string | null | undefined,
+  glosa: string | null | undefined,
+  fallback: string,
+): string {
+  const clean = (s: string | null | undefined) => {
+    const t = (s ?? "").trim();
+    return t && t !== "—" ? t : "";
+  };
+  return clean(primary) || clean(glosa) || fallback;
+}
+
 /** Días entre 1899-12-30 (epoch de Excel) y 1970-01-01. */
 const EXCEL_EPOCH_OFFSET = 25569;
 
