@@ -39,6 +39,8 @@ export async function POST(req: Request) {
       accountId: true,
       dedupKey: true,
       descartadoAt: true,
+      description: true,
+      postDate: true,
       asientoManual: { select: { id: true } },
       _count: { select: { consolidadoLinks: true, egresoConciliacionLinks: true } },
     },
@@ -53,16 +55,22 @@ export async function POST(req: Request) {
   });
   const cajaMatchedSet = new Set(cajaMatched.map((c) => c.bankMovementId));
 
-  // Un movimiento está "resuelto" si tiene link del motor, link de egreso a
-  // tercero, un asiento manual generado o un match de caja. Esos se bloquean:
-  // hay que deshacer primero. El resto se puede descartar.
-  const resuelto = (m: (typeof movements)[number]) =>
-    m._count.consolidadoLinks > 0 ||
-    m._count.egresoConciliacionLinks > 0 ||
-    m.asientoManual != null ||
-    cajaMatchedSet.has(m.id);
-  const bloqueados = movements.filter(resuelto);
-  const aDescartar = movements.filter((m) => !resuelto(m) && !m.descartadoAt);
+  // Motivos por los que un movimiento está "resuelto" (bloqueado para descartar).
+  // Se listan explícitamente para que el usuario sepa DÓNDE está el vínculo,
+  // porque algunos (caja) no se ven en las tabs de Consolidados.
+  const motivosDe = (m: (typeof movements)[number]): string[] => {
+    const ms: string[] = [];
+    if (m._count.consolidadoLinks > 0) ms.push("vínculo del motor (Consolidados)");
+    if (m._count.egresoConciliacionLinks > 0) ms.push("conciliación de egreso a tercero");
+    if (m.asientoManual != null) ms.push("asiento manual generado");
+    if (cajaMatchedSet.has(m.id)) ms.push("match de conciliación de caja (Movimientos)");
+    return ms;
+  };
+  const bloqueados = movements
+    .map((m) => ({ m, motivos: motivosDe(m) }))
+    .filter((x) => x.motivos.length > 0);
+  const bloqueadoIds = new Set(bloqueados.map((x) => x.m.id));
+  const aDescartar = movements.filter((m) => !bloqueadoIds.has(m.id) && !m.descartadoAt);
 
   const now = new Date();
   let descartados = 0;
@@ -87,14 +95,31 @@ export async function POST(req: Request) {
     descartados = aDescartar.length;
   }
 
+  // Detalle legible de los bloqueados: fecha + glosa + motivo(s).
+  const detalleBloqueados = bloqueados.map((x) => ({
+    id: x.m.id,
+    fecha: x.m.postDate.toISOString().slice(0, 10),
+    glosa: x.m.description,
+    motivos: x.motivos,
+  }));
+
+  let mensaje: string;
+  if (bloqueados.length === 0) {
+    mensaje = `${descartados} movimiento(s) enviado(s) a descartados.`;
+  } else {
+    const lineas = detalleBloqueados
+      .map((d) => `• ${d.fecha} · ${d.glosa} → ${d.motivos.join(" + ")}`)
+      .join("\n");
+    mensaje =
+      `${descartados} descartado(s). ${bloqueados.length} bloqueado(s) porque tienen un vínculo activo ` +
+      `(hay que deshacerlo primero):\n${lineas}`;
+  }
+
   return NextResponse.json({
     descartados,
-    bloqueados: bloqueados.map((m) => m.id),
+    bloqueados: detalleBloqueados,
     yaDescartados: movements.filter((m) => m.descartadoAt).map((m) => m.id),
-    mensaje:
-      bloqueados.length > 0
-        ? `${descartados} descartado(s). ${bloqueados.length} no se descartaron porque ya están conciliados: desvinculá primero.`
-        : `${descartados} movimiento(s) enviado(s) a descartados.`,
+    mensaje,
   });
 }
 
