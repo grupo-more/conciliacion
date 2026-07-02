@@ -68,6 +68,9 @@ export interface BranchSummary {
   ventasTotal: number;
   matchedCount: number;
   matchRate: number;
+  movCount: number;
+  sinClienteCount: number;
+  sinClienteTotal: number;
 }
 
 export interface CashierSummary {
@@ -77,6 +80,9 @@ export interface CashierSummary {
   ventasTotal: number;
   glosaQualityCounts: { excellent: number; good: number; fair: number; poor: number };
   glosaQualityScore: number;
+  movCount: number;
+  sinClienteCount: number;
+  sinClienteTotal: number;
 }
 
 export interface AlertItem {

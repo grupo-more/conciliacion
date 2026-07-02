@@ -505,32 +505,49 @@ export interface BranchSummary {
   ventasTotal: number;
   matchedCount: number;
   matchRate: number;
+  /** Movimientos del período (todos, excluye anulados). Denominador de la auditoría. */
+  movCount: number;
+  /** Movimientos sin cliente (clienteName vacío). */
+  sinClienteCount: number;
+  sinClienteTotal: number;
 }
 
 export async function computeTopBranches(range: PeriodRange): Promise<BranchSummary[]> {
-  // Migrado a TesoreriaMovement + Consolidado.
+  // Migrado a TesoreriaMovement + Consolidado. Ventas se calculan por CASE (no se
+  // filtra la fila) para poder contar TODOS los movimientos y, sobre ese universo,
+  // los "sin cliente" (auditoría). Se excluyen anulados (estado ANU).
   const rows = await prisma.$queryRaw<
     Array<{
       sucursal_id: number;
       sucursal_name: string | null;
+      mov_count: bigint;
       ventas_count: bigint;
       ventas_total: bigint;
       matched_count: bigint;
+      sin_cliente_count: bigint;
+      sin_cliente_total: bigint;
     }>
   >`
     SELECT
       t.sucursal_id,
       t.sucursal_name,
-      COUNT(*)::bigint AS ventas_count,
-      COALESCE(SUM(t.monto), 0)::bigint AS ventas_total,
-      COUNT(CASE WHEN c.status IN ('AUTO_MATCHED','MANUAL') THEN 1 END)::bigint AS matched_count
+      COUNT(*)::bigint AS mov_count,
+      COUNT(CASE WHEN EXISTS (
+        SELECT 1 FROM jsonb_array_elements(t.items) AS item
+        WHERE (item->>'nombre') ILIKE 'Venta%'
+      ) THEN 1 END)::bigint AS ventas_count,
+      COALESCE(SUM(CASE WHEN EXISTS (
+        SELECT 1 FROM jsonb_array_elements(t.items) AS item
+        WHERE (item->>'nombre') ILIKE 'Venta%'
+      ) THEN t.monto ELSE 0 END), 0)::bigint AS ventas_total,
+      COUNT(CASE WHEN c.status IN ('AUTO_MATCHED','MANUAL') THEN 1 END)::bigint AS matched_count,
+      COUNT(CASE WHEN t.cliente_name IS NULL OR btrim(t.cliente_name) = '' THEN 1 END)::bigint AS sin_cliente_count,
+      COALESCE(SUM(CASE WHEN t.cliente_name IS NULL OR btrim(t.cliente_name) = '' THEN t.monto ELSE 0 END), 0)::bigint AS sin_cliente_total
     FROM "TesoreriaMovement" t
     LEFT JOIN "Consolidado" c ON c.tesoreria_movement_id = t.id
     WHERE t.fecha >= ${range.start} AND t.fecha < ${range.end}
-      AND EXISTS (
-        SELECT 1 FROM jsonb_array_elements(t.items) AS item
-        WHERE (item->>'nombre') ILIKE 'Venta%'
-      )
+      AND COALESCE(t.estado_actual, '') <> 'ANU'
+      AND t.clase_operacion IS DISTINCT FROM 'TBK'
     GROUP BY t.sucursal_id, t.sucursal_name
     ORDER BY ventas_total DESC
     LIMIT 10
@@ -546,6 +563,9 @@ export async function computeTopBranches(range: PeriodRange): Promise<BranchSumm
       ventasTotal: Number(r.ventas_total),
       matchedCount: matched,
       matchRate: ventas > 0 ? matched / ventas : 0,
+      movCount: Number(r.mov_count),
+      sinClienteCount: Number(r.sin_cliente_count),
+      sinClienteTotal: Number(r.sin_cliente_total),
     };
   });
 }
@@ -557,17 +577,28 @@ export interface CashierSummary {
   ventasTotal: number;
   glosaQualityCounts: { excellent: number; good: number; fair: number; poor: number };
   glosaQualityScore: number; // 0-100
+  /** Movimientos del período (todos, excluye anulados). Denominador de la auditoría. */
+  movCount: number;
+  /** Movimientos sin cliente (clienteName vacío). */
+  sinClienteCount: number;
+  sinClienteTotal: number;
 }
 
 /**
- * Top cajeros por volumen + calidad de glosa.
- * Calcula la calidad parseando cada glosa (en memoria, escala bien a miles).
+ * Top cajeros por volumen + calidad de glosa + auditoría de "sin cliente".
+ * La calidad de glosa se calcula sobre ventas; los contadores de movimientos y
+ * "sin cliente" se calculan sobre TODOS los movimientos del período (excluye
+ * anulados). Parseo de glosa en memoria (escala bien a miles).
  */
 export async function computeTopCashiers(range: PeriodRange): Promise<CashierSummary[]> {
-  // Migrado a TesoreriaMovement.
+  // Migrado a TesoreriaMovement. Excluye anulados (estado ANU).
   const movs = await prisma.tesoreriaMovement.findMany({
     where: {
       fecha: { gte: range.start, lt: range.end },
+      NOT: { estadoActual: "ANU" },
+      // Excluye ventas con tarjeta (TBK): por naturaleza no traen cliente y se
+      // cuadran aparte en Cruce Transbank. Mismo criterio que el motor/Lista.
+      claseOperacion: { not: "TBK" },
     },
     select: {
       cajeroUsername: true,
@@ -575,17 +606,19 @@ export async function computeTopCashiers(range: PeriodRange): Promise<CashierSum
       glosa: true,
       monto: true,
       items: true,
+      clienteName: true,
     },
   });
 
-  // Filtrar solo Ventas
-  const ventas = movs.filter((m) => {
+  const isVenta = (m: (typeof movs)[number]) => {
     const items = m.items as Array<{ nombre?: string }> | null;
     return Array.isArray(items) && items.some((i) => i?.nombre?.toLowerCase().startsWith("venta"));
-  });
+  };
 
   const grouped = new Map<string, CashierSummary>();
-  for (const m of ventas) {
+  // Agregamos sobre TODOS los movimientos (no solo ventas): así aparecen también
+  // cajeros de solo depósitos y el "sin cliente" cubre todo el universo.
+  for (const m of movs) {
     const key = m.cajeroUsername;
     let agg = grouped.get(key);
     if (!agg) {
@@ -596,19 +629,31 @@ export async function computeTopCashiers(range: PeriodRange): Promise<CashierSum
         ventasTotal: 0,
         glosaQualityCounts: { excellent: 0, good: 0, fair: 0, poor: 0 },
         glosaQualityScore: 0,
+        movCount: 0,
+        sinClienteCount: 0,
+        sinClienteTotal: 0,
       };
       grouped.set(key, agg);
     }
     // Si entró sin nombre y un movimiento posterior lo trae, completarlo
     if (!agg.cashierName && m.cajeroName) agg.cashierName = m.cajeroName;
-    agg.ventasCount++;
-    agg.ventasTotal += Number(m.monto);
 
-    const q = parseGlosa(m.glosa || "").quality;
-    if (q === "EXCELLENT") agg.glosaQualityCounts.excellent++;
-    else if (q === "GOOD") agg.glosaQualityCounts.good++;
-    else if (q === "FAIR") agg.glosaQualityCounts.fair++;
-    else agg.glosaQualityCounts.poor++;
+    agg.movCount++;
+    if (!m.clienteName || m.clienteName.trim() === "") {
+      agg.sinClienteCount++;
+      agg.sinClienteTotal += Number(m.monto);
+    }
+
+    // Métricas de ventas + calidad de glosa: solo sobre ventas.
+    if (isVenta(m)) {
+      agg.ventasCount++;
+      agg.ventasTotal += Number(m.monto);
+      const q = parseGlosa(m.glosa || "").quality;
+      if (q === "EXCELLENT") agg.glosaQualityCounts.excellent++;
+      else if (q === "GOOD") agg.glosaQualityCounts.good++;
+      else if (q === "FAIR") agg.glosaQualityCounts.fair++;
+      else agg.glosaQualityCounts.poor++;
+    }
   }
 
   // Score: ponderado (excellent=100, good=75, fair=40, poor=0)

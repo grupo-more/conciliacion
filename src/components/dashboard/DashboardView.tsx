@@ -9,7 +9,14 @@ import { KPIDetailModal, type KPIKind } from "./KPIDetailModal";
 import { PipelineCard } from "./PipelineCard";
 import { TopBranches } from "./TopBranches";
 import { TopCashiers } from "./TopCashiers";
+import { SinClienteModal } from "./SinClienteModal";
 import type { DashboardData, Period } from "./types";
+
+/** Drill-down de auditoría "sin cliente": por sucursal, por cajero, o global. */
+type SinClienteDrill =
+  | { scope: "all" }
+  | { scope: "sucursal"; sucursalId: number }
+  | { scope: "cajero"; cajero: string };
 
 const REFRESH_INTERVAL_MS = 60_000;
 
@@ -20,6 +27,7 @@ export function DashboardView() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedKPI, setSelectedKPI] = useState<KPIKind | null>(null);
+  const [sinClienteDrill, setSinClienteDrill] = useState<SinClienteDrill | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   async function load(silent = false) {
@@ -137,8 +145,20 @@ export function DashboardView() {
             </div>
             <div className="space-y-4">
               <PipelineCard pipeline={data.pipeline} />
-              <TopBranches branches={data.topBranches} />
-              <TopCashiers cashiers={data.topCashiers} />
+              <TopBranches
+                branches={data.topBranches}
+                onDrillSinCliente={(sucursalId) =>
+                  setSinClienteDrill(
+                    sucursalId != null ? { scope: "sucursal", sucursalId } : { scope: "all" },
+                  )
+                }
+              />
+              <TopCashiers
+                cashiers={data.topCashiers}
+                onDrillSinCliente={(cajero) =>
+                  setSinClienteDrill(cajero ? { scope: "cajero", cajero } : { scope: "all" })
+                }
+              />
             </div>
           </div>
 
@@ -154,6 +174,24 @@ export function DashboardView() {
           pipeline={data.pipeline}
           periodLabel={periodLabel}
           onClose={() => setSelectedKPI(null)}
+        />
+      )}
+
+      {/* Drill-down auditoría: movimientos sin cliente */}
+      {sinClienteDrill && data && (
+        <SinClienteModal
+          from={data.range.start}
+          to={data.range.end}
+          sucursalId={sinClienteDrill.scope === "sucursal" ? sinClienteDrill.sucursalId : undefined}
+          cajero={sinClienteDrill.scope === "cajero" ? sinClienteDrill.cajero : undefined}
+          titulo={
+            sinClienteDrill.scope === "sucursal"
+              ? "Filtrado por sucursal"
+              : sinClienteDrill.scope === "cajero"
+              ? "Filtrado por cajero"
+              : `Todo el período · ${periodLabel}`
+          }
+          onClose={() => setSinClienteDrill(null)}
         />
       )}
     </div>
