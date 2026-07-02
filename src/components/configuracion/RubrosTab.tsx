@@ -9,6 +9,8 @@ interface Rubro {
   isDifference: boolean;
   accountId: string | null;
   accountLabel: string | null;
+  sucursalId: string | null;
+  sucursalLabel: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -21,6 +23,7 @@ interface CuentaOption {
 export function RubrosTab() {
   const [rubros, setRubros] = useState<Rubro[]>([]);
   const [cuentas, setCuentas] = useState<CuentaOption[]>([]);
+  const [sucursales, setSucursales] = useState<CuentaOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
@@ -57,9 +60,24 @@ export function RubrosTab() {
     );
   }
 
+  async function loadSucursales() {
+    const res = await fetch("/api/sucursales");
+    if (!res.ok) return;
+    const data = await res.json();
+    setSucursales(
+      (data.sucursales ?? [])
+        .filter((s: { active?: boolean }) => s.active !== false)
+        .map((s: { id: string; codigo: number | null; nombre: string }) => ({
+          id: s.id,
+          label: `${s.codigo != null ? s.codigo + " · " : ""}${s.nombre}`,
+        })),
+    );
+  }
+
   useEffect(() => {
     load();
     loadCuentas();
+    loadSucursales();
   }, []);
 
   return (
@@ -90,6 +108,7 @@ export function RubrosTab() {
               <th className="px-4 py-2 text-left w-24">Código</th>
               <th className="px-4 py-2 text-left">Nombre</th>
               <th className="px-4 py-2 text-left">Cuenta banco</th>
+              <th className="px-4 py-2 text-left">Sucursal</th>
               <th className="px-4 py-2 text-left">Descripción</th>
               <th className="px-4 py-2 text-center w-32">Diferencias</th>
               <th className="px-4 py-2 text-right w-32">Acciones</th>
@@ -98,14 +117,14 @@ export function RubrosTab() {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-text-muted">
+                <td colSpan={7} className="px-4 py-6 text-center text-text-muted">
                   Cargando…
                 </td>
               </tr>
             )}
             {!loading && rubros.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-text-muted">
+                <td colSpan={7} className="px-4 py-6 text-center text-text-muted">
                   No hay rubros aún. Crea el primero con "+ Nuevo rubro".
                 </td>
               </tr>
@@ -119,6 +138,15 @@ export function RubrosTab() {
                     {r.accountLabel ? (
                       <span className="inline-block rounded-full bg-brand/10 text-brand text-[11px] px-2 py-0.5">
                         {r.accountLabel}
+                      </span>
+                    ) : (
+                      <span className="text-text-dim">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-text-muted">
+                    {r.sucursalLabel ? (
+                      <span className="inline-block rounded-full bg-accent/10 text-accent text-[11px] px-2 py-0.5">
+                        {r.sucursalLabel}
                       </span>
                     ) : (
                       <span className="text-text-dim">—</span>
@@ -160,6 +188,7 @@ export function RubrosTab() {
         <RubroFormModal
           mode="create"
           cuentas={cuentas}
+          sucursales={sucursales}
           onClose={() => setShowCreate(false)}
           onSaved={() => {
             setShowCreate(false);
@@ -173,6 +202,7 @@ export function RubrosTab() {
           mode="edit"
           initial={editing}
           cuentas={cuentas}
+          sucursales={sucursales}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null);
@@ -201,12 +231,14 @@ function RubroFormModal({
   mode,
   initial,
   cuentas,
+  sucursales,
   onClose,
   onSaved,
 }: {
   mode: "create" | "edit";
   initial?: Rubro;
   cuentas: CuentaOption[];
+  sucursales: CuentaOption[];
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -215,6 +247,7 @@ function RubroFormModal({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [isDifference, setIsDifference] = useState(initial?.isDifference ?? false);
   const [accountId, setAccountId] = useState<string>(initial?.accountId ?? "");
+  const [sucursalId, setSucursalId] = useState<string>(initial?.sucursalId ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -244,12 +277,14 @@ function RubroFormModal({
               description: description.trim() || null,
               isDifference,
               accountId: accountId || null,
+              sucursalId: sucursalId || null,
             }
           : {
               name: name.trim(),
               description: description.trim() || null,
               isDifference,
               accountId: accountId || null,
+              sucursalId: sucursalId || null,
             };
 
       const res = await fetch(url, {
@@ -331,6 +366,26 @@ function RubroFormModal({
               Si este rubro corresponde a una cuenta bancaria, enlazala acá. Se usa
               para poner el rubro del banco en los asientos (Asientos manuales /
               Traspasos internos) sin adivinar por nombre.
+            </p>
+          </div>
+          <div>
+            <label className="label">Sucursal (opcional)</label>
+            <select
+              className="input"
+              value={sucursalId}
+              onChange={(e) => setSucursalId(e.target.value)}
+            >
+              <option value="">— Sin sucursal (no es rubro de sucursal) —</option>
+              {sucursales.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-text-muted mt-1">
+              Si este rubro es de una sucursal, enlazala acá. Se usa como el rubro
+              de la sucursal en los asientos (Cuadratura consolidación, Asientos
+              manuales proveedor/cliente).
             </p>
           </div>
           <div>

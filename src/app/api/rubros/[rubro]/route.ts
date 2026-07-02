@@ -9,6 +9,8 @@ const patchSchema = z.object({
   isDifference: z.boolean().optional(),
   // Cuenta bancaria enlazada. null explícito = desasignar.
   accountId: z.string().uuid().optional().nullable(),
+  // Sucursal enlazada. null explícito = desasignar.
+  sucursalId: z.string().uuid().optional().nullable(),
 });
 
 function parseRubroParam(raw: string): number | null {
@@ -44,6 +46,7 @@ export async function PATCH(
     description?: string | null;
     isDifference?: boolean;
     accountId?: string | null;
+    sucursalId?: string | null;
   } = {};
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.description !== undefined) {
@@ -54,6 +57,9 @@ export async function PATCH(
   }
   if (parsed.data.accountId !== undefined) {
     data.accountId = parsed.data.accountId;
+  }
+  if (parsed.data.sucursalId !== undefined) {
+    data.sucursalId = parsed.data.sucursalId;
   }
   if (Object.keys(data).length === 0) {
     return NextResponse.json(
@@ -73,6 +79,7 @@ export async function PATCH(
       description: updated.description,
       isDifference: updated.isDifference,
       accountId: updated.accountId,
+      sucursalId: updated.sucursalId,
       createdAt: updated.createdAt.toISOString(),
       updatedAt: updated.updatedAt.toISOString(),
     });
@@ -86,7 +93,7 @@ export async function PATCH(
     }
     if (code === "P2002") {
       return NextResponse.json(
-        { error: "Esa cuenta bancaria ya está asignada a otro rubro." },
+        { error: "Esa cuenta o sucursal ya está asignada a otro rubro." },
         { status: 409 }
       );
     }

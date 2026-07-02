@@ -29,6 +29,7 @@ export async function GET(req: Request) {
   const sucursalId = sucursalIdRaw ? parseInt(sucursalIdRaw, 10) : null;
 
   const settings = await getCuadraturaSettings();
+  const rubroPorSucursal = await loadRubroPorSucursal();
 
   // Asiento de una cuadratura ya generada (desde sus items persistidos).
   if (cuadraturaId) {
@@ -53,12 +54,16 @@ export async function GET(req: Request) {
     }));
     return NextResponse.json({
       cuadratura: serializeCuadratura(cuad, cuad.items.length),
-      asiento: buildCuadraturaAsiento(items, {
-        rubroVentas: cuad.rubroVentas,
-        rubroTesoreria: cuad.rubroTesoreria,
-        rubroComision: cuad.rubroComision,
-        rubroDiferencia: cuad.rubroDiferencia,
-      }),
+      asiento: buildCuadraturaAsiento(
+        items,
+        {
+          rubroVentas: cuad.rubroVentas,
+          rubroTesoreria: cuad.rubroTesoreria,
+          rubroComision: cuad.rubroComision,
+          rubroDiferencia: cuad.rubroDiferencia,
+        },
+        rubroPorSucursal,
+      ),
     });
   }
 
@@ -104,7 +109,7 @@ export async function GET(req: Request) {
     to: to.toISOString(),
     settings,
     pendingCount: pending.length,
-    asiento: buildCuadraturaAsiento(items, settings),
+    asiento: buildCuadraturaAsiento(items, settings, rubroPorSucursal),
     facets: {
       sucursales: [...sucMap.entries()]
         .map(([id, name]) => ({ id, name }))
@@ -218,6 +223,20 @@ export async function DELETE(req: Request) {
   // Borra la cuadratura; los items caen por cascada y los pares quedan libres.
   await prisma.cuadraturaTransbank.delete({ where: { id } });
   return NextResponse.json({ ok: true });
+}
+
+/**
+ * Mapa POS sucursalId → rubro contable, a partir del enlace explícito
+ * Rubros → Sucursal (RubroLabel.sucursalId → Sucursal.codigo = POS id).
+ */
+async function loadRubroPorSucursal(): Promise<Map<number, number>> {
+  const rows = await prisma.rubroLabel.findMany({
+    where: { sucursalId: { not: null } },
+    select: { rubro: true, sucursal: { select: { codigo: true } } },
+  });
+  const m = new Map<number, number>();
+  for (const r of rows) if (r.sucursal?.codigo != null) m.set(r.sucursal.codigo, r.rubro);
+  return m;
 }
 
 function serializeCuadratura(

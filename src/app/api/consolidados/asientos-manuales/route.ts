@@ -48,9 +48,15 @@ export async function GET(req: Request) {
     // Rubro del banco (HABER del neto) resuelto con la misma cascada que usa
     // Traspasos internos: nombre de cuenta ↔ RubroLabel, o rubro de la entidad.
     const [rubros, entidades] = await Promise.all([
-      prisma.rubroLabel.findMany({ where: { isDifference: false }, select: { rubro: true, name: true, accountId: true } }),
+      prisma.rubroLabel.findMany({
+        where: { isDifference: false },
+        select: { rubro: true, name: true, accountId: true, sucursalId: true },
+      }),
       loadEntidadesInternas(prisma),
     ]);
+    // Mapa Sucursal.id → rubro contable (enlace explícito en Configuración → Rubros).
+    const sucursalRubroMap = new Map<string, number>();
+    for (const r of rubros) if (r.sucursalId) sucursalRubroMap.set(r.sucursalId, r.rubro);
     const accountsForRubro: AccountForRubro[] = [];
     const seenAcc = new Set<string>();
     for (const a of asientos) {
@@ -88,8 +94,9 @@ export async function GET(req: Request) {
         montoBruto: a.montoBruto.toString(),
         lineas: a.lineas.map((l) => ({
           sucursalNombre: l.sucursalNombre,
-          // El "código de sucursal" ES el rubro de gestión del DEBE (así se define en el modal).
-          rubro: l.sucursal.codigo,
+          // Rubro contable de la sucursal: enlace explícito (Rubros → Sucursal);
+          // si no está enlazada, cae al código POS de la sucursal.
+          rubro: sucursalRubroMap.get(l.sucursalId) ?? l.sucursal.codigo,
           personas: Number(l.personas),
           porcentaje: Number(l.porcentaje),
           monto: l.monto.toString(),

@@ -98,6 +98,12 @@ const abs = (n: bigint) => (n < 0n ? -n : n);
 export function buildCuadraturaAsiento(
   items: CuadraturaItemInput[],
   settings: CuadraturaSettings,
+  /**
+   * Rubro contable por sucursal POS (sucursalId → rubro), del enlace explícito
+   * Rubros → Sucursal. Se usa en el asiento de CONSOLIDACIÓN para el HABER de
+   * cada sucursal. Si una sucursal no está mapeada, cae al código POS.
+   */
+  rubroPorSucursal?: Map<number, number>,
 ): CuadraturaAsientoDTO {
   // Agrupar por sucursal.
   const groups = new Map<
@@ -279,14 +285,20 @@ export function buildCuadraturaAsiento(
       debe: totTransbank.toString(),
       haber: null,
     },
-    ...ordered.map<AsientoLineaDTO>((g) => ({
-      rubro: g.sucursalCodigo ?? g.sucursalId,
-      cuenta: g.sucursalName ?? (g.sucursalCodigo != null ? `#${g.sucursalCodigo}` : `#${g.sucursalId}`),
-      detalle: "Tesorería sucursal",
-      side: "HABER",
-      debe: null,
-      haber: g.transbank.toString(),
-    })),
+    ...ordered.map<AsientoLineaDTO>((g) => {
+      const nombre =
+        g.sucursalName ?? (g.sucursalCodigo != null ? `#${g.sucursalCodigo}` : `#${g.sucursalId}`);
+      return {
+        // Rubro contable de la sucursal (enlace Rubros→Sucursal); si no está
+        // mapeada, cae al código POS. Antes usaba siempre el código POS.
+        rubro: rubroPorSucursal?.get(g.sucursalId) ?? g.sucursalCodigo ?? g.sucursalId,
+        cuenta: nombre,
+        detalle: nombre, // nombre de la sucursal (antes "Tesorería sucursal")
+        side: "HABER",
+        debe: null,
+        haber: g.transbank.toString(),
+      };
+    }),
   ];
   const consDebe = totTransbank;
   const consHaber = totTransbank;

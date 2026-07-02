@@ -10,6 +10,8 @@ const createSchema = z.object({
   isDifference: z.boolean().optional(),
   // Cuenta bancaria (de Cartolas) enlazada a este rubro. null = sin enlace.
   accountId: z.string().uuid().optional().nullable(),
+  // Sucursal (del maestro) enlazada a este rubro. null = sin enlace.
+  sucursalId: z.string().uuid().optional().nullable(),
 });
 
 /** Etiqueta legible de una cuenta bancaria. */
@@ -34,6 +36,7 @@ export async function GET() {
       account: {
         select: { id: true, bankName: true, holderName: true, displayNumber: true, accountNumber: true },
       },
+      sucursal: { select: { id: true, codigo: true, nombre: true } },
     },
   });
 
@@ -45,6 +48,10 @@ export async function GET() {
       isDifference: r.isDifference,
       accountId: r.accountId,
       accountLabel: r.account ? accountLabel(r.account) : null,
+      sucursalId: r.sucursalId,
+      sucursalLabel: r.sucursal
+        ? `${r.sucursal.codigo != null ? r.sucursal.codigo + " · " : ""}${r.sucursal.nombre}`
+        : null,
       createdAt: r.createdAt.toISOString(),
       updatedAt: r.updatedAt.toISOString(),
     })),
@@ -66,7 +73,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { rubro, name, description, isDifference, accountId } = parsed.data;
+  const { rubro, name, description, isDifference, accountId, sucursalId } = parsed.data;
 
   const existing = await prisma.rubroLabel.findUnique({ where: { rubro } });
   if (existing) {
@@ -84,6 +91,7 @@ export async function POST(req: Request) {
         description: description ?? null,
         isDifference: isDifference ?? false,
         accountId: accountId ?? null,
+        sucursalId: sucursalId ?? null,
       },
     });
 
@@ -94,6 +102,7 @@ export async function POST(req: Request) {
         description: created.description,
         isDifference: created.isDifference,
         accountId: created.accountId,
+        sucursalId: created.sucursalId,
         createdAt: created.createdAt.toISOString(),
         updatedAt: created.updatedAt.toISOString(),
       },
@@ -102,7 +111,7 @@ export async function POST(req: Request) {
   } catch (e) {
     if ((e as { code?: string }).code === "P2002") {
       return NextResponse.json(
-        { error: "Esa cuenta bancaria ya está asignada a otro rubro." },
+        { error: "Esa cuenta o sucursal ya está asignada a otro rubro." },
         { status: 409 }
       );
     }

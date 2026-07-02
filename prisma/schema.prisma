@@ -256,6 +256,12 @@ model RubroLabel {
   // cuenta se asigna a un solo rubro. null para rubros que no son de banco.
   accountId   String?      @unique @map("account_id")
   account     BankAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  // Sucursal (del maestro) a la que corresponde este rubro. Enlace EXPLÍCITO
+  // usado para poner el rubro contable de la sucursal en los asientos
+  // (Cuadratura consolidación, Asientos manuales proveedor/cliente), en vez de
+  // usar el código POS. Único: una sucursal → un rubro. null si no es de sucursal.
+  sucursalId  String?      @unique @map("sucursal_id")
+  sucursal    Sucursal?    @relation(fields: [sucursalId], references: [id], onDelete: SetNull)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -603,6 +609,7 @@ model Sucursal {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   lineas AsientoManualLinea[]
+  rubroLabel RubroLabel?
 
   @@index([active])
 }
