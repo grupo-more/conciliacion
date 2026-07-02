@@ -55,15 +55,16 @@ export async function POST(req: Request) {
   });
   const cajaMatchedSet = new Set(cajaMatched.map((c) => c.bankMovementId));
 
-  // Motivos por los que un movimiento está "resuelto" (bloqueado para descartar).
-  // Se listan explícitamente para que el usuario sepa DÓNDE está el vínculo,
-  // porque algunos (caja) no se ven en las tabs de Consolidados.
+  // Motivos que BLOQUEAN el descarte: solo conciliaciones contables DELIBERADAS
+  // (motor, egreso a tercero, asiento manual). Esas hay que deshacerlas primero.
+  // El match de conciliación de CAJA NO bloquea: es un match automático/heurístico
+  // (monto+fecha+cuenta) sin UI para deshacerse; al descartar se rompe solo (el
+  // MovimientoCaja vuelve a NO_MATCH). Ver más abajo.
   const motivosDe = (m: (typeof movements)[number]): string[] => {
     const ms: string[] = [];
     if (m._count.consolidadoLinks > 0) ms.push("vínculo del motor (Consolidados)");
     if (m._count.egresoConciliacionLinks > 0) ms.push("conciliación de egreso a tercero");
     if (m.asientoManual != null) ms.push("asiento manual generado");
-    if (cajaMatchedSet.has(m.id)) ms.push("match de conciliación de caja (Movimientos)");
     return ms;
   };
   const bloqueados = movements
@@ -72,12 +73,19 @@ export async function POST(req: Request) {
   const bloqueadoIds = new Set(bloqueados.map((x) => x.m.id));
   const aDescartar = movements.filter((m) => !bloqueadoIds.has(m.id) && !m.descartadoAt);
 
+  // De los que se van a descartar, cuáles tenían un match de caja → hay que
+  // romperlo (dejar el MovimientoCaja en NO_MATCH) para no dejarlo apuntando a
+  // un movimiento descartado.
+  const descartarIds = aDescartar.map((m) => m.id);
+  const cajaAromper = descartarIds.filter((id) => cajaMatchedSet.has(id));
+
   const now = new Date();
   let descartados = 0;
+  let cajaRotos = 0;
   if (aDescartar.length > 0) {
     await prisma.$transaction([
       prisma.bankMovement.updateMany({
-        where: { id: { in: aDescartar.map((m) => m.id) } },
+        where: { id: { in: descartarIds } },
         data: { descartadoAt: now },
       }),
       // Registro durable por (accountId, dedupKey). Upsert-por-lote no existe,
@@ -91,8 +99,14 @@ export async function POST(req: Request) {
         })),
         skipDuplicates: true,
       }),
+      // Romper matches de caja de los movimientos descartados.
+      prisma.movimientoCaja.updateMany({
+        where: { bankMovementId: { in: cajaAromper } },
+        data: { status: "NO_MATCH", bankMovementId: null, matchType: null, score: null },
+      }),
     ]);
     descartados = aDescartar.length;
+    cajaRotos = cajaAromper.length;
   }
 
   // Detalle legible de los bloqueados: fecha + glosa + motivo(s).
@@ -103,16 +117,18 @@ export async function POST(req: Request) {
     motivos: x.motivos,
   }));
 
+  const cajaNota =
+    cajaRotos > 0 ? ` (${cajaRotos} match de caja roto[s] y devuelto[s] a NO_MATCH)` : "";
   let mensaje: string;
   if (bloqueados.length === 0) {
-    mensaje = `${descartados} movimiento(s) enviado(s) a descartados.`;
+    mensaje = `${descartados} movimiento(s) enviado(s) a descartados${cajaNota}.`;
   } else {
     const lineas = detalleBloqueados
       .map((d) => `• ${d.fecha} · ${d.glosa} → ${d.motivos.join(" + ")}`)
       .join("\n");
     mensaje =
-      `${descartados} descartado(s). ${bloqueados.length} bloqueado(s) porque tienen un vínculo activo ` +
-      `(hay que deshacerlo primero):\n${lineas}`;
+      `${descartados} descartado(s)${cajaNota}. ${bloqueados.length} bloqueado(s) porque tienen una ` +
+      `conciliación contable activa (hay que deshacerla primero):\n${lineas}`;
   }
 
   return NextResponse.json({
