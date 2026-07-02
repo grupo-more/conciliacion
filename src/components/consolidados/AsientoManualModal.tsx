@@ -307,8 +307,8 @@ export function AsientoManualModal({
             {!yaGenerado && tipo === "CLIENTE" && (
               <div className="space-y-4">
                 <div className="rounded-md border border-border-soft bg-bg-soft/40 p-3 text-sm text-text-muted">
-                  Ingreso de cliente: se arma el asiento <b>banco ↔ sucursal</b> (1:1, sin
-                  impuestos). Elegí a qué sucursal corresponde este movimiento.
+                  Ingreso de cliente: se arma el asiento <b>sucursal (DEBE) ↔ banco (HABER)</b>
+                  {" "}(1:1, sin impuestos). Elegí a qué sucursal corresponde este movimiento.
                 </div>
 
                 {/* Glosa */}
@@ -356,8 +356,8 @@ export function AsientoManualModal({
 
                 {/* Resumen: banco (DEBE) ↔ sucursal (HABER) */}
                 <div className="grid grid-cols-2 gap-2 text-sm">
-                  <Box label="Debe · Banco" value={formatMoney(montoNeto)} />
-                  <Box label="Haber · Sucursal" value={formatMoney(montoNeto)} strong />
+                  <Box label="Debe · Sucursal" value={formatMoney(montoNeto)} strong />
+                  <Box label="Haber · Banco" value={formatMoney(montoNeto)} />
                 </div>
 
                 <div className="flex justify-end gap-2">
@@ -587,7 +587,7 @@ function GeneradoView({
         )}
         <div className="text-xs text-text-muted mt-0.5">
           {isCliente ? (
-            <>Ingreso <strong>{formatMoney(BigInt(asiento.montoNeto))}</strong> · banco (DEBE) ↔ sucursal (HABER)</>
+            <>Ingreso <strong>{formatMoney(BigInt(asiento.montoNeto))}</strong> · sucursal (DEBE) ↔ banco (HABER)</>
           ) : (
             <>
               Líquido {formatMoney(BigInt(asiento.montoNeto))}
@@ -606,7 +606,7 @@ function GeneradoView({
             <th className="px-2 py-1.5 text-left">Sucursal</th>
             {!isCliente && <th className="px-2 py-1.5 text-right">Personas</th>}
             {!isCliente && <th className="px-2 py-1.5 text-right">%</th>}
-            <th className="px-2 py-1.5 text-right">Monto ({isCliente ? "HABER" : "DEBE"})</th>
+            <th className="px-2 py-1.5 text-right">Monto (DEBE)</th>
           </tr>
         </thead>
         <tbody>

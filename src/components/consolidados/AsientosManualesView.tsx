@@ -98,11 +98,11 @@ export function AsientosManualesView() {
     for (const a of gen) {
       const detalle = a.glosa || a.counterpartyName || `${a.bankName} ${a.holderName}`;
       if (a.tipo === "CLIENTE") {
-        // Ingreso de cliente: DEBE banco / HABER sucursal (1:1, sin impuestos).
-        lineas.push({ rubro: a.bancoRubro ?? "", detalle, debe: a.montoNeto });
+        // Ingreso de cliente: DEBE sucursal / HABER banco (1:1, sin impuestos).
         for (const l of a.lineas) {
-          lineas.push({ rubro: l.rubro ?? "", detalle, haber: l.monto });
+          lineas.push({ rubro: l.rubro ?? "", detalle, debe: l.monto });
         }
+        lineas.push({ rubro: a.bancoRubro ?? "", detalle, haber: a.montoNeto });
       } else {
         // Proveedor: DEBE gasto (prorrateo por sucursal) / HABER banco (+ retención).
         for (const l of a.lineas) {
