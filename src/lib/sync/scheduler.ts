@@ -64,26 +64,27 @@ export function startSyncScheduler() {
       { runTbkTesoreriaSync },
       { runEgresosSync },
       { runMovimientosSync },
-      { runMatchMovimientos },
     ] = await Promise.all([
       import("@/lib/tesoreria/sync"),
       import("@/lib/transbank/sync-tbk"),
       import("@/lib/egresos/sync-egresos"),
       import("@/lib/movimientos/sync-movimientos"),
-      import("@/lib/movimientos/match-movimientos"),
     ]);
 
     const runners: Runner[] = [
       { name: "tesoreria", run: runTesoreriaSync, running: false },
       { name: "tbk", run: runTbkTesoreriaSync, running: false },
       { name: "egresos", run: runEgresosSync, running: false },
-      // Movimientos de caja: ingiere CAJA_BANCO/BANCO_BANCO y los cruza contra
-      // la cartola en la misma corrida.
+      // Movimientos de caja: SOLO ingiere el feed (CAJA_BANCO/BANCO_BANCO). El
+      // cruce automático contra la cartola (runMatchMovimientos) se APAGÓ el
+      // 2026-07-02: era una conciliación que no se mostraba en ninguna vista y
+      // no se podía auditar. La conciliación real vive en Consolidados
+      // (BANCO_BANCO ya está cubierto por Traspasos internos). Para reactivarlo,
+      // volver a importar y llamar runMatchMovimientos() acá.
       {
         name: "movimientos",
         run: async () => {
           await runMovimientosSync();
-          return runMatchMovimientos();
         },
         running: false,
       },
