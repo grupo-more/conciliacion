@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { runTbkTesoreriaSync } from "@/lib/transbank/sync-tbk";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * POST /api/transbank/sync
@@ -11,6 +12,8 @@ export async function POST() {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "importar");
+  if (deniedPerm) return deniedPerm;
   const result = await runTbkTesoreriaSync();
   if (!result.ok) {
     return NextResponse.json(result, { status: 502 });

@@ -15,6 +15,7 @@ import type {
   MovementsResponse,
 } from "./types";
 import { formatDate, formatMoney } from "@/lib/format";
+import { usePermisos } from "@/lib/use-permisos";
 
 /** Sentinel para "Vista general" (todas las cuentas). */
 const ALL_ACCOUNTS = "__all__";
@@ -23,6 +24,7 @@ const TRANSBANK_VIEW = "__transbank__";
 
 export function CartolasView() {
   const router = useRouter();
+  const { can } = usePermisos();
   const [accounts, setAccounts] = useState<BankAccountDTO[]>([]);
   // null = aun no se cargaron las cuentas
   // ALL_ACCOUNTS = vista general (todas)
@@ -244,23 +246,29 @@ export function CartolasView() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setDuplicatesOpen(true)}
-            className="btn-ghost text-sm"
-            title="Buscar y limpiar movimientos duplicados"
-          >
-            Detectar duplicados
-          </button>
-          <button
-            onClick={() => setTransbankOpen(true)}
-            className="btn-ghost text-sm"
-            title="Subir el reporte 'Abonos por día' de Transbank (.xls)"
-          >
-            Subir abonos Transbank
-          </button>
-          <button onClick={() => setImportOpen(true)} className="btn-primary">
-            Subir cartola
-          </button>
+          {can("depurar") && (
+            <button
+              onClick={() => setDuplicatesOpen(true)}
+              className="btn-ghost text-sm"
+              title="Buscar y limpiar movimientos duplicados"
+            >
+              Detectar duplicados
+            </button>
+          )}
+          {can("importar") && (
+            <>
+              <button
+                onClick={() => setTransbankOpen(true)}
+                className="btn-ghost text-sm"
+                title="Subir el reporte 'Abonos por día' de Transbank (.xls)"
+              >
+                Subir abonos Transbank
+              </button>
+              <button onClick={() => setImportOpen(true)} className="btn-primary">
+                Subir cartola
+              </button>
+            </>
+          )}
         </div>
       </div>
 

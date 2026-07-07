@@ -9,6 +9,7 @@ import {
 import { suggestRubroForAccounts } from "@/lib/consolidados/rubro-suggest";
 import { extractEmbeddedReference } from "@/lib/cartolas/dedup";
 import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * GET /api/consolidados/[id]
@@ -349,6 +350,8 @@ export async function PATCH(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "conciliar");
+  if (deniedPerm) return deniedPerm;
 
   const tesoreriaId = context.params.id;
   const body = await req.json().catch(() => null);

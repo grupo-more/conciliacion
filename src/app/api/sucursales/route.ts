@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * GET  /api/sucursales            → maestro de sucursales (headcount para el prorrateo).
@@ -42,6 +43,8 @@ const createSchema = z.object({
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(json);

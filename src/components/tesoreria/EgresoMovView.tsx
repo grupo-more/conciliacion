@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatMoney, formatDate } from "@/lib/format";
+import { usePermisos } from "@/lib/use-permisos";
 
 interface EgRow {
   id: string;
@@ -26,6 +27,7 @@ interface Resp {
 
 /** Sub-tab "Egresos": gastos operativos (feed /api/egresos). */
 export function EgresoMovView() {
+  const { can } = usePermisos();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [sucursalId, setSucursalId] = useState("");
@@ -99,7 +101,9 @@ export function EgresoMovView() {
         </Field>
         <Field label="Desde"><input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
         <Field label="Hasta"><input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
-        <button onClick={onSync} disabled={busy} className="btn-ghost">{busy ? "Sincronizando…" : "Sincronizar egresos"}</button>
+        {can("importar") && (
+          <button onClick={onSync} disabled={busy} className="btn-ghost">{busy ? "Sincronizando…" : "Sincronizar egresos"}</button>
+        )}
       </div>
 
       {banner && (

@@ -12,6 +12,7 @@ import {
   STATUS_ORDER,
 } from "./types";
 import { ConsolidadoDetail } from "./ConsolidadoDetail";
+import { usePermisos } from "@/lib/use-permisos";
 import { CompareView } from "./CompareView";
 import { OKView } from "./OKView";
 import { AbonoTransbankView } from "./AbonoTransbankView";
@@ -35,6 +36,7 @@ type Tab =
   | "asientos-manuales";
 
 export function ConsolidadosView() {
+  const { can } = usePermisos();
   const [tab, setTab] = useState<Tab>("list");
   const [period, setPeriod] = useState<Period>("month");
   const [statusFilter, setStatusFilter] = useState<Set<ConsolidadoStatus>>(new Set());
@@ -191,14 +193,16 @@ export function ConsolidadosView() {
               <option value="week">Última semana</option>
               <option value="month">Último mes</option>
             </select>
-            <button
-              onClick={runMatching}
-              disabled={running}
-              className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
-              title="Wipea y reconstruye todo el matching (preserva los MANUAL)"
-            >
-              {running ? "Procesando..." : "Re-evaluar todo"}
-            </button>
+            {can("reevaluar") && (
+              <button
+                onClick={runMatching}
+                disabled={running}
+                className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+                title="Wipea y reconstruye todo el matching (preserva los MANUAL)"
+              >
+                {running ? "Procesando..." : "Re-evaluar todo"}
+              </button>
+            )}
           </div>
         )}
       </div>

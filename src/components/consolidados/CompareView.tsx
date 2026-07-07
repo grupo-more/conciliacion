@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { formatMoney, formatDate } from "@/lib/format";
+import { usePermisos } from "@/lib/use-permisos";
 
 interface BankMovementDTO {
   id: string;
@@ -121,6 +122,10 @@ export function CompareView({
   // accountId en el query string para pre-filtrar.
   const searchParams = useSearchParams();
   const presetAccountId = searchParams.get("accountId") ?? "";
+  // Sin permiso de conciliar, la vista es solo consulta (no aparece la barra
+  // de vincular). El backend igual rechaza el manual-link con 403.
+  const { can } = usePermisos();
+  const puedeConciliar = can("conciliar");
 
   const [data, setData] = useState<CompareResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -598,7 +603,7 @@ export function CompareView({
       </div>
 
       {/* Barra de acción flotante */}
-      {(selectedBankIds.size > 0 || selectedTesoreriaIds.size > 0) && (
+      {puedeConciliar && (selectedBankIds.size > 0 || selectedTesoreriaIds.size > 0) && (
         <div className="sticky top-16 z-20 rounded-md border border-brand/40 bg-brand/5 backdrop-blur p-3 shadow-soft flex items-center justify-between gap-4 flex-wrap">
           <div className="text-sm">
             {selectedTesoreriaIds.size > 0 ? (

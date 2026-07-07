@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { denyUnless } from "@/lib/perms";
 
 const patchSchema = z.object({
   accountId: z.string().uuid().optional(),
@@ -14,6 +15,8 @@ export async function PATCH(
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(json);
@@ -47,6 +50,8 @@ export async function DELETE(
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   await prisma.bankAccountAlias.delete({ where: { id: context.params.id } }).catch(() => null);
   return NextResponse.json({ ok: true });

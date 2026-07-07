@@ -4,6 +4,7 @@ import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { normalizeRut } from "@/lib/internos/detect";
+import { denyUnless } from "@/lib/perms";
 
 const createSchema = z.object({
   rut: z.string().trim().min(1),
@@ -49,6 +50,8 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(json);

@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { getCuadraturaSettings } from "@/lib/cuadratura/settings";
 import { getPendingPairs } from "@/lib/cuadratura/pending";
 import { buildCuadraturaAsiento, type CuadraturaItemInput } from "@/lib/cuadratura/asiento";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * Asiento de cuadratura Transbank (subtab "Conciliados (asiento)").
@@ -128,6 +129,8 @@ const postSchema = z.object({
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "generarAsientos");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = postSchema.safeParse(json);
@@ -213,6 +216,8 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "generarAsientos");
+  if (deniedPerm) return deniedPerm;
 
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Falta id" }, { status: 400 });

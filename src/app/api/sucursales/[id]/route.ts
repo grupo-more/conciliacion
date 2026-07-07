@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * PATCH  /api/sucursales/[id] → edita nombre / código / headcount / activa / orden.
@@ -22,6 +23,8 @@ export async function PATCH(
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(json);
@@ -74,6 +77,8 @@ export async function DELETE(
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   const id = context.params.id;
   const usada = await prisma.asientoManualLinea.count({ where: { sucursalId: id } });

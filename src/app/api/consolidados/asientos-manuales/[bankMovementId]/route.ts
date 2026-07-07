@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * GET    /api/consolidados/asientos-manuales/[bankMovementId] → detalle del
@@ -70,6 +71,8 @@ export async function DELETE(
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "generarAsientos");
+  if (deniedPerm) return deniedPerm;
 
   const a = await prisma.asientoManual.findUnique({
     where: { bankMovementId: context.params.bankMovementId },

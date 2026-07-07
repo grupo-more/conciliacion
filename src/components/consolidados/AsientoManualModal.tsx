@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { formatDate, formatMoney } from "@/lib/format";
 import { prorratear, calcRetencion } from "@/lib/asientos/prorrateo";
+import { usePermisos } from "@/lib/use-permisos";
 
 interface Sucursal {
   id: string;
@@ -52,6 +53,8 @@ export function AsientoManualModal({
   onClose: () => void;
   onChanged: () => void;
 }) {
+  const { can } = usePermisos();
+  const puedeGenerar = can("generarAsientos");
   const [data, setData] = useState<DetailResp | null>(null);
   const [sucursales, setSucursales] = useState<Sucursal[]>([]);
   const [settings, setSettings] = useState<{ retencionTasa: number; retencionRubro: number } | null>(null);
@@ -283,11 +286,22 @@ export function AsientoManualModal({
 
             {/* Ya generado: read-only + deshacer */}
             {yaGenerado && data?.asiento && (
-              <GeneradoView asiento={data.asiento} onDeshacer={deshacer} acting={acting} />
+              <GeneradoView
+                asiento={data.asiento}
+                onDeshacer={puedeGenerar ? deshacer : undefined}
+                acting={acting}
+              />
+            )}
+
+            {/* Sin permiso de generar asientos: solo consulta */}
+            {!yaGenerado && !puedeGenerar && (
+              <p className="text-sm text-text-muted">
+                Este movimiento no tiene contraparte en el sistema. Tu perfil no permite generar asientos.
+              </p>
             )}
 
             {/* Clasificación */}
-            {!yaGenerado && tipo === null && (
+            {puedeGenerar && !yaGenerado && tipo === null && (
               <div>
                 <p className="text-sm text-text-muted mb-3">
                   Este movimiento no tiene contraparte en el sistema. Definí qué es para generar el asiento:
@@ -304,7 +318,7 @@ export function AsientoManualModal({
             )}
 
             {/* Cliente: banco ↔ sucursal (una sola), sin impuestos */}
-            {!yaGenerado && tipo === "CLIENTE" && (
+            {puedeGenerar && !yaGenerado && tipo === "CLIENTE" && (
               <div className="space-y-4">
                 <div className="rounded-md border border-border-soft bg-bg-soft/40 p-3 text-sm text-text-muted">
                   Ingreso de cliente: se arma el asiento <b>sucursal (DEBE) ↔ banco (HABER)</b>
@@ -376,7 +390,7 @@ export function AsientoManualModal({
             )}
 
             {/* Proveedor: builder */}
-            {!yaGenerado && tipo === "PROVEEDOR" && (
+            {puedeGenerar && !yaGenerado && tipo === "PROVEEDOR" && (
               <div className="space-y-4">
                 {/* Glosa del asiento (detalle del pago a proveedor) */}
                 <div>
@@ -572,7 +586,7 @@ function GeneradoView({
   acting,
 }: {
   asiento: NonNullable<DetailResp["asiento"]>;
-  onDeshacer: () => void;
+  onDeshacer?: () => void;
   acting: boolean;
 }) {
   const isCliente = asiento.tipo === "CLIENTE";
@@ -620,11 +634,13 @@ function GeneradoView({
           ))}
         </tbody>
       </table>
-      <div className="flex justify-end">
-        <button onClick={onDeshacer} disabled={acting} className="text-xs text-rose-700 hover:underline">
-          Deshacer asiento
-        </button>
-      </div>
+      {onDeshacer && (
+        <div className="flex justify-end">
+          <button onClick={onDeshacer} disabled={acting} className="text-xs text-rose-700 hover:underline">
+            Deshacer asiento
+          </button>
+        </div>
+      )}
     </div>
   );
 }

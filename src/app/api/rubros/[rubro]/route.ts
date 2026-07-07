@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { denyUnless } from "@/lib/perms";
 
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
@@ -26,6 +27,8 @@ export async function PATCH(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   const rubro = parseRubroParam(params.rubro);
   if (rubro === null) {
@@ -109,6 +112,8 @@ export async function DELETE(
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   const rubro = parseRubroParam(params.rubro);
   if (rubro === null) {

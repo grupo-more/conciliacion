@@ -107,6 +107,45 @@ const ACCOUNTS = [
   },
 ];
 
+// Perfiles base (variables de permisos). Idempotente; la migración
+// 20260625200000_add_perfiles ya los crea — esto los repara si faltan.
+const PERMISOS_TODO = {
+  modulos: { dashboard: true, consolidados: true, cartolas: true, movimientos: true, reportes: true },
+  acciones: { conciliar: true, reevaluar: true, generarAsientos: true, importar: true, depurar: true, configurar: true, gestionarUsuarios: true },
+};
+const PERFILES = [
+  { id: "perfil-admin", nombre: "Admin", esAdmin: true, permisos: PERMISOS_TODO },
+  {
+    id: "perfil-operador",
+    nombre: "Operador conciliación",
+    esAdmin: false,
+    permisos: {
+      modulos: { ...PERMISOS_TODO.modulos },
+      acciones: { conciliar: true, reevaluar: true, generarAsientos: true, importar: true, depurar: true, configurar: false, gestionarUsuarios: false },
+    },
+  },
+  {
+    id: "perfil-lectura",
+    nombre: "Solo lectura",
+    esAdmin: false,
+    permisos: {
+      modulos: { ...PERMISOS_TODO.modulos },
+      acciones: { conciliar: false, reevaluar: false, generarAsientos: false, importar: false, depurar: false, configurar: false, gestionarUsuarios: false },
+    },
+  },
+];
+
+async function seedPerfiles() {
+  for (const p of PERFILES) {
+    await prisma.perfil.upsert({
+      where: { id: p.id },
+      update: { nombre: p.nombre, esAdmin: p.esAdmin },
+      create: p,
+    });
+    console.log(`✓ Perfil: ${p.nombre}`);
+  }
+}
+
 async function seedUser() {
   const email = process.env.SEED_ADMIN_EMAIL;
   const password = process.env.SEED_ADMIN_PASSWORD;
@@ -121,10 +160,10 @@ async function seedUser() {
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.upsert({
     where: { email },
-    update: { name, active: true },
-    create: { email, passwordHash, name, active: true },
+    update: { name, active: true, perfilId: "perfil-admin" },
+    create: { email, passwordHash, name, active: true, perfilId: "perfil-admin" },
   });
-  console.log(`✓ Usuario gerencia: ${user.email}`);
+  console.log(`✓ Usuario gerencia: ${user.email} (Admin)`);
 }
 
 async function seedAccounts() {
@@ -151,6 +190,7 @@ async function seedAccounts() {
 }
 
 async function main() {
+  await seedPerfiles();
   await seedUser();
   await seedAccounts();
 }

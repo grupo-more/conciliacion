@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { runMovimientosSync } from "@/lib/movimientos/sync-movimientos";
 import { runMatchMovimientos } from "@/lib/movimientos/match-movimientos";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * POST /api/movimientos-caja/sync
@@ -12,6 +13,8 @@ import { runMatchMovimientos } from "@/lib/movimientos/match-movimientos";
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "importar");
+  if (deniedPerm) return deniedPerm;
 
   const onlySync = new URL(req.url).searchParams.get("onlySync") === "1";
 

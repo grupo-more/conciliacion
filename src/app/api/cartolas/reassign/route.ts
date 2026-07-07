@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isUnassignedAccountNumber } from "@/lib/cartolas/import";
+import { denyUnless } from "@/lib/perms";
 
 const bodySchema = z.object({
   movementIds: z.array(z.string().uuid()).min(1).max(2000),
@@ -24,6 +25,8 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "importar");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = bodySchema.safeParse(json);

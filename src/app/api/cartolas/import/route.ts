@@ -4,6 +4,7 @@ import { runImport } from "@/lib/cartolas/import";
 import { runConsolidados } from "@/lib/consolidados/match";
 import { prisma } from "@/lib/db";
 import { suggestEntidadByName } from "@/lib/internos/suggest";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * POST /api/cartolas/import?dryRun=1
@@ -19,6 +20,8 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "importar");
+  if (deniedPerm) return deniedPerm;
 
   let form: FormData;
   try {

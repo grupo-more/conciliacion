@@ -7,8 +7,17 @@ import { BankAliasesTab } from "./BankAliasesTab";
 import { DifMenorTab } from "./DifMenorTab";
 import { EntidadesInternasTab } from "./EntidadesInternasTab";
 import { SucursalesTab } from "./SucursalesTab";
+import { UsuariosPerfilesTab } from "./UsuariosPerfilesTab";
+import { usePermisos } from "@/lib/use-permisos";
 
-type Tab = "perfil" | "rubros" | "aliases" | "dif-menor" | "entidades-internas" | "sucursales";
+type Tab =
+  | "perfil"
+  | "rubros"
+  | "aliases"
+  | "dif-menor"
+  | "entidades-internas"
+  | "sucursales"
+  | "usuarios";
 
 interface Props {
   user: { email: string; name: string | null };
@@ -16,6 +25,12 @@ interface Props {
 
 export function ConfiguracionView({ user }: Props) {
   const [tab, setTab] = useState<Tab>("perfil");
+  // Gating por variables del perfil: "Perfil" (datos propios) es para todos;
+  // los maestros del sistema requieren `configurar`; usuarios/perfiles,
+  // `gestionarUsuarios`. El backend igual valida cada mutación.
+  const { can } = usePermisos();
+  const verConfig = can("configurar");
+  const verUsuarios = can("gestionarUsuarios");
 
   return (
     <div className="space-y-6">
@@ -27,38 +42,48 @@ export function ConfiguracionView({ user }: Props) {
       </div>
 
       <div className="border-b border-border-soft">
-        <nav className="flex gap-1" aria-label="Secciones de configuración">
+        <nav className="flex gap-1 flex-wrap" aria-label="Secciones de configuración">
           <TabButton active={tab === "perfil"} onClick={() => setTab("perfil")}>
             Perfil
           </TabButton>
-          <TabButton active={tab === "rubros"} onClick={() => setTab("rubros")}>
-            Rubros
-          </TabButton>
-          <TabButton active={tab === "aliases"} onClick={() => setTab("aliases")}>
-            Mapeo de cuentas
-          </TabButton>
-          <TabButton active={tab === "dif-menor"} onClick={() => setTab("dif-menor")}>
-            Dif menor a 100
-          </TabButton>
-          <TabButton
-            active={tab === "entidades-internas"}
-            onClick={() => setTab("entidades-internas")}
-          >
-            Entidades internas
-          </TabButton>
-          <TabButton active={tab === "sucursales"} onClick={() => setTab("sucursales")}>
-            Sucursales
-          </TabButton>
+          {verConfig && (
+            <>
+              <TabButton active={tab === "rubros"} onClick={() => setTab("rubros")}>
+                Rubros
+              </TabButton>
+              <TabButton active={tab === "aliases"} onClick={() => setTab("aliases")}>
+                Mapeo de cuentas
+              </TabButton>
+              <TabButton active={tab === "dif-menor"} onClick={() => setTab("dif-menor")}>
+                Dif menor a 100
+              </TabButton>
+              <TabButton
+                active={tab === "entidades-internas"}
+                onClick={() => setTab("entidades-internas")}
+              >
+                Entidades internas
+              </TabButton>
+              <TabButton active={tab === "sucursales"} onClick={() => setTab("sucursales")}>
+                Sucursales
+              </TabButton>
+            </>
+          )}
+          {verUsuarios && (
+            <TabButton active={tab === "usuarios"} onClick={() => setTab("usuarios")}>
+              Usuarios y perfiles
+            </TabButton>
+          )}
         </nav>
       </div>
 
       <div className="animate-fade-in">
         {tab === "perfil" && <PerfilTab user={user} />}
-        {tab === "rubros" && <RubrosTab />}
-        {tab === "aliases" && <BankAliasesTab />}
-        {tab === "dif-menor" && <DifMenorTab />}
-        {tab === "entidades-internas" && <EntidadesInternasTab />}
-        {tab === "sucursales" && <SucursalesTab />}
+        {verConfig && tab === "rubros" && <RubrosTab />}
+        {verConfig && tab === "aliases" && <BankAliasesTab />}
+        {verConfig && tab === "dif-menor" && <DifMenorTab />}
+        {verConfig && tab === "entidades-internas" && <EntidadesInternasTab />}
+        {verConfig && tab === "sucursales" && <SucursalesTab />}
+        {verUsuarios && tab === "usuarios" && <UsuariosPerfilesTab />}
       </div>
     </div>
   );

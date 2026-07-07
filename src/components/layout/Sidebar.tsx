@@ -4,12 +4,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 import { Logo } from "@/components/brand/Logo";
+import { usePermisos } from "@/lib/use-permisos";
+import type { Modulo } from "@/lib/perms-shared";
 
 interface NavItem {
   href: string;
   label: string;
   matchPrefix?: boolean;
   icon: React.ReactNode;
+  /** Módulo de permisos que habilita este ítem (variables del perfil). */
+  modulo?: Modulo;
 }
 
 interface SidebarProps {
@@ -25,6 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/dashboard",
     label: "Dashboard",
+    modulo: "dashboard",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="3" width="7" height="9" rx="1.5" />
@@ -38,6 +43,7 @@ const NAV_ITEMS: NavItem[] = [
     href: "/dashboard/consolidados",
     label: "Consolidados",
     matchPrefix: true,
+    modulo: "consolidados",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M4 6h7M4 12h7M4 18h7" />
@@ -51,6 +57,7 @@ const NAV_ITEMS: NavItem[] = [
     href: "/dashboard/cartolas",
     label: "Cartolas",
     matchPrefix: true,
+    modulo: "cartolas",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M5 4h11l3 3v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z" />
@@ -62,6 +69,7 @@ const NAV_ITEMS: NavItem[] = [
     href: "/dashboard/tesoreria",
     label: "Movimientos",
     matchPrefix: true,
+    modulo: "movimientos",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="6" width="18" height="13" rx="2" />
@@ -74,6 +82,7 @@ const NAV_ITEMS: NavItem[] = [
     href: "/dashboard/reportes",
     label: "Reportes",
     matchPrefix: true,
+    modulo: "reportes",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <path d="M5 3h14a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z" />
@@ -97,6 +106,10 @@ const SETTINGS_ITEM: NavItem = {
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
+  // Gating por módulos del perfil (variables). Configuración siempre visible:
+  // adentro cada tab se gatea (Perfil propio es para todos).
+  const { canVer } = usePermisos();
+  const visibleItems = NAV_ITEMS.filter((it) => !it.modulo || canVer(it.modulo));
 
   function isActive(item: NavItem): boolean {
     if (item.matchPrefix) return pathname.startsWith(item.href);
@@ -180,7 +193,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
         {/* Navegación */}
         <nav className="flex-1 px-3 py-4 space-y-1 stagger overflow-y-auto flex flex-col">
-          {NAV_ITEMS.map((item) =>
+          {visibleItems.map((item) =>
             renderNavLink(item, isActive(item), onMobileClose)
           )}
           <div className="flex-1" aria-hidden />

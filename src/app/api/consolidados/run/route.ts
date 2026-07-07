@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { runConsolidados } from "@/lib/consolidados/match";
 import { runEgresosTerceros } from "@/lib/egresos/match-terceros";
 import { runDynatechEgresosTerceros } from "@/lib/egresos/match-dynatech-terceros";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * POST /api/consolidados/run
@@ -21,6 +22,8 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "reevaluar");
+  if (deniedPerm) return deniedPerm;
 
   const body = await req.json().catch(() => ({}));
   const dryRun = body?.dryRun === true;

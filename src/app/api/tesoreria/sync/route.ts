@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { runTesoreriaSync, syncTesoreriaIfStale } from "@/lib/tesoreria/sync";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * POST /api/tesoreria/sync
@@ -13,6 +14,8 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "importar");
+  if (deniedPerm) return deniedPerm;
 
   const url = new URL(req.url);
   const force = url.searchParams.get("force") === "1";

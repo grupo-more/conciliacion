@@ -9,6 +9,7 @@ import { getAsientoSettings } from "@/lib/asientos/settings";
 import { prorratear, calcRetencion } from "@/lib/asientos/prorrateo";
 import { loadEntidadesInternas } from "@/lib/internos/detect";
 import { buildRubroMap, type AccountForRubro } from "@/lib/internos/rubro-resolver";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * Módulo "Asientos manuales": movimientos de cartola sin contraparte en el
@@ -144,6 +145,8 @@ const postSchema = z.object({
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "generarAsientos");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = postSchema.safeParse(json);

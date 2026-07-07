@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { CUADRATURA_SETTINGS_ID, getCuadraturaSettings } from "@/lib/cuadratura/settings";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * GET/PUT de los 4 rubros del asiento de cuadratura Transbank
@@ -24,6 +25,8 @@ const putSchema = z.object({
 export async function PUT(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = putSchema.safeParse(json);

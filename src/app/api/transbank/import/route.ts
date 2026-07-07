@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { importTransbankAbonos } from "@/lib/transbank/import-abonos";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * POST /api/transbank/import?dryRun=1
@@ -15,6 +16,8 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "importar");
+  if (deniedPerm) return deniedPerm;
 
   let form: FormData;
   try {

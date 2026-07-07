@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isUnassignedAccountNumber } from "@/lib/cartolas/import";
 import { normalizeRut } from "@/lib/internos/detect";
+import { denyUnless } from "@/lib/perms";
 
 export async function GET() {
   const session = await getSession();
@@ -72,6 +73,8 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = createSchema.safeParse(json);

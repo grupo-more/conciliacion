@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * Vínculo MANUAL POS↔settlement en Cruce Transbank, para pares que el motor no
@@ -20,6 +21,8 @@ const postSchema = z.object({
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "conciliar");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = postSchema.safeParse(json);
@@ -55,6 +58,8 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const deniedPerm = await denyUnless(session, "conciliar");
+  if (deniedPerm) return deniedPerm;
 
   const url = new URL(req.url);
   const id = url.searchParams.get("id");

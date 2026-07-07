@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatMoney, formatDate } from "@/lib/format";
+import { usePermisos } from "@/lib/use-permisos";
 
 interface TbkRow {
   id: string;
@@ -27,6 +28,7 @@ interface Resp {
 
 /** Sub-tab "17": ventas POS Transbank (feed /api/tbk-tesoreria). */
 export function TbkMovView() {
+  const { can } = usePermisos();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [sucursalId, setSucursalId] = useState("");
@@ -93,7 +95,9 @@ export function TbkMovView() {
         </Field>
         <Field label="Desde"><input type="date" className="input" value={from} onChange={(e) => setFrom(e.target.value)} /></Field>
         <Field label="Hasta"><input type="date" className="input" value={to} onChange={(e) => setTo(e.target.value)} /></Field>
-        <button onClick={onSync} disabled={busy} className="btn-ghost">{busy ? "Sincronizando…" : "Sincronizar POS"}</button>
+        {can("importar") && (
+          <button onClick={onSync} disabled={busy} className="btn-ghost">{busy ? "Sincronizando…" : "Sincronizar POS"}</button>
+        )}
       </div>
 
       {banner && (

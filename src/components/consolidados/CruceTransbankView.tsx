@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatMoney, formatDate } from "@/lib/format";
 import { CuadraturaTransbankView } from "./CuadraturaTransbankView";
+import { usePermisos } from "@/lib/use-permisos";
 
 type Estado = "cuadrado" | "pos_sin_settlement" | "settlement_sin_pos";
 
@@ -52,6 +53,7 @@ const ESTADO_META: Record<Estado, { label: string; cls: string }> = {
 };
 
 export function CruceTransbankView() {
+  const { can } = usePermisos();
   const [from, setFrom] = useState<string>(firstDayOfMonthIso());
   const [to, setTo] = useState<string>(todayIso());
   const [sucursalId, setSucursalId] = useState<string>("");
@@ -198,9 +200,11 @@ export function CruceTransbankView() {
             </select>
           </label>
         )}
-        <button onClick={onSyncPos} disabled={busy} className="btn-ghost text-sm">
-          {busy ? "Sincronizando…" : "Sincronizar POS"}
-        </button>
+        {can("importar") && (
+          <button onClick={onSyncPos} disabled={busy} className="btn-ghost text-sm">
+            {busy ? "Sincronizando…" : "Sincronizar POS"}
+          </button>
+        )}
         {mode === "movimientos" && k && (
           <div className="ml-auto text-sm text-text-muted text-right leading-tight">
             <div>
@@ -327,7 +331,7 @@ export function CruceTransbankView() {
                       )}
                     </td>
                     <td className="px-3 py-2 text-center whitespace-nowrap">
-                      {r.estado === "pos_sin_settlement" && (
+                      {can("conciliar") && r.estado === "pos_sin_settlement" && (
                         <button
                           onClick={() => setLinkTarget(r)}
                           className="text-brand hover:underline text-xs"
@@ -336,7 +340,7 @@ export function CruceTransbankView() {
                           Vincular
                         </button>
                       )}
-                      {r.estado === "settlement_sin_pos" && (
+                      {can("conciliar") && r.estado === "settlement_sin_pos" && (
                         <button
                           onClick={() => setPosFicticioTarget(r)}
                           className="text-brand hover:underline text-xs"
@@ -345,7 +349,7 @@ export function CruceTransbankView() {
                           Crear POS
                         </button>
                       )}
-                      {r.estado === "cuadrado" && r.ficticio && (
+                      {can("conciliar") && r.estado === "cuadrado" && r.ficticio && (
                         <button
                           onClick={() => onBorrarFicticio(r)}
                           disabled={busy}
@@ -355,7 +359,7 @@ export function CruceTransbankView() {
                           Borrar POS
                         </button>
                       )}
-                      {r.estado === "cuadrado" && r.manual && !r.ficticio && (
+                      {can("conciliar") && r.estado === "cuadrado" && r.manual && !r.ficticio && (
                         <button
                           onClick={() => onDesvincular(r)}
                           disabled={busy}

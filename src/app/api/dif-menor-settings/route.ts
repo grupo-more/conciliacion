@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { DIF_MENOR_SETTINGS_ID } from "@/lib/dif-menor/detect";
+import { denyUnless } from "@/lib/perms";
 
 /**
  * GET  /api/dif-menor-settings → devuelve el setting actual (1 row).
@@ -44,6 +45,8 @@ export async function PATCH(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
+  const deniedPerm = await denyUnless(session, "configurar");
+  if (deniedPerm) return deniedPerm;
 
   const json = await req.json().catch(() => null);
   const parsed = patchSchema.safeParse(json);

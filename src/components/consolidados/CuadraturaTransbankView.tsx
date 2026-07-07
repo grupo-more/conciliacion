@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
+import { usePermisos } from "@/lib/use-permisos";
 import {
   exportAsi1Zip,
   exportAsi1MultiSheet,
@@ -136,6 +137,7 @@ export function CuadraturaTransbankView({
   to: string;
   sucursalId: string;
 }) {
+  const { can } = usePermisos();
   const [vista, setVista] = useState<"pendiente" | "generadas" | "papelera">("pendiente");
   const [data, setData] = useState<PreviewResp | null>(null);
   const [loading, setLoading] = useState(false);
@@ -338,22 +340,39 @@ export function CuadraturaTransbankView({
       {loading && <div className="p-4 text-sm text-text-muted">Cargando…</div>}
 
       {!loading && vista === "pendiente" && data && (
-        <PreviewBlock data={data} busy={busy} onGenerar={onGenerar} onApartar={onApartar} from={from} to={to} />
+        <PreviewBlock
+          data={data}
+          busy={busy}
+          onGenerar={onGenerar}
+          canGenerar={can("generarAsientos")}
+          onApartar={can("depurar") ? onApartar : undefined}
+          from={from}
+          to={to}
+        />
       )}
 
       {!loading && vista === "generadas" && (
-        <GeneradasBlock cuads={cuads} onOpen={(c) => openCuadratura(c.id, setDetalle)} onDeshacer={onDeshacer} busy={busy} />
+        <GeneradasBlock
+          cuads={cuads}
+          onOpen={(c) => openCuadratura(c.id, setDetalle)}
+          onDeshacer={can("generarAsientos") ? onDeshacer : undefined}
+          busy={busy}
+        />
       )}
 
       {!loading && vista === "papelera" && (
-        <PapeleraBlock apartados={apartados} onRestaurar={onRestaurar} busy={busy} />
+        <PapeleraBlock
+          apartados={apartados}
+          onRestaurar={can("depurar") ? onRestaurar : undefined}
+          busy={busy}
+        />
       )}
 
       {detalle && (
         <CuadraturaModal
           detalle={detalle}
           onClose={() => setDetalle(null)}
-          onDeshacer={() => onDeshacer(detalle.cuadratura.id)}
+          onDeshacer={can("generarAsientos") ? () => onDeshacer(detalle.cuadratura.id) : undefined}
           busy={busy}
         />
       )}
@@ -375,6 +394,7 @@ function PreviewBlock({
   data,
   busy,
   onGenerar,
+  canGenerar,
   onApartar,
   from,
   to,
@@ -382,7 +402,8 @@ function PreviewBlock({
   data: PreviewResp;
   busy: boolean;
   onGenerar: () => void;
-  onApartar: (mov: Movimiento, suc: SucursalAsiento) => void;
+  canGenerar: boolean;
+  onApartar?: (mov: Movimiento, suc: SucursalAsiento) => void;
   from: string;
   to: string;
 }) {
@@ -403,13 +424,15 @@ function PreviewBlock({
           )}
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={onGenerar}
-            disabled={!hasRows || busy}
-            className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
-          >
-            {busy ? "Generando…" : "Generar cuadratura"}
-          </button>
+          {canGenerar && (
+            <button
+              onClick={onGenerar}
+              disabled={!hasRows || busy}
+              className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? "Generando…" : "Generar cuadratura"}
+            </button>
+          )}
         </div>
       </div>
 
@@ -739,7 +762,7 @@ function GeneradasBlock({
 }: {
   cuads: Cuadratura[] | null;
   onOpen: (c: Cuadratura) => void;
-  onDeshacer: (id: string) => void;
+  onDeshacer?: (id: string) => void;
   busy: boolean;
 }) {
   if (!cuads) return null;
@@ -774,13 +797,15 @@ function GeneradasBlock({
                 <button onClick={() => onOpen(c)} className="text-brand hover:underline text-xs">
                   Ver
                 </button>
-                <button
-                  onClick={() => onDeshacer(c.id)}
-                  disabled={busy}
-                  className="ml-3 text-rose-700 hover:underline text-xs disabled:opacity-50"
-                >
-                  Deshacer
-                </button>
+                {onDeshacer && (
+                  <button
+                    onClick={() => onDeshacer(c.id)}
+                    disabled={busy}
+                    className="ml-3 text-rose-700 hover:underline text-xs disabled:opacity-50"
+                  >
+                    Deshacer
+                  </button>
+                )}
               </td>
             </tr>
           ))}
@@ -798,7 +823,7 @@ function PapeleraBlock({
   busy,
 }: {
   apartados: Apartado[] | null;
-  onRestaurar: (id: string) => void;
+  onRestaurar?: (id: string) => void;
   busy: boolean;
 }) {
   if (!apartados) return null;
@@ -852,7 +877,7 @@ function PapeleraBlock({
                 )}
               </td>
               <td className="px-3 py-2 text-center whitespace-nowrap">
-                {a.recuperable ? (
+                {a.recuperable && onRestaurar ? (
                   <button
                     onClick={() => onRestaurar(a.id)}
                     disabled={busy}
@@ -880,7 +905,7 @@ function CuadraturaModal({
 }: {
   detalle: { cuadratura: Cuadratura; asiento: Asiento };
   onClose: () => void;
-  onDeshacer: () => void;
+  onDeshacer?: () => void;
   busy: boolean;
 }) {
   const { cuadratura: c, asiento } = detalle;
@@ -918,9 +943,11 @@ function CuadraturaModal({
             >
               Auditar
             </button>
-            <button onClick={onDeshacer} disabled={busy} className="btn-ghost text-sm text-rose-700">
-              Deshacer
-            </button>
+            {onDeshacer && (
+              <button onClick={onDeshacer} disabled={busy} className="btn-ghost text-sm text-rose-700">
+                Deshacer
+              </button>
+            )}
             <button onClick={onClose} className="btn-ghost text-sm">
               Cerrar
             </button>

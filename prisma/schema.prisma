@@ -15,6 +15,27 @@ model User {
   active       Boolean  @default(true)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Perfil de permisos. null → tratado como "Solo lectura" (mínimo privilegio).
+  perfilId String? @map("perfil_id")
+  perfil   Perfil? @relation(fields: [perfilId], references: [id], onDelete: SetNull)
+}
+
+// Perfil de uso del sistema. `permisos` (Json) son las "variables" del perfil:
+//   { modulos: { dashboard, consolidados, cartolas, movimientos, reportes },
+//     acciones: { conciliar, reevaluar, generarAsientos, importar, depurar,
+//                 configurar, gestionarUsuarios } }
+// esAdmin=true bypasea todo (perfil de Gerencia, no editable ni eliminable).
+// La forma canónica vive en src/lib/perms.ts (normalizePermisos).
+model Perfil {
+  id        String   @id @default(uuid())
+  nombre    String   @unique
+  esAdmin   Boolean  @default(false) @map("es_admin")
+  permisos  Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users User[]
 }
 
 model BankAccount {
