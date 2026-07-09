@@ -73,6 +73,20 @@ const SEED: SeedEntidad[] = [
 async function main() {
   console.log("Seed EntidadInterna — iniciando…\n");
 
+  // EntidadInterna.rubro tiene FK a RubroLabel.rubro. En una BD recién instalada
+  // esos labels no existen (en el server viejo se crearon por la UI) → P2003.
+  // Asegurarlos antes, con el nombre canónico de la entidad como label.
+  for (const e of SEED) {
+    if (e.rubro == null) continue;
+    await prisma.rubroLabel.upsert({
+      where: { rubro: e.rubro },
+      update: {},
+      create: { rubro: e.rubro, name: `Traspaso ${e.nombreCanonico}` },
+    });
+    console.log(`  ✓ RubroLabel ${e.rubro} (${e.nombreCanonico}) asegurado`);
+  }
+  console.log("");
+
   for (const e of SEED) {
     const rutCanonico = normalizeRut(e.rut);
     const existing = await prisma.entidadInterna.findUnique({
