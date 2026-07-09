@@ -9,6 +9,7 @@ import { EntidadesInternasTab } from "./EntidadesInternasTab";
 import { SucursalesTab } from "./SucursalesTab";
 import { UsuariosPerfilesTab } from "./UsuariosPerfilesTab";
 import { DescartesTab } from "./DescartesTab";
+import { ProveedoresTab } from "./ProveedoresTab";
 import { usePermisos } from "@/lib/use-permisos";
 
 type Tab =
@@ -19,6 +20,7 @@ type Tab =
   | "entidades-internas"
   | "sucursales"
   | "descartes"
+  | "proveedores"
   | "usuarios";
 
 interface Props {
@@ -71,6 +73,9 @@ export function ConfiguracionView({ user }: Props) {
               <TabButton active={tab === "descartes"} onClick={() => setTab("descartes")}>
                 Descartes automáticos
               </TabButton>
+              <TabButton active={tab === "proveedores"} onClick={() => setTab("proveedores")}>
+                Proveedores
+              </TabButton>
             </>
           )}
           {verUsuarios && (
@@ -89,6 +94,7 @@ export function ConfiguracionView({ user }: Props) {
         {verConfig && tab === "entidades-internas" && <EntidadesInternasTab />}
         {verConfig && tab === "sucursales" && <SucursalesTab />}
         {verConfig && tab === "descartes" && <DescartesTab />}
+        {verConfig && tab === "proveedores" && <ProveedoresTab />}
         {verUsuarios && tab === "usuarios" && <UsuariosPerfilesTab />}
       </div>
     </div>

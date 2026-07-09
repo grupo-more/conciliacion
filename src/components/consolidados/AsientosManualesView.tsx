@@ -17,11 +17,15 @@ interface PendienteRow {
   counterpartyName: string | null;
   counterpartyRut: string | null;
   description: string | null;
+  /** Solo en la cola "proveedores": qué proveedor del maestro lo derivó acá. */
+  proveedorNombre?: string;
 }
 
 interface PendientesResp {
   rows: PendienteRow[];
   totals: { count: number; monto: string };
+  /** Cuántos pendientes quedaron en la OTRA cola (aviso de derivados). */
+  derivadosOtraCola?: number;
   facets: { accounts: { id: string; label: string }[] };
 }
 
@@ -60,7 +64,14 @@ interface Emision {
   createdAt: string;
 }
 
-export function AsientosManualesView() {
+/**
+ * `queue` particiona los pendientes contra el maestro ProveedorAsiento
+ * (Configuración → Proveedores): "proveedores" = solo los que matchean (cola
+ * delegable con su propio ciclo generados/emitidos), "manual" = el resto.
+ */
+export function AsientosManualesView({ queue = "manual" }: { queue?: "manual" | "proveedores" }) {
+  const esProveedores = queue === "proveedores";
+  const origen = esProveedores ? "PROVEEDORES" : "MANUAL";
   const [from, setFrom] = useState(firstDayOfMonthIso());
   const [to, setTo] = useState(todayIso());
   const [accountId, setAccountId] = useState("");
@@ -80,11 +91,11 @@ export function AsientosManualesView() {
     setLoading(true);
     try {
       if (mode === "emitidos") {
-        const res = await fetch(`/api/consolidados/asientos-manuales/emisiones`);
+        const res = await fetch(`/api/consolidados/asientos-manuales/emisiones?origen=${origen}`);
         setEmisiones(res.ok ? (await res.json()).emisiones ?? [] : []);
         return;
       }
-      const p = new URLSearchParams({ from, to, mode });
+      const p = new URLSearchParams({ from, to, mode, queue });
       if (accountId) p.set("accountId", accountId);
       const res = await fetch(`/api/consolidados/asientos-manuales?${p}`);
       if (!res.ok) {
@@ -148,11 +159,14 @@ export function AsientosManualesView() {
     };
   }
 
+  const etiqueta = esProveedores ? "Asientos proveedores" : "Asientos manuales";
+  const filePrefix = esProveedores ? "asientos_proveedores" : "asientos_manuales";
+
   function buildAsiento(): { options: Asi1Options; filename: string } | null {
     return buildAsientoFrom(
       gen,
-      `Asientos manuales ${formatDate(from)} al ${formatDate(to)}`,
-      `asientos_manuales_${from}_${to}`,
+      `${etiqueta} ${formatDate(from)} al ${formatDate(to)}`,
+      `${filePrefix}_${from}_${to}`,
       to,
     );
   }
@@ -189,7 +203,7 @@ export function AsientosManualesView() {
       const res = await fetch(`/api/consolidados/asientos-manuales/emisiones`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ from, to, accountId: accountId || null }),
+        body: JSON.stringify({ from, to, accountId: accountId || null, origen }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -199,8 +213,8 @@ export function AsientosManualesView() {
       // Descargar el documento de inmediato (es el mismo que Descargar Excel).
       const a = buildAsientoFrom(
         gen,
-        `Asientos manuales · Emisión #${j.folio}`,
-        `asientos_manuales_emision_${j.folio}`,
+        `${etiqueta} · Emisión #${j.folio}`,
+        `${filePrefix}_emision_${j.folio}`,
         to,
       );
       if (a) exportAsi1Xls(a.options, a.filename);
@@ -226,8 +240,8 @@ export function AsientosManualesView() {
     setPreview(
       buildAsientoFrom(
         asientos,
-        `Asientos manuales · Emisión #${e.folio}`,
-        `asientos_manuales_emision_${e.folio}`,
+        `${etiqueta} · Emisión #${e.folio}`,
+        `${filePrefix}_emision_${e.folio}`,
         fechaDocDeEmision(e),
       ),
     );
@@ -238,8 +252,8 @@ export function AsientosManualesView() {
     if (!asientos) return;
     const a = buildAsientoFrom(
       asientos,
-      `Asientos manuales · Emisión #${e.folio}`,
-      `asientos_manuales_emision_${e.folio}`,
+      `${etiqueta} · Emisión #${e.folio}`,
+      `${filePrefix}_emision_${e.folio}`,
       fechaDocDeEmision(e),
     );
     if (a) exportAsi1Xls(a.options, a.filename);
@@ -376,6 +390,11 @@ export function AsientosManualesView() {
           <span className="text-xs text-text-muted whitespace-nowrap">
             {debouncedQ.trim() ? `${filteredRows.length} de ${pend.totals.count}` : `${pend.totals.count} sin conciliar`} ·{" "}
             <span className="font-mono">{formatMoney(totalMonto)}</span>
+            {(pend.derivadosOtraCola ?? 0) > 0 && (
+              <span className="ml-2 text-text-dim" title={esProveedores ? "Pendientes que NO matchean el maestro de proveedores (quedan en Asientos manuales)" : "Pendientes derivados a la tab Proveedores por el maestro de Configuración"}>
+                · {pend.derivadosOtraCola} en {esProveedores ? "Asientos manuales" : "Proveedores"}
+              </span>
+            )}
           </span>
         )}
         {mode === "generados" && gen.length > 0 && (
@@ -420,6 +439,7 @@ export function AsientosManualesView() {
                 <thead className="bg-bg-soft text-xs uppercase tracking-wider text-text-muted">
                   <tr>
                     <th className="px-3 py-2 text-left">Fecha</th>
+                    {esProveedores && <th className="px-3 py-2 text-left">Proveedor</th>}
                     <th className="px-3 py-2 text-left">Cuenta</th>
                     <th className="px-3 py-2 text-left">Dir.</th>
                     <th className="px-3 py-2 text-right">Monto</th>
@@ -432,6 +452,16 @@ export function AsientosManualesView() {
                   {filteredRows.map((r) => (
                     <tr key={r.id} onClick={() => setSelected(r.id)} className="border-t border-border-soft/60 hover:bg-bg-soft/40 cursor-pointer">
                       <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.fecha)}</td>
+                      {esProveedores && (
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span
+                            className="inline-block rounded-full bg-sky-100 text-sky-800 border border-sky-200 text-[11px] px-2 py-0.5 font-semibold"
+                            title="Proveedor del maestro (Configuración → Proveedores) que derivó este movimiento a esta cola"
+                          >
+                            {r.proveedorNombre ?? "—"}
+                          </span>
+                        </td>
+                      )}
                       <td className="px-3 py-2 whitespace-nowrap">
                         <div>{r.bankName}{r.holderName ? ` ${r.holderName}` : ""}</div>
                         <div className="text-xs text-text-muted font-mono">{r.accountNumber}</div>

@@ -664,9 +664,35 @@ model Sucursal {
 // vista "Generados", pero quedan auditables como conjunto — el documento se
 // puede previsualizar/re-descargar EXACTO (los mismos asientos) y la emisión
 // se puede deshacer (vuelven a GENERADO).
+// Maestro de PROVEEDORES para la tab "Proveedores" de Consolidados: los
+// movimientos de banco sin conciliar que matchean este maestro se derivan a esa
+// tab (cola de trabajo delegable) y salen de "Asientos manuales". Match certero:
+// RUT primero (counterpartyRut o RUT incrustado en glosa/nombre, misma cascada
+// que EntidadInterna), patrones de texto como respaldo (glosas sin RUT, ej.
+// "Traspaso A: <persona>" de Banco de Chile).
+model ProveedorAsiento {
+  id          String   @id @default(uuid())
+  nombre      String
+  // RUT normalizado (dígitos + K, sin puntos/guion). Opcional pero recomendado.
+  rut         String?  @unique
+  // Patrones contains case-insensitive contra contraparte y glosa.
+  patrones    String[] @default([])
+  active      Boolean  @default(true)
+  nota        String?  @db.Text
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([active])
+}
+
 model EmisionAsientos {
   id    String @id @default(uuid())
   folio Int    @unique @default(autoincrement())
+
+  // Cola que emitió: MANUAL (tab Asientos manuales) | PROVEEDORES (tab
+  // Proveedores). El folio es UN solo correlativo compartido.
+  origen String @default("MANUAL")
 
   // Rango del filtro con el que se emitió (informativo).
   desde DateTime
@@ -691,6 +717,10 @@ model AsientoManual {
 
   tipo   String // PROVEEDOR | CLIENTE
   estado String @default("GENERADO") // GENERADO | EMITIDO | PENDIENTE (cliente)
+  // Cola donde se generó (snapshot al crear, resuelto por match contra el
+  // maestro ProveedorAsiento): MANUAL | PROVEEDORES. Editar el maestro después
+  // NO cambia de cola los asientos ya generados.
+  origen String @default("MANUAL")
 
   // Emisión a la que pertenece (estado EMITIDO). SetNull para que deshacer una
   // emisión nunca borre asientos.
@@ -716,6 +746,7 @@ model AsientoManual {
 
   @@index([tipo])
   @@index([estado])
+  @@index([origen])
   @@index([emisionId])
 }
 

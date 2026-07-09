@@ -23,6 +23,7 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const id = url.searchParams.get("id");
+  const origen = url.searchParams.get("origen"); // MANUAL | PROVEEDORES | null (todas)
 
   if (id) {
     const emision = await prisma.emisionAsientos.findUnique({ where: { id } });
@@ -35,6 +36,7 @@ export async function GET(req: Request) {
   }
 
   const emisiones = await prisma.emisionAsientos.findMany({
+    where: origen === "MANUAL" || origen === "PROVEEDORES" ? { origen } : {},
     orderBy: { folio: "desc" },
     take: 500,
   });
@@ -45,6 +47,7 @@ const postSchema = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   accountId: z.string().uuid().nullable().optional(),
+  origen: z.enum(["MANUAL", "PROVEEDORES"]).default("MANUAL"),
 });
 
 export async function POST(req: Request) {
@@ -60,11 +63,13 @@ export async function POST(req: Request) {
   }
   const { from, to } = parseRange(parsed.data.from, parsed.data.to);
   const accountId = parsed.data.accountId ?? null;
+  const origen = parsed.data.origen;
 
-  // Los mismos asientos que muestra la vista "Generados" con ese filtro.
+  // Los mismos asientos que muestra la vista "Generados" de esa cola con ese filtro.
   const asientos = await prisma.asientoManual.findMany({
     where: {
       estado: "GENERADO",
+      origen,
       bankMovement: {
         postDate: { gte: from, lt: to },
         ...(accountId ? { accountId } : {}),
@@ -82,6 +87,7 @@ export async function POST(req: Request) {
   const emision = await prisma.$transaction(async (tx) => {
     const e = await tx.emisionAsientos.create({
       data: {
+        origen,
         desde: from,
         hasta: to,
         count: asientos.length,
@@ -128,6 +134,7 @@ export async function DELETE(req: Request) {
 function serializeEmision(e: {
   id: string;
   folio: number;
+  origen: string;
   desde: Date;
   hasta: Date;
   count: number;
@@ -138,6 +145,7 @@ function serializeEmision(e: {
   return {
     id: e.id,
     folio: e.folio,
+    origen: e.origen,
     desde: e.desde.toISOString(),
     hasta: e.hasta.toISOString(),
     count: e.count,

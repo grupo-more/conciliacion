@@ -33,7 +33,8 @@ type Tab =
   | "egresos-terceros"
   | "traspasos-internos"
   | "dif-menor"
-  | "asientos-manuales";
+  | "asientos-manuales"
+  | "proveedores";
 
 export function ConsolidadosView() {
   const { can } = usePermisos();
@@ -261,6 +262,12 @@ export function ConsolidadosView() {
           >
             Asientos manuales
           </TabButton>
+          <TabButton
+            active={tab === "proveedores"}
+            onClick={() => setTab("proveedores")}
+          >
+            Proveedores
+          </TabButton>
         </nav>
       </div>
 
@@ -274,6 +281,7 @@ export function ConsolidadosView() {
       {tab === "traspasos-internos" && <TraspasosInternosView />}
       {tab === "dif-menor" && <DifMenorView />}
       {tab === "asientos-manuales" && <AsientosManualesView />}
+      {tab === "proveedores" && <AsientosManualesView queue="proveedores" />}
 
       {tab === "list" && (
         <>

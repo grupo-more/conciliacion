@@ -8,6 +8,7 @@ import { computeBancoSinConciliar } from "@/lib/reportes/banco-compute";
 import { getAsientoSettings } from "@/lib/asientos/settings";
 import { prorratear, calcRetencion } from "@/lib/asientos/prorrateo";
 import { loadAsientosSerializados } from "@/lib/asientos/serialize";
+import { loadProveedores, matchProveedor } from "@/lib/asientos/proveedores";
 import { denyUnless } from "@/lib/perms";
 
 /**
@@ -27,10 +28,13 @@ export async function GET(req: Request) {
   const mode = url.searchParams.get("mode") || "pendientes";
   const { from, to } = parseRange(url.searchParams.get("from"), url.searchParams.get("to"));
   const accountId = url.searchParams.get("accountId") || null;
+  // Cola: "manual" (tab Asientos manuales) | "proveedores" (tab Proveedores).
+  const queue = url.searchParams.get("queue") === "proveedores" ? "proveedores" : "manual";
 
   if (mode === "generados") {
     const asientos = await loadAsientosSerializados({
       estado: "GENERADO",
+      origen: queue === "proveedores" ? "PROVEEDORES" : "MANUAL",
       bankMovement: {
         postDate: { gte: from, lt: to },
         ...(accountId ? { accountId } : {}),
@@ -43,13 +47,30 @@ export async function GET(req: Request) {
     });
   }
 
-  // mode = pendientes: la brecha de banco (sin asiento, ya excluido en compute).
-  const result = await computeBancoSinConciliar(from, to, { accountId });
+  // mode = pendientes: la brecha de banco (sin asiento, ya excluido en compute),
+  // PARTICIONADA contra el maestro de proveedores: cada movimiento cae en
+  // exactamente una cola (derivado, sin estado persistido — editar el maestro
+  // mueve los pendientes de cola automáticamente).
+  const [result, proveedores] = await Promise.all([
+    computeBancoSinConciliar(from, to, { accountId }),
+    loadProveedores(),
+  ]);
+  const enProveedores: Array<(typeof result.rows)[number] & { proveedorNombre: string }> = [];
+  const enManual: typeof result.rows = [];
+  for (const r of result.rows) {
+    const m = matchProveedor(r, proveedores);
+    if (m) enProveedores.push({ ...r, proveedorNombre: m.proveedor.nombre });
+    else enManual.push(r);
+  }
+  const rows = queue === "proveedores" ? enProveedores : enManual;
+  const monto = rows.reduce((acc, r) => acc + BigInt(r.monto ?? "0"), 0n);
   return NextResponse.json({
     from: from.toISOString(),
     to: to.toISOString(),
-    rows: result.rows,
-    totals: { count: result.resumen.count, monto: result.resumen.monto },
+    rows,
+    totals: { count: rows.length, monto: monto.toString() },
+    // Cuántos quedaron en la OTRA cola (para el aviso "N derivados a…").
+    derivadosOtraCola: queue === "proveedores" ? enManual.length : enProveedores.length,
     facets: result.facets,
   });
 }
@@ -165,12 +186,19 @@ export async function POST(req: Request) {
   }
   const montoBruto = montoNeto + montoRetencion;
 
+  // Cola de origen (snapshot): se resuelve en el SERVER contra el maestro de
+  // proveedores — no se confía en el cliente, y editar el maestro después no
+  // cambia de cola los asientos ya generados.
+  const proveedoresMaestro = await loadProveedores();
+  const origen = matchProveedor(bm, proveedoresMaestro) ? "PROVEEDORES" : "MANUAL";
+
   const created = await prisma.$transaction(async (tx) => {
     const asiento = await tx.asientoManual.create({
       data: {
         bankMovementId,
         tipo,
         estado: "GENERADO",
+        origen,
         montoNeto,
         retencionTasa: retencionTasa != null ? new Prisma.Decimal(retencionTasa) : null,
         montoRetencion,
