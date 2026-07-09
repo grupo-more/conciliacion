@@ -133,7 +133,12 @@ export function TraspasosInternosView() {
         descripcion: `Traspasos internos ${formatDate(from)} al ${formatDate(to)}`,
         lineas: data.rows.map((r) => ({
           rubro: r.rubro ?? "",
-          detalle: pickDescripcion(r.contraparte, r.glosa, r.detalle),
+          // A diferencia de las otras tabs (donde contraparte = cliente, útil
+          // para gestión), acá la contraparte cruda es un RUT o "Internet a
+          // XX.XXX.XXX-X" — sin valor en el documento. La descripción correcta
+          // de cada línea es la CUENTA (banco · titular · n°), igual que la
+          // columna Detalle de la vista.
+          detalle: r.detalle || pickDescripcion(r.contraparte, r.glosa, r.detalle),
           debe: r.debe,
           haber: r.haber,
         })),
