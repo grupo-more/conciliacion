@@ -8,6 +8,7 @@ import { DifMenorTab } from "./DifMenorTab";
 import { EntidadesInternasTab } from "./EntidadesInternasTab";
 import { SucursalesTab } from "./SucursalesTab";
 import { UsuariosPerfilesTab } from "./UsuariosPerfilesTab";
+import { DescartesTab } from "./DescartesTab";
 import { usePermisos } from "@/lib/use-permisos";
 
 type Tab =
@@ -17,6 +18,7 @@ type Tab =
   | "dif-menor"
   | "entidades-internas"
   | "sucursales"
+  | "descartes"
   | "usuarios";
 
 interface Props {
@@ -66,6 +68,9 @@ export function ConfiguracionView({ user }: Props) {
               <TabButton active={tab === "sucursales"} onClick={() => setTab("sucursales")}>
                 Sucursales
               </TabButton>
+              <TabButton active={tab === "descartes"} onClick={() => setTab("descartes")}>
+                Descartes automáticos
+              </TabButton>
             </>
           )}
           {verUsuarios && (
@@ -83,6 +88,7 @@ export function ConfiguracionView({ user }: Props) {
         {verConfig && tab === "dif-menor" && <DifMenorTab />}
         {verConfig && tab === "entidades-internas" && <EntidadesInternasTab />}
         {verConfig && tab === "sucursales" && <SucursalesTab />}
+        {verConfig && tab === "descartes" && <DescartesTab />}
         {verUsuarios && tab === "usuarios" && <UsuariosPerfilesTab />}
       </div>
     </div>

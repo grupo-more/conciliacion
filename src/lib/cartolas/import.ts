@@ -30,6 +30,8 @@ export interface ImportPreviewItem {
   duplicateOfAccountId?: string | null;
   duplicateOfAccountLabel?: string | null;
   errorReason?: string;
+  /** Si matcheó una DescarteRegla: se inserta pero directo a descartados. */
+  autoDescartePatron?: string;
 }
 
 export interface ImportPreview {
@@ -55,6 +57,8 @@ export interface ImportPreview {
     duplicatesSameAccount: number;
     duplicatesOtherAccount: number;
     parseErrors: number;
+    /** De los toInsert, cuántos entran directo a descartados por regla. */
+    autoDescartados: number;
   };
   items: ImportPreviewItem[];
   /** Si fileHash ya existe en algún StatementImport, info del previo. */
@@ -187,6 +191,24 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
   });
   const descartadoSet = new Set(descartadosRows.map((d) => d.dedupKey));
 
+  // Reglas de descarte automático (Configuración → Descartes automáticos):
+  // los movimientos cuya contraparte/glosa contiene el patrón se insertan
+  // directo a "Movimientos descartados" (ej. inversiones de More Capital vía
+  // Motale/Vector, que no son flujo del negocio).
+  const reglas = await prisma.descarteRegla.findMany({
+    where: { active: true, OR: [{ accountId: null }, { accountId: resolved.id }] },
+    select: { patron: true },
+  });
+  const matchRegla = (m: NormalizedMovement): string | null => {
+    if (reglas.length === 0) return null;
+    const hay = `${m.counterpartyName ?? ""} ${m.description ?? ""}`.toLowerCase();
+    for (const r of reglas) {
+      const p = r.patron.trim().toLowerCase();
+      if (p && hay.includes(p)) return r.patron;
+    }
+    return null;
+  };
+
   // 5) Cross-check intra-banco (otras cuentas del mismo banco) — match perfecto
   // Solo aplica para los movimientos que aún no están duplicados en la cuenta destino.
   const otherBankAccountIds = await prisma.bankAccount
@@ -282,7 +304,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
       continue;
     }
 
-    items.push({ movement: m, dedupKey: key, status: "NEW" });
+    const patron = matchRegla(m);
+    items.push({ movement: m, dedupKey: key, status: "NEW", autoDescartePatron: patron ?? undefined });
     toInsert++;
   }
 
@@ -336,6 +359,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
       duplicatesSameAccount: dupSame,
       duplicatesOtherAccount: dupOther,
       parseErrors: parsed.errors.length,
+      autoDescartados: items.filter((it) => it.status === "NEW" && it.autoDescartePatron).length,
     },
     items,
     alreadyImported: previousImport
@@ -418,11 +442,27 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
           txType: it.movement.txType,
           dedupKey: it.dedupKey,
           rawRow: it.movement.rawRow as object,
-          // Si ya estaba descartado, reentra directo a "Movimientos descartados".
-          descartadoAt: descartadoSet.has(it.dedupKey) ? new Date() : null,
+          // Directo a "Movimientos descartados" si ya estaba descartado (registro
+          // durable) o si matcheó una regla de descarte automático.
+          descartadoAt:
+            descartadoSet.has(it.dedupKey) || it.autoDescartePatron ? new Date() : null,
         })),
         skipDuplicates: true,
       });
+
+      // Registro durable de los descartados por regla (con la razón visible en
+      // la vista de descartados). skipDuplicates: si ya existía, se conserva.
+      const porRegla = newItems.filter((it) => it.autoDescartePatron && !descartadoSet.has(it.dedupKey));
+      if (porRegla.length > 0) {
+        await tx.movimientoDescartado.createMany({
+          data: porRegla.map((it) => ({
+            accountId: resolved.id,
+            dedupKey: it.dedupKey,
+            razon: `Regla automática: "${it.autoDescartePatron}"`,
+          })),
+          skipDuplicates: true,
+        });
+      }
     }
 
     return stmt;

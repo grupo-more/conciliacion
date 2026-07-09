@@ -46,7 +46,11 @@ const ACCOUNTS = [
     accountNumber: "9822911",
     displayNumber: "9822911",
     holderName: "MORECAPITAL",
-    holderRut: null,
+    // RUT de More Capital SpA. Sin esto el matcher de traspasos internos no
+    // puede mapear la cuenta como destino y TODOS los traspasos a More Capital
+    // quedan huérfanos (no-dest-account). Antes se parchaba post-install con
+    // scripts/fix-holder-rut.ts; ahora nace correcto desde el seed.
+    holderRut: "76815928-9",
     currency: "CLP",
   },
   {

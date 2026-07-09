@@ -53,14 +53,37 @@ model BankAccount {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  imports     StatementImport[]
-  movements   BankMovement[]
-  aliases     BankAccountAlias[]
-  descartados MovimientoDescartado[]
-  rubroLabel  RubroLabel?
+  imports        StatementImport[]
+  movements      BankMovement[]
+  aliases        BankAccountAlias[]
+  descartados    MovimientoDescartado[]
+  descarteReglas DescarteRegla[]
+  rubroLabel     RubroLabel?
 
   @@unique([bankCode, accountNumber])
   @@index([active])
+}
+
+// Regla de DESCARTE AUTOMÁTICO al importar cartolas: los movimientos cuya
+// contraparte o glosa contiene el patrón entran directo a "Movimientos
+// descartados" (descartadoAt seteado + registro durable), sin conciliar ni
+// contar como pendientes. Caso de origen: Banco Internacional (More Capital)
+// invierte vía "Motale Spa" / "Vector Capital"; esos flujos no son del negocio.
+// Se administran en Configuración → Descartes automáticos.
+model DescarteRegla {
+  id          String       @id @default(uuid())
+  // null = aplica a todas las cuentas; si no, solo a esa cuenta.
+  accountId   String?      @map("account_id")
+  account     BankAccount? @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  // Substring case-insensitive contra counterpartyName y description.
+  patron      String
+  active      Boolean      @default(true)
+  nota        String?      @db.Text
+  createdById String?      @map("created_by_id")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  @@index([active])
+  @@index([accountId])
 }
 
 // Mapeo explícito de TesoreriaMovement.banco → BankAccount.
