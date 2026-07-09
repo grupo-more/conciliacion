@@ -213,7 +213,16 @@ export function SucursalesTab() {
                 </tr>
               </thead>
               <tbody>
-                {sucursales.map((s) => (
+                {sucursales
+                  .slice()
+                  // Orden por código ascendente (legibilidad); sin código, al final por nombre.
+                  .sort((a, b) => {
+                    if (a.codigo == null && b.codigo == null) return a.nombre.localeCompare(b.nombre);
+                    if (a.codigo == null) return 1;
+                    if (b.codigo == null) return -1;
+                    return a.codigo - b.codigo;
+                  })
+                  .map((s) => (
                   <tr key={s.id} className="border-t border-border-soft/60">
                     <td className="px-2 py-1.5">
                       <input
