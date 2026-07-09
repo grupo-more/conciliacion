@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { consumedRefIds } from "@/lib/consolidados/emision-consumo";
 
 /**
  * GET /api/consolidados/ok?from=YYYY-MM-DD&to=YYYY-MM-DD&accountId=&rubroSucursal=
@@ -39,9 +40,17 @@ export async function GET(req: Request) {
       ? Number(rubroSucursalRaw)
       : null;
 
+  // Conciliados ya emitidos a gestión (folio): fuera del listado de esta tab.
+  // Siguen conciliados en todo el resto del sistema. La referencia consumida es
+  // el tesoreriaMovementId (NO el consolidadoId): el motor hace wipe+recreate de
+  // los Consolidados no-MANUAL en cada corrida y sus ids cambian — el TM es el
+  // ancla estable 1:1.
+  const emitidos = await consumedRefIds("OK");
+
   const consolidados = await prisma.consolidado.findMany({
     where: {
       status: { in: ["AUTO_MATCHED", "MANUAL"] },
+      ...(emitidos.size > 0 ? { tesoreriaMovementId: { notIn: Array.from(emitidos) } } : {}),
       tesoreriaMovement: {
         // OK = ingresos (clientes). Los egresos (tipoOperacion=EGRESO) van a la
         // tab "Egresos a terceros → Conciliados (asiento)".

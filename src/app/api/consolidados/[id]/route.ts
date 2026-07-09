@@ -367,6 +367,24 @@ export async function PATCH(
     return NextResponse.json({ error: "Movimiento no encontrado" }, { status: 404 });
   }
 
+  // Conciliación ya EMITIDA a gestión (tab OK → Emitidos): no se puede
+  // confirmar/deshacer suelta — el documento ya salió con este movimiento.
+  // Hay que deshacer la emisión completa primero.
+  if (body.action === "confirm" || body.action === "reject") {
+    const consumo = await prisma.emisionConsumo.findUnique({
+      where: { refId: tesoreriaId },
+      select: { emision: { select: { folio: true } } },
+    });
+    if (consumo) {
+      return NextResponse.json(
+        {
+          error: `Este movimiento pertenece a la emisión #${consumo.emision.folio} (documento ya emitido desde la tab OK). Deshacé la emisión completa primero, en OK → Emitidos.`,
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   switch (body.action) {
     case "confirm": {
       const bmId = body.bankMovementId;

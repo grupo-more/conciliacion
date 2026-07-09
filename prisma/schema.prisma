@@ -690,8 +690,13 @@ model EmisionAsientos {
   id    String @id @default(uuid())
   folio Int    @unique @default(autoincrement())
 
-  // Cola que emitió: MANUAL (tab Asientos manuales) | PROVEEDORES (tab
-  // Proveedores). El folio es UN solo correlativo compartido.
+  // Cola/tab que emitió. El folio es UN solo correlativo compartido entre todas:
+  //   MANUAL | PROVEEDORES        → asientos persistidos (AsientoManual.emisionId);
+  //                                 el documento se reconstruye desde los asientos.
+  //   OK | ABONO_TRANSBANK | DIF_MENOR | TRASPASOS_INTERNOS
+  //                               → vistas DERIVADAS (calculadas al vuelo); el
+  //                                 documento queda CONGELADO en `snapshot` y los
+  //                                 movimientos consumidos en EmisionConsumo.
   origen String @default("MANUAL")
 
   // Rango del filtro con el que se emitió (informativo).
@@ -699,15 +704,37 @@ model EmisionAsientos {
   hasta DateTime
 
   count      Int
+  // Para MANUAL/PROVEEDORES: neto/bruto. Para vistas derivadas: Σdebe/Σhaber.
   totalNeto  BigInt @map("total_neto")
   totalBruto BigInt @map("total_bruto")
+
+  // Documento exacto emitido (solo vistas derivadas): { lineas: Asi1Linea[],
+  // fechaDoc, descripcion, filename }. Re-descargar/previsualizar sale de acá —
+  // inmune a que el matcher re-calcule distinto después.
+  snapshot Json?
 
   createdById String?  @map("created_by_id")
   createdAt   DateTime @default(now()) @map("created_at")
 
   asientos AsientoManual[]
+  consumos EmisionConsumo[]
 
+  @@index([origen])
   @@index([createdAt])
+}
+
+// Referencias consumidas por una emisión de vista derivada (bankMovementId u
+// consolidadoId según la tab). El unique GLOBAL garantiza que un mismo
+// movimiento/consolidado jamás entra a dos documentos. La EXCLUSIÓN se aplica
+// SOLO al listado de la tab correspondiente — los motores de matching y
+// banco-compute (Reportes) NO consultan esta tabla: emitir nunca des-resuelve.
+model EmisionConsumo {
+  id        String          @id @default(uuid())
+  emisionId String          @map("emision_id")
+  emision   EmisionAsientos @relation(fields: [emisionId], references: [id], onDelete: Cascade)
+  refId     String          @unique @map("ref_id")
+
+  @@index([emisionId])
 }
 
 model AsientoManual {

@@ -7,6 +7,7 @@ import {
 } from "@/lib/dif-menor/detect";
 import { transbankPrismaWhere } from "@/lib/transbank/detect";
 import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
+import { consumedRefIds } from "@/lib/consolidados/emision-consumo";
 
 /**
  * GET /api/consolidados/dif-menor?from=YYYY-MM-DD&to=YYYY-MM-DD&accountId=
@@ -36,12 +37,16 @@ export async function GET(req: Request) {
 
   const settings = await getDifMenorSettings();
 
+  // Diferencias ya emitidas a gestión (folio): fuera del listado de esta tab.
+  const emitidos = await consumedRefIds("DIF_MENOR");
+
   const movements = await prisma.bankMovement.findMany({
     where: {
       direction: "IN",
       amount: { gt: 0n, lte: BigInt(settings.threshold) },
       postDate: { gte: from, lt: to },
       ...(accountId ? { accountId } : {}),
+      ...(emitidos.size > 0 ? { id: { notIn: Array.from(emitidos) } } : {}),
       descartadoAt: null,
       // Cuentas de uso parcial: fuera de scope.
       account: { isNot: usoParcialAccountWhere },

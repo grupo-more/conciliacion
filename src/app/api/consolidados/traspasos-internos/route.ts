@@ -10,6 +10,7 @@ import {
   buildRubroMap,
   type AccountForRubro,
 } from "@/lib/internos/rubro-resolver";
+import { consumedRefIds } from "@/lib/consolidados/emision-consumo";
 
 /**
  * GET /api/consolidados/traspasos-internos?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -71,8 +72,17 @@ export async function GET(req: Request) {
     take: 20000,
   });
 
+  // Movimientos ya emitidos a gestión (folio): fuera del universo de ESTA tab
+  // (se filtran ANTES del matcher para que los restantes pareen entre sí, en
+  // vez de esconder pares a medias). OJO: solo afecta este listado — el
+  // matchMirror de banco-compute (Reportes) corre aparte con el universo
+  // completo, así que emitir jamás des-resuelve.
+  const emitidos = await consumedRefIds("TRASPASOS_INTERNOS");
+  const movimientosLibres =
+    emitidos.size > 0 ? movements.filter((m) => !emitidos.has(m.id)) : movements;
+
   const result = matchMirror(
-    movements as BankMovementForMatch[],
+    movimientosLibres as BankMovementForMatch[],
     entidades,
   );
 

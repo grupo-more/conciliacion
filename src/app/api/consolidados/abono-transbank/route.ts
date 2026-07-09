@@ -6,6 +6,7 @@ import {
   TRANSBANK_RUBRO_CONTRA,
   transbankPrismaWhere,
 } from "@/lib/transbank/detect";
+import { consumedRefIds } from "@/lib/consolidados/emision-consumo";
 
 /**
  * GET /api/consolidados/abono-transbank?from=YYYY-MM-DD&to=YYYY-MM-DD&accountId=
@@ -33,11 +34,16 @@ export async function GET(req: Request) {
   );
   const accountId = url.searchParams.get("accountId") || null;
 
+  // Abonos ya emitidos a gestión (folio): fuera del listado. Siguen resueltos
+  // como "Abono Transbank" en Cartolas/Reportes (eso va por patrón de glosa).
+  const emitidos = await consumedRefIds("ABONO_TRANSBANK");
+
   const movements = await prisma.bankMovement.findMany({
     where: {
       ...transbankPrismaWhere,
       postDate: { gte: from, lt: to },
       ...(accountId ? { accountId } : {}),
+      ...(emitidos.size > 0 ? { id: { notIn: Array.from(emitidos) } } : {}),
       descartadoAt: null,
     },
     include: {

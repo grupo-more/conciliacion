@@ -58,8 +58,17 @@ export async function POST(req: Request) {
   });
   const cajaMatchedSet = new Set(cajaMatched.map((c) => c.bankMovementId));
 
+  // Movimientos consumidos por una EMISIÓN (documento ya emitido a gestión desde
+  // Abono Transbank / Dif menor / Traspasos internos): también bloquean.
+  const consumos = await prisma.emisionConsumo.findMany({
+    where: { refId: { in: movements.map((m) => m.id) } },
+    select: { refId: true, emision: { select: { folio: true } } },
+  });
+  const folioByRef = new Map(consumos.map((c) => [c.refId, c.emision.folio]));
+
   // Motivos que BLOQUEAN el descarte: solo conciliaciones contables DELIBERADAS
-  // (motor, egreso a tercero, asiento manual). Esas hay que deshacerlas primero.
+  // (motor, egreso a tercero, asiento manual, emisión de documento). Esas hay
+  // que deshacerlas primero.
   // El match de conciliación de CAJA NO bloquea: es un match automático/heurístico
   // (monto+fecha+cuenta) sin UI para deshacerse; al descartar se rompe solo (el
   // MovimientoCaja vuelve a NO_MATCH). Ver más abajo.
@@ -68,6 +77,8 @@ export async function POST(req: Request) {
     if (m._count.consolidadoLinks > 0) ms.push("vínculo del motor (Consolidados)");
     if (m._count.egresoConciliacionLinks > 0) ms.push("conciliación de egreso a tercero");
     if (m.asientoManual != null) ms.push("asiento manual generado");
+    const folio = folioByRef.get(m.id);
+    if (folio != null) ms.push(`emitido en documento #${folio} (deshacé la emisión primero)`);
     return ms;
   };
   const bloqueados = movements
