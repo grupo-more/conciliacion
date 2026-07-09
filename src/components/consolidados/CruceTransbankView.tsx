@@ -55,7 +55,7 @@ const ESTADO_META: Record<Estado, { label: string; cls: string }> = {
 };
 
 export function CruceTransbankView() {
-  const { can } = usePermisos();
+  const { can, me } = usePermisos();
   const [from, setFrom] = useState<string>(firstDayOfMonthIso());
   const [to, setTo] = useState<string>(todayIso());
   const [sucursalId, setSucursalId] = useState<string>("");
@@ -68,6 +68,7 @@ export function CruceTransbankView() {
   const [busy, setBusy] = useState(false);
   const [linkTarget, setLinkTarget] = useState<CruceRow | null>(null);
   const [posFicticioTarget, setPosFicticioTarget] = useState<CruceRow | null>(null);
+  const [auditOpen, setAuditOpen] = useState(false);
 
   async function onDesvincular(row: CruceRow) {
     if (!row.tbkTesoreriaId) return;
@@ -209,6 +210,15 @@ export function CruceTransbankView() {
         {can("importar") && (
           <button onClick={onSyncPos} disabled={busy} className="btn-ghost text-sm">
             {busy ? "Sincronizando…" : "Sincronizar POS"}
+          </button>
+        )}
+        {mode === "movimientos" && (
+          <button
+            onClick={() => setAuditOpen(true)}
+            className="btn-ghost text-sm"
+            title="Generar un informe imprimible del detalle de esta vista (para respaldo en papel)"
+          >
+            Auditoría
           </button>
         )}
         {mode === "movimientos" && k && (
@@ -409,6 +419,18 @@ export function CruceTransbankView() {
             setBanner({ kind: "ok", msg: "Vínculo creado. El par quedó cuadrado." });
             load();
           }}
+        />
+      )}
+
+      {auditOpen && (
+        <AuditoriaModal
+          from={from}
+          to={to}
+          sucursalId={sucursalId}
+          sucursales={data?.facets.sucursales ?? []}
+          estadoActual={estado}
+          emisor={me?.user?.email ?? ""}
+          onClose={() => setAuditOpen(false)}
         />
       )}
 
@@ -782,6 +804,301 @@ function VincularModal({
       </div>
     </div>
   );
+}
+
+/* ===================== Modal Auditoría (informe imprimible) ===================== */
+
+const ESTADO_ORDEN: Estado[] = ["settlement_sin_pos", "pos_sin_settlement", "cuadrado"];
+const ESTADO_INFORME: Record<Estado, { titulo: string; desc: string }> = {
+  settlement_sin_pos: {
+    titulo: "Abonos Transbank sin POS (irregulares)",
+    desc: "Ventas liquidadas por Transbank que no tienen operación registrada en el sistema de caja.",
+  },
+  pos_sin_settlement: {
+    titulo: "POS sin settlement",
+    desc: "Operaciones de caja con tarjeta que no tienen abono Transbank cargado en el período.",
+  },
+  cuadrado: {
+    titulo: "Cuadrados",
+    desc: "Pares POS ↔ abono conciliados (automáticos y manuales).",
+  },
+};
+
+function AuditoriaModal({
+  from,
+  to,
+  sucursalId,
+  sucursales,
+  estadoActual,
+  emisor,
+  onClose,
+}: {
+  from: string;
+  to: string;
+  sucursalId: string;
+  sucursales: { id: number; name: string | null }[];
+  estadoActual: Estado | "";
+  emisor: string;
+  onClose: () => void;
+}) {
+  // Preselección: el estado filtrado en la vista; si no hay, los dos irregulares.
+  const [estados, setEstados] = useState<Set<Estado>>(
+    () => new Set<Estado>(estadoActual ? [estadoActual] : ["settlement_sin_pos", "pos_sin_settlement"]),
+  );
+  const [nota, setNota] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const sucursalName =
+    sucursalId === ""
+      ? "Todas"
+      : sucursales.find((s) => String(s.id) === sucursalId)?.name ?? `#${sucursalId}`;
+
+  function toggleEstado(e: Estado) {
+    const next = new Set(estados);
+    if (next.has(e)) next.delete(e);
+    else next.add(e);
+    setEstados(next);
+  }
+
+  async function imprimir() {
+    if (estados.size === 0) {
+      setErr("Elegí al menos un estado para el informe.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    try {
+      const p = new URLSearchParams({ from, to });
+      if (sucursalId) p.set("sucursalId", sucursalId);
+      const res = await fetch(`/api/consolidados/cruce-transbank?${p}`);
+      if (!res.ok) {
+        setErr("Error al cargar los datos del informe.");
+        return;
+      }
+      const j = (await res.json()) as CruceResponse;
+      const win = window.open("", "_blank");
+      if (!win) {
+        setErr("El navegador bloqueó la ventana del informe. Permití los pop-ups para este sitio.");
+        return;
+      }
+      win.document.write(
+        buildInformeHtml({
+          rows: j.rows,
+          estados,
+          from,
+          to,
+          sucursalName,
+          emisor,
+          nota: nota.trim(),
+          truncado: j.rowsTotal > j.rows.length ? j.rowsTotal : null,
+        }),
+      );
+      win.document.close();
+      win.focus();
+      // Dar tiempo a que la ventana renderice antes del diálogo de impresión.
+      setTimeout(() => win.print(), 350);
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal-panel max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-lg font-semibold tracking-tight">Informe de auditoría</h2>
+          <button onClick={onClose} className="btn-ghost text-sm">Cerrar</button>
+        </div>
+
+        <p className="text-xs text-text-muted mb-3">
+          Genera un documento imprimible con el detalle de esta vista (rango <b>{from}</b> →{" "}
+          <b>{to}</b>, sucursal <b>{sucursalName}</b>), con totales por sección y espacio de firmas
+          para respaldo en papel.
+        </p>
+
+        {err && (
+          <div className="rounded-md bg-rose-50 text-rose-800 border border-rose-200 px-3 py-2 text-sm mb-2">
+            {err}
+          </div>
+        )}
+
+        <div className="space-y-2 mb-3">
+          <span className="block text-sm text-text-muted">Incluir en el informe</span>
+          {ESTADO_ORDEN.map((e) => (
+            <label
+              key={e}
+              className="flex items-start gap-2 rounded-md border border-border-soft px-3 py-2 cursor-pointer hover:bg-bg-soft/50"
+            >
+              <input
+                type="checkbox"
+                checked={estados.has(e)}
+                onChange={() => toggleEstado(e)}
+                className="accent-brand mt-0.5"
+              />
+              <span className="text-sm">
+                <span
+                  className={`inline-block rounded-full border px-2 py-0.5 text-[11px] font-semibold mr-1.5 ${ESTADO_META[e].cls}`}
+                >
+                  {ESTADO_META[e].label}
+                </span>
+                <span className="block text-xs text-text-muted mt-0.5">{ESTADO_INFORME[e].desc}</span>
+              </span>
+            </label>
+          ))}
+        </div>
+
+        <label className="text-sm block mb-4">
+          <span className="block text-text-muted">Nota / motivo (se imprime en el encabezado, opcional)</span>
+          <textarea
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
+            maxLength={500}
+            rows={2}
+            placeholder="ej: transacciones irregulares detectadas en SUECIA, semana del 07-07"
+            className="input w-full"
+          />
+        </label>
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} disabled={busy} className="btn-ghost text-sm">Cancelar</button>
+          <button
+            onClick={imprimir}
+            disabled={busy}
+            className="rounded-md bg-brand text-white px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? "Generando…" : "Generar e imprimir"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function buildInformeHtml(opts: {
+  rows: CruceRow[];
+  estados: Set<Estado>;
+  from: string;
+  to: string;
+  sucursalName: string;
+  emisor: string;
+  nota: string;
+  truncado: number | null;
+}): string {
+  const { rows, estados, from, to, sucursalName, emisor, nota, truncado } = opts;
+  const emitido = new Date().toLocaleString("es-CL");
+  const fmt = (s: string | null) => (s == null ? "—" : `$${formatMoney(BigInt(s))}`);
+
+  const secciones = ESTADO_ORDEN.filter((e) => estados.has(e))
+    .map((e) => {
+      const list = rows.filter((r) => r.estado === e);
+      const totalBruto = list.reduce((acc, r) => acc + BigInt(r.montoBruto), 0n);
+      const totalNeto = list.reduce((acc, r) => acc + BigInt(r.neto ?? "0"), 0n);
+      const filas = list
+        .map(
+          (r) => `<tr>
+            <td>${formatDate(r.fecha)}</td>
+            <td>${escapeHtml(r.sucursalName ?? (r.sucursalId != null ? `#${r.sucursalId}` : "—"))}</td>
+            <td class="mono">${escapeHtml(r.settCount > 1 ? r.boleta ?? "—" : r.op ?? r.boleta ?? "—")}${r.settCount > 1 ? " (1↔" + r.settCount + ")" : ""}</td>
+            <td>${escapeHtml(r.medioPago ?? "—")}</td>
+            <td class="mono num">${fmt(r.montoBruto)}</td>
+            <td class="mono num">${r.comision ? fmt(r.comision) : "—"}</td>
+            <td class="mono num">${r.neto ? fmt(r.neto) : "—"}</td>
+            <td class="glosa">${escapeHtml(r.glosa ?? "")}${r.ficticio ? " <b>[POS FICTICIO]</b>" : r.manual ? " <b>[MANUAL]</b>" : ""}</td>
+          </tr>`,
+        )
+        .join("");
+      return `
+        <section>
+          <h2>${ESTADO_INFORME[e].titulo} <span class="count">(${list.length})</span></h2>
+          <p class="desc">${ESTADO_INFORME[e].desc}</p>
+          ${
+            list.length === 0
+              ? `<p class="desc"><i>Sin movimientos en el rango.</i></p>`
+              : `<table>
+            <thead><tr>
+              <th>Fecha</th><th>Sucursal</th><th>OP / Boleta</th><th>Medio</th>
+              <th class="num">Monto bruto</th><th class="num">Comisión</th><th class="num">Neto</th><th>Glosa / Local</th>
+            </tr></thead>
+            <tbody>${filas}</tbody>
+            <tfoot><tr>
+              <td colspan="4"><b>Total (${list.length} movimientos)</b></td>
+              <td class="mono num"><b>$${formatMoney(totalBruto)}</b></td>
+              <td></td>
+              <td class="mono num"><b>${totalNeto !== 0n ? `$${formatMoney(totalNeto)}` : "—"}</b></td>
+              <td></td>
+            </tr></tfoot>
+          </table>`
+          }
+        </section>`;
+    })
+    .join("");
+
+  return `<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Auditoría Cruce Transbank ${from} a ${to}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font: 11px/1.4 "Segoe UI", Arial, sans-serif; color: #111; margin: 24px; }
+  header { border-bottom: 2px solid #111; padding-bottom: 10px; margin-bottom: 14px; }
+  h1 { font-size: 16px; margin: 0 0 2px; }
+  .sub { color: #444; font-size: 11px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 4px 24px; margin-top: 8px; font-size: 11px; }
+  .meta b { display: inline-block; min-width: 0; }
+  .nota { margin-top: 8px; padding: 6px 8px; border: 1px solid #999; background: #f5f5f5; font-size: 11px; }
+  h2 { font-size: 13px; margin: 18px 0 2px; border-bottom: 1px solid #999; padding-bottom: 3px; }
+  .count { color: #555; font-weight: normal; }
+  .desc { color: #555; margin: 2px 0 6px; font-size: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 10px; }
+  th { text-align: left; border-bottom: 1px solid #111; padding: 3px 6px; font-size: 9px; text-transform: uppercase; letter-spacing: .04em; }
+  td { border-bottom: 1px solid #ddd; padding: 3px 6px; vertical-align: top; }
+  tfoot td { border-top: 1.5px solid #111; border-bottom: none; padding-top: 5px; }
+  .num { text-align: right; }
+  .mono { font-family: Consolas, "Courier New", monospace; font-variant-numeric: tabular-nums; }
+  .glosa { max-width: 220px; word-break: break-word; }
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; }
+  section { page-break-inside: auto; }
+  .firmas { display: flex; gap: 60px; margin-top: 48px; page-break-inside: avoid; }
+  .firma { flex: 1; text-align: center; font-size: 10px; color: #333; }
+  .firma .linea { border-top: 1px solid #111; margin-bottom: 4px; padding-top: 4px; }
+  footer { margin-top: 24px; font-size: 9px; color: #666; }
+  @media print { body { margin: 10mm; } }
+</style>
+</head>
+<body>
+  <header>
+    <h1>MORE · Conciliación — Informe de auditoría · Cruce Transbank</h1>
+    <div class="sub">Detalle de movimientos POS ↔ abonos Transbank para respaldo documental.</div>
+    <div class="meta">
+      <span>Período: <b>${from} → ${to}</b></span>
+      <span>Sucursal: <b>${escapeHtml(sucursalName)}</b></span>
+      <span>Emitido: <b>${emitido}</b></span>
+      ${emisor ? `<span>Emitido por: <b>${escapeHtml(emisor)}</b></span>` : ""}
+    </div>
+    ${nota ? `<div class="nota"><b>Nota:</b> ${escapeHtml(nota)}</div>` : ""}
+    ${truncado ? `<div class="nota">⚠ El rango tiene ${truncado} movimientos; este informe muestra los primeros ${rows.length}. Acotá las fechas para el detalle completo.</div>` : ""}
+  </header>
+  ${secciones}
+  <div class="firmas">
+    <div class="firma"><div class="linea">Preparado por</div>Nombre, firma y fecha</div>
+    <div class="firma"><div class="linea">Revisado por</div>Nombre, firma y fecha</div>
+    <div class="firma"><div class="linea">Gerencia</div>Nombre, firma y fecha</div>
+  </div>
+  <footer>
+    Generado por el sistema de Conciliación. "Abonos sin POS" = liquidado por Transbank sin operación de caja registrada;
+    "POS sin settlement" = operación de caja sin abono cargado en el período. Los marcados [MANUAL] fueron vinculados a mano;
+    [POS FICTICIO] son operaciones insertadas manualmente para documentar ventas no registradas por la caja.
+  </footer>
+</body>
+</html>`;
 }
 
 function absBig(n: bigint): bigint {
