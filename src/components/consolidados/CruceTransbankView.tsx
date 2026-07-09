@@ -24,6 +24,8 @@ interface CruceRow {
   boleta: string | null;
   tbkTesoreriaId: string | null;
   transbankSaleId: string | null;
+  /** N abonos cuadrados con este POS (2+ = pago dividido / multi-boleta). */
+  settCount: number;
   manual: boolean;
   ficticio: boolean;
 }
@@ -69,7 +71,11 @@ export function CruceTransbankView() {
 
   async function onDesvincular(row: CruceRow) {
     if (!row.tbkTesoreriaId) return;
-    if (!confirm("Deshacer este vínculo manual? El par volverá a quedar sin conciliar.")) return;
+    const msg =
+      row.settCount > 1
+        ? `Deshacer este vínculo manual? Se desvinculan los ${row.settCount} abonos del grupo y todo vuelve a quedar sin conciliar.`
+        : "Deshacer este vínculo manual? El par volverá a quedar sin conciliar.";
+    if (!confirm(msg)) return;
     setBusy(true);
     try {
       const res = await fetch(`/api/consolidados/cruce-transbank/link?tbkTesoreriaId=${row.tbkTesoreriaId}`, {
@@ -284,7 +290,15 @@ export function CruceTransbankView() {
                     <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.fecha)}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{r.sucursalName ?? (r.sucursalId ? `#${r.sucursalId}` : "—")}</td>
                     <td className="px-3 py-2 whitespace-nowrap font-mono text-xs">
-                      {r.op ?? r.boleta ?? "—"}
+                      {r.settCount > 1 ? r.boleta : r.op ?? r.boleta ?? "—"}
+                      {r.settCount > 1 && (
+                        <span
+                          className="ml-1.5 inline-block rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] px-1.5 py-0.5 font-bold align-middle"
+                          title={`Pago dividido: 1 POS cuadrado contra ${r.settCount} abonos Transbank`}
+                        >
+                          1↔{r.settCount}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">{r.medioPago ?? "—"}</td>
                     <td className="px-3 py-2 text-right font-mono whitespace-nowrap">
@@ -581,8 +595,21 @@ function VincularModal({
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Selección múltiple: un POS puede cuadrar contra 2+ abonos (pago dividido).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const posMonto = BigInt(pos.montoBruto);
+  const selectedRows = (cands ?? []).filter((c) => c.transbankSaleId && selected.has(c.transbankSaleId));
+  const selectedSum = selectedRows.reduce((acc, c) => acc + BigInt(c.montoBruto), 0n);
+  const deltaSel = selectedSum - posMonto;
+
+  function toggle(sett: CruceRow) {
+    if (!sett.transbankSaleId) return;
+    const next = new Set(selected);
+    if (next.has(sett.transbankSaleId)) next.delete(sett.transbankSaleId);
+    else next.add(sett.transbankSaleId);
+    setSelected(next);
+  }
 
   useEffect(() => {
     let cancel = false;
@@ -614,15 +641,15 @@ function VincularModal({
     };
   }, [from, to, pos.fecha, pos.sucursalId, posMonto]);
 
-  async function link(sett: CruceRow) {
-    if (!pos.tbkTesoreriaId || !sett.transbankSaleId) return;
+  async function link(settIds: string[]) {
+    if (!pos.tbkTesoreriaId || settIds.length === 0) return;
     setBusy(true);
     setErr(null);
     try {
       const res = await fetch(`/api/consolidados/cruce-transbank/link`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tbkTesoreriaId: pos.tbkTesoreriaId, transbankSaleId: sett.transbankSaleId }),
+        body: JSON.stringify({ tbkTesoreriaId: pos.tbkTesoreriaId, transbankSaleIds: settIds }),
       });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) setErr(j.error || "Error al vincular");
@@ -654,11 +681,34 @@ function VincularModal({
         {err && <div className="rounded-md bg-rose-50 text-rose-800 border border-rose-200 px-3 py-2 text-sm mb-2">{err}</div>}
 
         <p className="text-xs text-text-muted mb-2">
-          Elegí el abono que corresponde. Ordenados por sucursal, monto más cercano y fecha. El monto <b>no tiene que
+          Elegí el o los abonos que corresponden (un giro pagado en 2+ transacciones de tarjeta se vincula a{" "}
+          <b>varios abonos a la vez</b>). Ordenados por sucursal, monto más cercano y fecha. El monto <b>no tiene que
           ser exacto</b>: en crédito, Transbank liquida la boleta <b>+ ~2% de recargo</b>. Esa diferencia es el{" "}
           <b>recargo de crédito de Transbank</b> y se registra automáticamente en el asiento (rubro comisión/recargo{" "}
           <b>708</b> y, donde aplica, <b>1403 Diferencia</b>) al generar la cuadratura.
         </p>
+
+        {selected.size > 0 && (
+          <div className="rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm mb-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <span>
+              <b>{selected.size}</b> abono{selected.size > 1 ? "s" : ""} seleccionado{selected.size > 1 ? "s" : ""}:{" "}
+              <span className="font-mono">${formatMoney(selectedSum)}</span> de{" "}
+              <span className="font-mono">${formatMoney(posMonto)}</span> del POS
+            </span>
+            <span className={deltaSel === 0n ? "text-emerald-700 font-semibold" : "text-amber-700"}>
+              {deltaSel === 0n
+                ? "Δ $0 — cuadre exacto"
+                : `Δ ${deltaSel > 0n ? "+" : "−"}$${formatMoney(absBig(deltaSel))}`}
+            </span>
+            <button
+              onClick={() => link(Array.from(selected))}
+              disabled={busy}
+              className="ml-auto rounded-md bg-brand text-white px-3 py-1.5 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+            >
+              {busy ? "Vinculando…" : `Vincular ${selected.size > 1 ? `los ${selected.size}` : ""}`}
+            </button>
+          </div>
+        )}
 
         <div className="rounded-lg border border-border-soft max-h-[50vh] overflow-auto">
           {loading && <div className="p-4 text-sm text-text-muted">Buscando candidatos…</div>}
@@ -669,6 +719,7 @@ function VincularModal({
             <table className="w-full text-sm">
               <thead className="bg-bg-soft text-xs uppercase tracking-wider text-text-muted sticky top-0">
                 <tr>
+                  <th className="px-3 py-2 text-center w-8"></th>
                   <th className="px-3 py-2 text-left">Fecha</th>
                   <th className="px-3 py-2 text-left">Sucursal</th>
                   <th className="px-3 py-2 text-left">Boleta</th>
@@ -682,8 +733,22 @@ function VincularModal({
               <tbody>
                 {cands.map((c, i) => {
                   const sameSuc = c.sucursalId === pos.sucursalId;
+                  const checked = !!c.transbankSaleId && selected.has(c.transbankSaleId);
                   return (
-                    <tr key={i} className="border-t border-border-soft/60 hover:bg-bg-soft/40">
+                    <tr
+                      key={i}
+                      className={`border-t border-border-soft/60 hover:bg-bg-soft/40 cursor-pointer ${checked ? "bg-indigo-50/60" : ""}`}
+                      onClick={() => toggle(c)}
+                    >
+                      <td className="px-3 py-1.5 text-center">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggle(c)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="accent-brand"
+                        />
+                      </td>
                       <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(c.fecha)}</td>
                       <td className="px-3 py-1.5 whitespace-nowrap">
                         {c.sucursalName ?? (c.sucursalId ? `#${c.sucursalId}` : "—")}
@@ -696,9 +761,13 @@ function VincularModal({
                       <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap text-emerald-700">${formatMoney(BigInt(c.montoBruto) - BigInt(c.comision ?? "0"))}</td>
                       <td className="px-3 py-1.5 text-center sticky right-0 bg-white">
                         <button
-                          onClick={() => link(c)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (c.transbankSaleId) link([c.transbankSaleId]);
+                          }}
                           disabled={busy}
                           className="rounded-md bg-brand text-white px-2.5 py-1 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+                          title="Vincular solo este abono (1:1)"
                         >
                           Vincular
                         </button>

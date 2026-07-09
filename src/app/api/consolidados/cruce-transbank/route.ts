@@ -73,14 +73,21 @@ export async function GET(req: Request) {
     boleta: string | null;
     tbkTesoreriaId: string | null;
     transbankSaleId: string | null;
+    /** N settlements cuadrados con este POS (2+ = pago dividido / multi-boleta). */
+    settCount: number;
     manual: boolean;
     ficticio: boolean; // POS insertado a mano (TbkTesoreria.manual)
   };
   const rows: Row[] = [];
 
   for (const p of pairs) {
-    if (p.sett) {
+    if (p.setts.length > 0) {
       const base = Number(absB(p.pos.monto));
+      // Grupo 1:N: comisión/neto se suman; boleta se muestra "4047+4048".
+      const comision = p.setts.reduce((acc, s) => acc + s.comision + s.ivaComision, 0n);
+      const neto = p.setts.reduce((acc, s) => acc + s.totalAbono, 0n);
+      const boletas = p.setts.map((s) => s.numeroBoleta).filter(Boolean) as string[];
+      const medios = Array.from(new Set(p.setts.map((s) => s.medioPago).filter(Boolean)));
       rows.push({
         estado: "cuadrado",
         fecha: p.pos.fecha.toISOString(),
@@ -88,16 +95,17 @@ export async function GET(req: Request) {
         sucursalName: p.pos.sucursalName,
         op: p.pos.opNumber,
         glosa: p.pos.glosa,
-        medioPago: p.sett.medioPago,
+        medioPago: medios.length ? medios.join("+") : null,
         montoBruto: p.pos.monto.toString(),
-        comision: (p.sett.comision + p.sett.ivaComision).toString(),
-        neto: p.sett.totalAbono.toString(),
+        comision: comision.toString(),
+        neto: neto.toString(),
         diferencia: p.diff.toString(),
         diferenciaPct: base > 0 ? Math.round((Number(p.diff) / base) * 1000) / 10 : null,
-        tid: p.sett.tid,
-        boleta: p.sett.numeroBoleta,
+        tid: p.setts.length === 1 ? p.setts[0].tid : null,
+        boleta: boletas.length ? boletas.join("+") : null,
         tbkTesoreriaId: p.pos.id,
-        transbankSaleId: p.sett.id,
+        transbankSaleId: p.setts[0].id,
+        settCount: p.setts.length,
         manual: manualPosIds.has(p.pos.id),
         ficticio: p.pos.manual,
       });
@@ -119,6 +127,7 @@ export async function GET(req: Request) {
         boleta: null,
         tbkTesoreriaId: p.pos.id,
         transbankSaleId: null,
+        settCount: 0,
         manual: false,
         ficticio: p.pos.manual,
       });
@@ -142,6 +151,7 @@ export async function GET(req: Request) {
       boleta: s.numeroBoleta,
       tbkTesoreriaId: null,
       transbankSaleId: s.id,
+      settCount: 0,
       manual: false,
       ficticio: false,
     });

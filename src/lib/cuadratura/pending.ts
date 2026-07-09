@@ -61,28 +61,38 @@ export async function getPendingPairs(
 
   const out: PendingPair[] = [];
   for (const p of pairs) {
-    if (!p.sett) continue; // solo cuadrados
+    if (p.setts.length === 0) continue; // solo cuadrados
     if (opts.sucursalId != null && p.pos.sucursalId !== opts.sucursalId) continue;
-    // Comisión de cartola (settlement, con IVA) → base del 1403.
-    // Comisión de la API/Dynatech (con IVA, null en débito → 0) → rubro 708.
-    const comisionCartola = p.sett.comision + p.sett.ivaComision;
-    const comisionApi = p.pos.comisionMonto ?? 0n;
-    out.push({
-      tbkTesoreriaId: p.pos.id,
-      transbankSaleId: p.sett.id,
-      sucursalId: p.pos.sucursalId,
-      sucursalName: sucByCodigo.get(p.pos.sucursalId) ?? p.pos.sucursalName ?? null,
-      sucursalCodigo: sucByCodigo.has(p.pos.sucursalId) ? p.pos.sucursalId : null,
-      montoDynatech: p.pos.monto < 0n ? -p.pos.monto : p.pos.monto,
-      montoTransbank: p.sett.totalAbono,
-      montoComision: comisionCartola,
-      montoComisionApi: comisionApi,
-      // Detalle por movimiento (para el desglose y el snapshot al generar).
-      fecha: p.pos.fecha.toISOString(),
-      opBoleta: p.pos.opNumber ?? p.sett.numeroBoleta ?? null,
-      medioPago: p.sett.medioPago ?? null,
-      fechaPos: p.pos.fecha,
-    });
+    const posMonto = p.pos.monto < 0n ? -p.pos.monto : p.pos.monto;
+    // Grupo 1:N (pago dividido): un item por settlement. El monto POS se reparte
+    // para que la SUMA de los legs sea exactamente el POS (sin duplicar): cada
+    // leg lleva su montoVenta y el primero absorbe el residuo (con 1 settlement
+    // esto degenera al comportamiento 1:1 de siempre: leg único = monto POS).
+    const restoVenta = p.setts.slice(1).reduce((acc, s) => acc + s.montoVenta, 0n);
+    for (let i = 0; i < p.setts.length; i++) {
+      const sett = p.setts[i];
+      // Comisión de cartola (settlement, con IVA) → base del 1403.
+      // Comisión de la API/Dynatech (con IVA, null en débito → 0) → rubro 708,
+      // solo en el primer leg (es del POS, no del settlement: no se duplica).
+      const comisionCartola = sett.comision + sett.ivaComision;
+      const comisionApi = i === 0 ? p.pos.comisionMonto ?? 0n : 0n;
+      out.push({
+        tbkTesoreriaId: p.pos.id,
+        transbankSaleId: sett.id,
+        sucursalId: p.pos.sucursalId,
+        sucursalName: sucByCodigo.get(p.pos.sucursalId) ?? p.pos.sucursalName ?? null,
+        sucursalCodigo: sucByCodigo.has(p.pos.sucursalId) ? p.pos.sucursalId : null,
+        montoDynatech: i === 0 ? posMonto - restoVenta : sett.montoVenta,
+        montoTransbank: sett.totalAbono,
+        montoComision: comisionCartola,
+        montoComisionApi: comisionApi,
+        // Detalle por movimiento (para el desglose y el snapshot al generar).
+        fecha: p.pos.fecha.toISOString(),
+        opBoleta: (p.setts.length === 1 ? p.pos.opNumber : null) ?? sett.numeroBoleta ?? null,
+        medioPago: sett.medioPago ?? null,
+        fechaPos: p.pos.fecha,
+      });
+    }
   }
   return out;
 }

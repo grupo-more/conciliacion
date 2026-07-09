@@ -739,7 +739,9 @@ model CuadraturaTransbankItem {
   cuadraturaId String              @map("cuadratura_id")
   cuadratura   CuadraturaTransbank @relation(fields: [cuadraturaId], references: [id], onDelete: Cascade)
 
-  tbkTesoreriaId  String @unique @map("tbk_tesoreria_id")
+  // 1:N con el POS: un POS cuadrado contra 2+ settlements genera un item por
+  // settlement (el monto POS se reparte entre los legs). El settlement sí es único.
+  tbkTesoreriaId  String @map("tbk_tesoreria_id")
   transbankSaleId String @unique @map("transbank_sale_id")
 
   sucursalId     Int     @map("sucursal_id")
@@ -758,20 +760,24 @@ model CuadraturaTransbankItem {
 
   @@index([cuadraturaId])
   @@index([sucursalId])
+  @@index([tbkTesoreriaId])
 }
 
 // Vínculo MANUAL POS↔settlement en Cruce Transbank: para pares que el motor no
 // puede cuadrar solo (sin llave común, monto no exacto, "ENVIO APP" con TCKT en
 // vez de boleta, etc.). El matching los fuerza como cuadrados antes de las
-// pasadas automáticas. Unicidad por lado: cada uno se vincula a lo sumo una vez.
+// pasadas automáticas. Cardinalidad 1:N — un POS puede vincularse a VARIOS
+// settlements (giro pagado en 2+ transacciones de tarjeta, ej. OP 4047/4048),
+// pero cada settlement pertenece a lo sumo a un POS.
 model CruceTransbankLink {
   id              String   @id @default(uuid())
-  tbkTesoreriaId  String   @unique @map("tbk_tesoreria_id")
+  tbkTesoreriaId  String   @map("tbk_tesoreria_id")
   transbankSaleId String   @unique @map("transbank_sale_id")
   nota            String?  @db.Text
   createdById     String?  @map("created_by_id")
   createdAt       DateTime @default(now()) @map("created_at")
 
+  @@index([tbkTesoreriaId])
   @@index([createdAt])
 }
 
@@ -793,7 +799,8 @@ model CuadraturaTransbankSettings {
 model CuadraturaTransbankApartado {
   id String @id @default(uuid())
 
-  tbkTesoreriaId  String @unique @map("tbk_tesoreria_id")
+  // 1:N con el POS (misma convención que CuadraturaTransbankItem).
+  tbkTesoreriaId  String @map("tbk_tesoreria_id")
   transbankSaleId String @unique @map("transbank_sale_id")
 
   sucursalId     Int     @map("sucursal_id")
@@ -813,6 +820,7 @@ model CuadraturaTransbankApartado {
   createdAt   DateTime @default(now()) @map("created_at")
   expiresAt   DateTime @map("expires_at")
 
+  @@index([tbkTesoreriaId])
   @@index([expiresAt])
 }
 
