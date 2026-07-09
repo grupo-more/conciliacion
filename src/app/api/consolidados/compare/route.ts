@@ -460,9 +460,9 @@ export async function GET(req: Request) {
         },
         isLinked: bm.consolidadoLinks.length > 0,
         // Resuelto por otra vía (visible cuando se muestran todos): asiento
-        // manual generado o egreso a tercero ya conciliado.
+        // manual generado/emitido o egreso a tercero ya conciliado.
         resueltoPor:
-          bm.asientoManual?.estado === "GENERADO"
+          bm.asientoManual?.estado === "GENERADO" || bm.asientoManual?.estado === "EMITIDO"
             ? ("asiento" as const)
             : bm.egresoConciliacionLinks.length > 0
               ? ("egreso" as const)

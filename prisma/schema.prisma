@@ -658,13 +658,44 @@ model Sucursal {
   @@index([active])
 }
 
+// Emisión (lote documental) de asientos manuales: el documento ASI1 descargado
+// e ingresado al otro sistema (gestión). Mismo patrón que CuadraturaTransbank:
+// al emitir, los asientos GENERADOS del filtro pasan a EMITIDO y salen de la
+// vista "Generados", pero quedan auditables como conjunto — el documento se
+// puede previsualizar/re-descargar EXACTO (los mismos asientos) y la emisión
+// se puede deshacer (vuelven a GENERADO).
+model EmisionAsientos {
+  id    String @id @default(uuid())
+  folio Int    @unique @default(autoincrement())
+
+  // Rango del filtro con el que se emitió (informativo).
+  desde DateTime
+  hasta DateTime
+
+  count      Int
+  totalNeto  BigInt @map("total_neto")
+  totalBruto BigInt @map("total_bruto")
+
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  asientos AsientoManual[]
+
+  @@index([createdAt])
+}
+
 model AsientoManual {
   id             String       @id @default(uuid())
   bankMovementId String       @unique @map("bank_movement_id")
   bankMovement   BankMovement @relation(fields: [bankMovementId], references: [id], onDelete: Cascade)
 
   tipo   String // PROVEEDOR | CLIENTE
-  estado String @default("GENERADO") // GENERADO | PENDIENTE (cliente)
+  estado String @default("GENERADO") // GENERADO | EMITIDO | PENDIENTE (cliente)
+
+  // Emisión a la que pertenece (estado EMITIDO). SetNull para que deshacer una
+  // emisión nunca borre asientos.
+  emisionId String?          @map("emision_id")
+  emision   EmisionAsientos? @relation(fields: [emisionId], references: [id], onDelete: SetNull)
 
   // Montos en CLP. montoNeto = monto del banco (HABER banco). montoBruto =
   // neto + retención = total del DEBE (lo repartido por sucursal).
@@ -685,6 +716,7 @@ model AsientoManual {
 
   @@index([tipo])
   @@index([estado])
+  @@index([emisionId])
 }
 
 model AsientoManualLinea {

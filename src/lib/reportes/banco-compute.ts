@@ -197,8 +197,10 @@ export async function computeBancoSinConciliar(
       continue;
     }
 
-    // 7) Asiento manual GENERADO (módulo "Asientos manuales") → resuelto.
-    if (bm.asientoManual?.estado === "GENERADO") {
+    // 7) Asiento manual GENERADO o EMITIDO (módulo "Asientos manuales") →
+    // resuelto. EMITIDO = generado + documento ya ingresado a gestión; sigue
+    // igual de resuelto (si no, emitir lo devolvería a "pendientes").
+    if (bm.asientoManual?.estado === "GENERADO" || bm.asientoManual?.estado === "EMITIDO") {
       resAsientoCount++;
       resAsientoMonto += abs;
       continue;

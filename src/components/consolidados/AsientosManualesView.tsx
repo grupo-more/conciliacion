@@ -49,22 +49,41 @@ interface GeneradoAsiento {
  * contraparte en el sistema, resueltos a mano generando un asiento (proveedor:
  * prorrateo por sucursal; cliente: pendiente).
  */
+interface Emision {
+  id: string;
+  folio: number;
+  desde: string;
+  hasta: string;
+  count: number;
+  totalNeto: string;
+  totalBruto: string;
+  createdAt: string;
+}
+
 export function AsientosManualesView() {
   const [from, setFrom] = useState(firstDayOfMonthIso());
   const [to, setTo] = useState(todayIso());
   const [accountId, setAccountId] = useState("");
-  const [mode, setMode] = useState<"pendientes" | "generados">("pendientes");
+  const [mode, setMode] = useState<"pendientes" | "generados" | "emitidos">("pendientes");
 
   const [pend, setPend] = useState<PendientesResp | null>(null);
   const [gen, setGen] = useState<GeneradoAsiento[]>([]);
+  const [emisiones, setEmisiones] = useState<Emision[]>([]);
   const [preview, setPreview] = useState<{ options: Asi1Options; filename: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
 
   async function load() {
     setLoading(true);
     try {
+      if (mode === "emitidos") {
+        const res = await fetch(`/api/consolidados/asientos-manuales/emisiones`);
+        setEmisiones(res.ok ? (await res.json()).emisiones ?? [] : []);
+        return;
+      }
       const p = new URLSearchParams({ from, to, mode });
       if (accountId) p.set("accountId", accountId);
       const res = await fetch(`/api/consolidados/asientos-manuales?${p}`);
@@ -88,14 +107,19 @@ export function AsientosManualesView() {
 
   const totalMonto = useMemo(() => (pend ? BigInt(pend.totals.monto) : 0n), [pend]);
 
-  // Exporta TODOS los asientos generados del rango como un solo asiento ASI1
-  // (mismo criterio que el resto de las tabs). Por cada asiento manual:
+  // Exporta una lista de asientos como un solo asiento ASI1 (mismo criterio que
+  // el resto de las tabs). Por cada asiento manual:
   //   DEBE: prorrateo por rubro-sucursal (código de sucursal).
   //   HABER: banco por el neto (rubro resuelto) + retención (rubro 26).
-  function buildAsiento(): { options: Asi1Options; filename: string } | null {
-    if (gen.length === 0) return null;
+  function buildAsientoFrom(
+    lista: GeneradoAsiento[],
+    descripcion: string,
+    filename: string,
+    fechaDoc: string,
+  ): { options: Asi1Options; filename: string } | null {
+    if (lista.length === 0) return null;
     const lineas: Asi1Linea[] = [];
-    for (const a of gen) {
+    for (const a of lista) {
       const detalle = a.glosa || a.counterpartyName || `${a.bankName} ${a.holderName}`;
       if (a.tipo === "CLIENTE") {
         // Ingreso de cliente: DEBE sucursal / HABER banco (1:1, sin impuestos).
@@ -119,18 +143,128 @@ export function AsientosManualesView() {
       }
     }
     return {
-      options: {
-        fecha: to,
-        descripcion: `Asientos manuales ${formatDate(from)} al ${formatDate(to)}`,
-        lineas,
-      },
-      filename: `asientos_manuales_${from}_${to}`,
+      options: { fecha: fechaDoc, descripcion, lineas },
+      filename,
     };
+  }
+
+  function buildAsiento(): { options: Asi1Options; filename: string } | null {
+    return buildAsientoFrom(
+      gen,
+      `Asientos manuales ${formatDate(from)} al ${formatDate(to)}`,
+      `asientos_manuales_${from}_${to}`,
+      to,
+    );
+  }
+
+  /** Fecha del documento de una emisión: su `hasta` almacenado es fin-EXCLUSIVO
+   *  (rango +1 día); el documento original usó el día anterior (el "Hasta" del
+   *  filtro al emitir). Reproducirla mantiene el re-download idéntico. */
+  function fechaDocDeEmision(e: Emision): string {
+    const d = new Date(e.hasta);
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
   }
 
   function exportXlsx() {
     const a = buildAsiento();
     if (a) exportAsi1Xls(a.options, a.filename);
+  }
+
+  // ---- Emisiones (lote documental, patrón Cuadratura Transbank) ----
+
+  async function emitir() {
+    if (gen.length === 0) return;
+    if (
+      !confirm(
+        `Se emitirán ${gen.length} asiento(s) del filtro actual como un documento (folio nuevo). ` +
+          `Saldrán de "Generados" y quedarán en la pestaña Emitidos, desde donde se puede ` +
+          `re-descargar el documento exacto o deshacer la emisión. ¿Continuar?`,
+      )
+    )
+      return;
+    setBusy(true);
+    setBanner(null);
+    try {
+      const res = await fetch(`/api/consolidados/asientos-manuales/emisiones`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ from, to, accountId: accountId || null }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBanner({ kind: "err", msg: j.error || "Error al emitir" });
+        return;
+      }
+      // Descargar el documento de inmediato (es el mismo que Descargar Excel).
+      const a = buildAsientoFrom(
+        gen,
+        `Asientos manuales · Emisión #${j.folio}`,
+        `asientos_manuales_emision_${j.folio}`,
+        to,
+      );
+      if (a) exportAsi1Xls(a.options, a.filename);
+      setBanner({ kind: "ok", msg: `Emisión #${j.folio} creada (${j.count} asientos). El documento se descargó.` });
+      load();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fetchEmisionAsientos(e: Emision): Promise<GeneradoAsiento[] | null> {
+    const res = await fetch(`/api/consolidados/asientos-manuales/emisiones?id=${e.id}`);
+    if (!res.ok) {
+      setBanner({ kind: "err", msg: "No se pudo cargar la emisión" });
+      return null;
+    }
+    return (await res.json()).asientos ?? [];
+  }
+
+  async function verEmision(e: Emision) {
+    const asientos = await fetchEmisionAsientos(e);
+    if (!asientos) return;
+    setPreview(
+      buildAsientoFrom(
+        asientos,
+        `Asientos manuales · Emisión #${e.folio}`,
+        `asientos_manuales_emision_${e.folio}`,
+        fechaDocDeEmision(e),
+      ),
+    );
+  }
+
+  async function descargarEmision(e: Emision) {
+    const asientos = await fetchEmisionAsientos(e);
+    if (!asientos) return;
+    const a = buildAsientoFrom(
+      asientos,
+      `Asientos manuales · Emisión #${e.folio}`,
+      `asientos_manuales_emision_${e.folio}`,
+      fechaDocDeEmision(e),
+    );
+    if (a) exportAsi1Xls(a.options, a.filename);
+  }
+
+  async function deshacerEmision(e: Emision) {
+    if (
+      !confirm(
+        `Deshacer la emisión #${e.folio}? Sus ${e.count} asiento(s) vuelven a "Generados". ` +
+          `Hazlo solo si el documento NO fue ingresado al otro sistema (o fue revertido allá).`,
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/consolidados/asientos-manuales/emisiones?id=${e.id}`, { method: "DELETE" });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) setBanner({ kind: "err", msg: j.error || "Error al deshacer" });
+      else {
+        setBanner({ kind: "ok", msg: `Emisión #${e.folio} deshecha; los asientos volvieron a Generados.` });
+        load();
+      }
+    } finally {
+      setBusy(false);
+    }
   }
 
   // Debounce del término: filtra 180ms después del último tecleo.
@@ -191,9 +325,29 @@ export function AsientosManualesView() {
         >
           Asientos generados
         </button>
+        <button
+          onClick={() => setMode("emitidos")}
+          className={`px-3 py-1.5 font-semibold ${mode === "emitidos" ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
+        >
+          Emitidos
+        </button>
       </div>
 
-      {/* Filtros */}
+      {banner && (
+        <div
+          className={`rounded-lg px-3 py-2 text-sm ${
+            banner.kind === "ok"
+              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+              : "bg-rose-50 text-rose-800 border border-rose-200"
+          }`}
+        >
+          {banner.msg}
+          <button onClick={() => setBanner(null)} className="ml-2 underline">cerrar</button>
+        </div>
+      )}
+
+      {/* Filtros (las emisiones no filtran por rango: son lotes ya cerrados) */}
+      {mode !== "emitidos" && (
       <div className="flex flex-wrap gap-2 items-center">
         <label className="flex items-center gap-1 text-sm">
           <span className="text-text-muted">Desde</span>
@@ -234,13 +388,22 @@ export function AsientosManualesView() {
             </button>
             <button
               onClick={exportXlsx}
-              className="rounded-md bg-brand text-white text-sm font-semibold px-3 py-1.5 hover:opacity-90"
+              className="rounded-md border border-border-soft text-sm font-semibold px-3 py-1.5 hover:bg-bg-soft"
             >
               Descargar Excel
+            </button>
+            <button
+              onClick={emitir}
+              disabled={busy}
+              className="rounded-md bg-brand text-white text-sm font-semibold px-3 py-1.5 hover:opacity-90 disabled:opacity-50"
+              title="Descarga el documento y mueve estos asientos a la pestaña Emitidos (documento ingresado al otro sistema)"
+            >
+              {busy ? "Emitiendo…" : `Emitir documento (${gen.length})`}
             </button>
           </div>
         )}
       </div>
+      )}
 
       {loading && <div className="text-center py-8 text-sm text-text-muted">Cargando…</div>}
 
@@ -326,6 +489,58 @@ export function AsientosManualesView() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {/* Emitidos: lotes documentales (patrón Cuadratura Transbank → Generadas) */}
+      {!loading && mode === "emitidos" && (
+        <div className="rounded-lg border border-border-soft bg-white overflow-hidden">
+          {emisiones.length === 0 ? (
+            <div className="text-center py-8 text-sm text-text-muted">
+              No hay emisiones. Se crean desde &quot;Asientos generados&quot; con el botón <b>Emitir documento</b>.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-bg-soft text-xs uppercase tracking-wider text-text-muted">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Folio</th>
+                    <th className="px-3 py-2 text-left">Emitida</th>
+                    <th className="px-3 py-2 text-left">Rango</th>
+                    <th className="px-3 py-2 text-right">Asientos</th>
+                    <th className="px-3 py-2 text-right">Neto</th>
+                    <th className="px-3 py-2 text-right">Bruto</th>
+                    <th className="px-3 py-2 text-center">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {emisiones.map((e) => (
+                    <tr key={e.id} className="border-t border-border-soft/60 hover:bg-bg-soft/40">
+                      <td className="px-3 py-2 font-mono font-bold whitespace-nowrap">#{e.folio}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatDate(e.createdAt)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-text-muted">
+                        {formatDate(e.desde)} → {formatDate(e.hasta)}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono">{e.count}</td>
+                      <td className="px-3 py-2 text-right font-mono whitespace-nowrap">${formatMoney(BigInt(e.totalNeto))}</td>
+                      <td className="px-3 py-2 text-right font-mono whitespace-nowrap">${formatMoney(BigInt(e.totalBruto))}</td>
+                      <td className="px-3 py-2 text-center whitespace-nowrap">
+                        <button onClick={() => verEmision(e)} className="text-brand hover:underline text-xs font-semibold mr-3" title="Ver el documento exacto (con imprimir y descargar)">
+                          Ver
+                        </button>
+                        <button onClick={() => descargarEmision(e)} className="text-brand hover:underline text-xs font-semibold mr-3" title="Re-descargar el Excel ASI1 exacto de esta emisión">
+                          Descargar
+                        </button>
+                        <button onClick={() => deshacerEmision(e)} disabled={busy} className="text-rose-700 hover:underline text-xs font-semibold disabled:opacity-50" title="Los asientos vuelven a Generados">
+                          Deshacer
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

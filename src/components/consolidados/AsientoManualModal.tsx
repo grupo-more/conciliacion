@@ -250,7 +250,10 @@ export function AsientoManualModal({
   if (!mounted) return null;
 
   const bm = data?.bankMovement;
-  const yaGenerado = data?.asiento?.estado === "GENERADO";
+  // GENERADO o EMITIDO: el asiento existe (read-only). Si está EMITIDO no se
+  // puede deshacer suelto (pertenece a una emisión; el backend igual lo bloquea).
+  const yaGenerado = data?.asiento?.estado === "GENERADO" || data?.asiento?.estado === "EMITIDO";
+  const emitido = data?.asiento?.estado === "EMITIDO";
 
   return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
@@ -284,13 +287,21 @@ export function AsientoManualModal({
               </div>
             </div>
 
-            {/* Ya generado: read-only + deshacer */}
+            {/* Ya generado: read-only + deshacer (bloqueado si EMITIDO) */}
             {yaGenerado && data?.asiento && (
-              <GeneradoView
-                asiento={data.asiento}
-                onDeshacer={puedeGenerar ? deshacer : undefined}
-                acting={acting}
-              />
+              <>
+                {emitido && (
+                  <div className="rounded-md border border-indigo-200 bg-indigo-50 text-indigo-900 px-3 py-2 text-xs mb-2">
+                    Este asiento pertenece a una <b>emisión</b> (documento ya ingresado a gestión). Para
+                    deshacerlo, deshacé la emisión completa en Asientos manuales → Emitidos.
+                  </div>
+                )}
+                <GeneradoView
+                  asiento={data.asiento}
+                  onDeshacer={puedeGenerar && !emitido ? deshacer : undefined}
+                  acting={acting}
+                />
+              </>
             )}
 
             {/* Sin permiso de generar asientos: solo consulta */}

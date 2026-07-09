@@ -76,9 +76,20 @@ export async function DELETE(
 
   const a = await prisma.asientoManual.findUnique({
     where: { bankMovementId: context.params.bankMovementId },
-    select: { id: true },
+    select: { id: true, estado: true, emision: { select: { folio: true } } },
   });
   if (!a) return NextResponse.json({ error: "No hay asiento para deshacer" }, { status: 404 });
+
+  // Un asiento EMITIDO ya está en un documento ingresado al otro sistema: no se
+  // puede deshacer suelto. Hay que deshacer la emisión completa primero.
+  if (a.estado === "EMITIDO") {
+    return NextResponse.json(
+      {
+        error: `Este asiento pertenece a la emisión #${a.emision?.folio ?? "?"} (documento ya emitido). Deshacé la emisión completa primero, en la pestaña Emitidos.`,
+      },
+      { status: 409 },
+    );
+  }
 
   // Las líneas caen por cascade.
   await prisma.asientoManual.delete({ where: { id: a.id } });
