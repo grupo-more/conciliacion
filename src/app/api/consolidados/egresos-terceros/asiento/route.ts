@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { loadEntidadesInternas } from "@/lib/internos/detect";
+import {
+  buildRubroMap,
+  type AccountForRubro,
+} from "@/lib/internos/rubro-resolver";
 
 /**
  * GET /api/consolidados/egresos-terceros/asiento?from&to&accountId
@@ -39,20 +44,37 @@ export async function GET(req: Request) {
     take: 2000,
   });
 
-  // Etiquetas de rubro (lado gasto) en un solo query.
-  const rubroCodes = new Set<number>();
-  for (const c of concs) {
-    if (c.tesoreriaMovement.rubroSucursal !== null) rubroCodes.add(c.tesoreriaMovement.rubroSucursal);
-    if (c.tesoreriaMovement.rubroBanco !== null) rubroCodes.add(c.tesoreriaMovement.rubroBanco);
-  }
-  const rubroLabels =
-    rubroCodes.size > 0
-      ? await prisma.rubroLabel.findMany({
-          where: { rubro: { in: Array.from(rubroCodes) } },
-          select: { rubro: true, name: true },
-        })
-      : [];
+  // Etiquetas de rubro + resolución del rubro banco por cuenta. Mismo
+  // resolver que Traspasos internos: enlace explícito RubroLabel.accountId
+  // (Configuración → Rubros) → match por nombre → rubro de la EntidadInterna.
+  const [rubroLabels, entidades] = await Promise.all([
+    prisma.rubroLabel.findMany({
+      select: { rubro: true, name: true, accountId: true, isDifference: true },
+    }),
+    loadEntidadesInternas(prisma),
+  ]);
   const labelByRubro = new Map(rubroLabels.map((r) => [r.rubro, r.name]));
+
+  const accountsForRubro: AccountForRubro[] = [];
+  const seenAccountIds = new Set<string>();
+  for (const c of concs) {
+    for (const l of c.links) {
+      const a = l.bankMovement.account;
+      if (seenAccountIds.has(a.id)) continue;
+      seenAccountIds.add(a.id);
+      accountsForRubro.push({
+        id: a.id,
+        bankName: a.bankName,
+        holderName: a.holderName,
+        holderRut: a.holderRut,
+      });
+    }
+  }
+  const rubroByAccount = buildRubroMap(
+    accountsForRubro,
+    rubroLabels.filter((r) => !r.isDifference),
+    entidades.map((e) => ({ rutCanonico: e.rutCanonico, rubro: e.rubro })),
+  );
 
   type Row = {
     groupId: string;
@@ -116,12 +138,17 @@ export async function GET(req: Request) {
       const bm = l.bankMovement;
       const linkAmount = l.amountAllocated ?? bm.amount;
       const bmAbs = linkAmount < 0n ? -linkAmount : linkAmount;
+      // Cascada del rubro banco: override manual del Consolidado → enlace
+      // cuenta→rubro (Configuración → Rubros, vía resolver) → rubroBanco
+      // que vino de Tesorería.
+      const rubroBanco =
+        c.overrideRubroBanco ?? rubroByAccount.get(bm.accountId) ?? tm.rubroBanco;
       rows.push({
         groupId: c.id,
         side: "BANCO",
         fecha: bm.postDate.toISOString(),
-        rubro: null,
-        rubroLabel: null,
+        rubro: rubroBanco,
+        rubroLabel: rubroBanco !== null ? labelByRubro.get(rubroBanco) ?? null : null,
         detalle: `${bm.account.bankName} ${bm.account.holderName}`,
         cuenta: bm.account.displayNumber || bm.account.accountNumber,
         glosa: bm.counterpartyName || bm.description || "",
