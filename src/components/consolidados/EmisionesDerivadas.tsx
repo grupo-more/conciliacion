@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatDateRangeEnd, formatMoney } from "@/lib/format";
 import { exportAsi1Xls, type Asi1Linea, type Asi1Options } from "@/lib/asientos/exportAsi1";
 import { Asi1PreviewModal } from "./Asi1Preview";
 
@@ -174,7 +174,7 @@ export function EmisionesPanel({ origen }: { origen: OrigenDerivado }) {
                     <td className="px-3 py-2 font-mono font-bold whitespace-nowrap">#{e.folio}</td>
                     <td className="px-3 py-2 whitespace-nowrap">{formatDate(e.createdAt)}</td>
                     <td className="px-3 py-2 whitespace-nowrap text-text-muted">
-                      {formatDate(e.desde)} → {formatDate(e.hasta)}
+                      {formatDate(e.desde)} → {formatDateRangeEnd(e.hasta)}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">{e.count}</td>
                     <td className="px-3 py-2 text-right font-mono whitespace-nowrap">${formatMoney(BigInt(e.totalDebe))}</td>

@@ -213,6 +213,10 @@ function serialize(
   };
 }
 
+// `hasta` se guarda como fin-EXCLUSIVO (día siguiente al "Hasta" elegido),
+// igual que el resto de los rangos de la app. Es metadato de despliegue (los
+// movimientos se eligen por refIds); al MOSTRARLO se resta 1 día
+// (formatDateRangeEnd) para ver el último día realmente incluido.
 function rangeFromStrings(fromRaw: string, toRaw: string): { from: Date; to: Date } {
   const [fy, fm, fd] = fromRaw.split("-").map(Number);
   const [ty, tm, td] = toRaw.split("-").map(Number);
