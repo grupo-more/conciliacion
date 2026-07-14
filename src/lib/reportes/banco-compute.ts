@@ -65,8 +65,10 @@ export async function computeBancoSinConciliar(
   // sobre el universo completo, (b) clasificar de forma estable.
   const all = await prisma.bankMovement.findMany({
     // Excluye descartados: no corresponden al sistema (no cuentan como sin
-    // conciliar ni aparecen como pendientes de asiento manual).
-    where: { postDate: { gte: from, lt: to }, descartadoAt: null },
+    // conciliar ni aparecen como pendientes de asiento manual). Excluye también
+    // los manuales/ficticios: existen solo para conciliar su Tesorería, no son
+    // cartola real y no cuentan en saldos ni en "sin conciliar".
+    where: { postDate: { gte: from, lt: to }, descartadoAt: null, manual: false },
     include: {
       account: {
         select: {

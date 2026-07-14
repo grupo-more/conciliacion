@@ -62,6 +62,9 @@ export async function GET(req: Request) {
 
   // Descartados: por defecto fuera; con ?descartados=only, solo ellos.
   where.descartadoAt = descartadosView ? { not: null } : null;
+  // Manuales/ficticios: no se listan en Cartolas (no son cartola real; existen
+  // solo para conciliar su Tesorería).
+  where.manual = false;
 
   if (since || until) {
     where.postDate = {};

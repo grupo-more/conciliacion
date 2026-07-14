@@ -39,9 +39,9 @@ import { denyUnless } from "@/lib/perms";
  */
 const bodySchema = z
   .object({
-    tesoreriaIds: z.array(z.string().uuid()).min(1).max(10).optional(),
+    tesoreriaIds: z.array(z.string().uuid()).min(1).max(200).optional(),
     tesoreriaId: z.string().uuid().optional(),
-    bankMovementIds: z.array(z.string().uuid()).min(1).max(10),
+    bankMovementIds: z.array(z.string().uuid()).min(1).max(200),
     adjustment: z
       .object({
         rubro: z.number().int(),

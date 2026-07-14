@@ -163,6 +163,13 @@ model BankMovement {
   // vive en MovimientoDescartado (sobrevive aunque se borre esta fila).
   descartadoAt DateTime? @map("descartado_at")
 
+  // Movimiento bancario MANUAL/ficticio: definido a mano para cuadrar una
+  // Tesorería real que la cartola NO capturó (mismo patrón que TbkTesoreria.manual).
+  // No viene de cartola: se badgea y se EXCLUYE de saldos/listados de cartola y
+  // de Reportes. Solo sirve para conciliar la Tesorería y darle su asiento OK.
+  manual         Boolean  @default(false)
+  manualNota     String?  @db.Text @map("manual_nota")
+
   consolidadoLinks    ConsolidadoLink[]
   egresoConciliacionLinks EgresoConciliacionLink[]
   asientoManual       AsientoManual?

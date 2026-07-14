@@ -151,6 +151,9 @@ export function CompareView({
   );
   const [linking, setLinking] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
+  // "Crear banco manual": definir a mano el movimiento bancario que la cartola
+  // no capturó, para cuadrar una Tesorería y que deje de estar estancada.
+  const [manualBankOpen, setManualBankOpen] = useState(false);
   // Cuando el backend detecta que la diferencia podría ser otra tesorería
   // sin matchear (warning POSSIBLE_SIBLING), mostramos modal de confirmación.
   const [siblingHint, setSiblingHint] = useState<SiblingHint | null>(null);
@@ -641,6 +644,17 @@ export function CompareView({
             >
               Limpiar selección
             </button>
+            {/* Tesorería sola (sin cartola que la cuadre): definir el banco a
+                mano. La cartola no capturó ese movimiento pero existe. */}
+            {selectedTesoreriaIds.size === 1 && selectedBankIds.size === 0 && (
+              <button
+                onClick={() => setManualBankOpen(true)}
+                className="btn-ghost text-sm border border-brand/40 text-brand"
+                title="La cartola no tiene este movimiento: definí el banco a mano para cuadrar esta Tesorería"
+              >
+                Crear banco manual
+              </button>
+            )}
             {/* Si hay diferencia y el panel no está abierto, el botón abre el
                 panel de ajuste en lugar de intentar vincular. */}
             <button
@@ -863,6 +877,20 @@ export function CompareView({
         </div>
       )}
 
+      {manualBankOpen && selectedTesorerias.length === 1 && (
+        <ManualBankModal
+          tesoreria={selectedTesorerias[0]}
+          accounts={data?.accounts ?? []}
+          onClose={() => setManualBankOpen(false)}
+          onCreated={async () => {
+            setManualBankOpen(false);
+            setSelectedTesoreriaIds(new Set());
+            setSelectedBankIds(new Set());
+            await load();
+          }}
+        />
+      )}
+
       {/* Dos columnas */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {/* IZQUIERDA: Cartolas bancarias */}
@@ -930,6 +958,159 @@ export function CompareView({
             ))}
           </div>
         </section>
+      </div>
+    </div>
+  );
+}
+
+/* ========================= Banco manual (modal) ========================= */
+
+/**
+ * Modal para definir a mano el movimiento bancario que la cartola no capturó y
+ * conciliar la Tesorería con él. El monto del banco se iguala a la Tesorería
+ * (así el asiento OK cuadra). Queda `manual=true` (excluido de saldos/cartolas).
+ */
+function ManualBankModal({
+  tesoreria,
+  accounts,
+  onClose,
+  onCreated,
+}: {
+  tesoreria: TesoreriaCompareDTO;
+  accounts: CompareResponse["accounts"];
+  onClose: () => void;
+  onCreated: () => void | Promise<void>;
+}) {
+  const defaultAccount = useMemo(() => {
+    const banco = (tesoreria.banco ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    const hit = banco
+      ? accounts.find((a) =>
+          `${a.bankName} ${a.holderName ?? ""}`.toLowerCase().includes(banco),
+        )
+      : undefined;
+    return hit?.id ?? accounts[0]?.id ?? "";
+  }, [accounts, tesoreria.banco]);
+
+  const [accountId, setAccountId] = useState(defaultAccount);
+  const [postDate, setPostDate] = useState(tesoreria.fecha.slice(0, 10));
+  const [glosa, setGlosa] = useState(
+    tesoreria.glosa || tesoreria.clienteName || "Movimiento manual",
+  );
+  const [nota, setNota] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const monto = BigInt(tesoreria.monto);
+
+  async function submit() {
+    if (!accountId) {
+      setErr("Elegí una cuenta");
+      return;
+    }
+    setSaving(true);
+    setErr(null);
+    try {
+      const res = await fetch("/api/consolidados/manual-bank", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tesoreriaId: tesoreria.id,
+          accountId,
+          postDate,
+          glosa: glosa.trim(),
+          nota: nota.trim() || null,
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErr(j.error || "Error al crear el movimiento manual");
+        return;
+      }
+      await onCreated();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="bg-bg rounded-md border border-brand/40 shadow-soft max-w-md w-full p-4 space-y-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="font-bold text-text">Crear movimiento bancario manual</h3>
+        <p className="text-xs text-text-muted">
+          Para cuadrar la Tesorería de{" "}
+          <strong>{tesoreria.clienteName ?? "—"}</strong> ({formatMoney(monto)}) que
+          la cartola no capturó. El monto del banco se iguala a la Tesorería. Queda
+          marcado como <strong>manual</strong> y no suma a los saldos.
+        </p>
+        <div>
+          <label className="label">Cuenta bancaria</label>
+          <select
+            className="input"
+            value={accountId}
+            onChange={(e) => setAccountId(e.target.value)}
+          >
+            <option value="">— Elegí una cuenta —</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.holderName ?? a.bankName} · {a.displayNumber || a.accountNumber} (
+                {a.bankName})
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1">
+            <label className="label">Fecha</label>
+            <input
+              type="date"
+              className="input"
+              value={postDate}
+              onChange={(e) => setPostDate(e.target.value)}
+            />
+          </div>
+          <div className="flex-1">
+            <label className="label">Monto (= Tesorería)</label>
+            <input className="input font-mono" value={formatMoney(monto)} disabled readOnly />
+          </div>
+        </div>
+        <div>
+          <label className="label">Glosa</label>
+          <input
+            className="input"
+            value={glosa}
+            onChange={(e) => setGlosa(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="label">Nota (opcional)</label>
+          <textarea
+            className="input"
+            rows={2}
+            value={nota}
+            onChange={(e) => setNota(e.target.value)}
+            placeholder="Por qué se define a mano (queda registrado)"
+          />
+        </div>
+        {err && <div className="text-sm text-rose-700">{err}</div>}
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="btn-ghost text-sm">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={submit}
+            disabled={saving || !accountId}
+            className="btn-primary text-sm disabled:opacity-50"
+          >
+            {saving ? "Creando…" : "Crear y conciliar"}
+          </button>
+        </div>
       </div>
     </div>
   );

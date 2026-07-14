@@ -81,6 +81,9 @@ export async function GET(req: Request) {
     ...(accountId ? { accountId } : {}),
     // Descartados: no corresponden al sistema, no se comparan acá.
     descartadoAt: null,
+    // Manuales/ficticios: ya nacen vinculados a su Tesorería; no son cartola
+    // real ni candidatos a matchear acá.
+    manual: false,
     // Cuentas de uso parcial: no quedan disponibles para matchear acá (solo
     // importan sus traspasos internos).
     account: { isNot: usoParcialAccountWhere },
