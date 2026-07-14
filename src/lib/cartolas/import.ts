@@ -1,5 +1,6 @@
 import { createHash } from "crypto";
 import * as XLSX from "xlsx";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { detectParser, detectPdfParser, isPdfBuffer } from "./detect";
 import { computeDedupKeys } from "./dedup";
@@ -209,64 +210,17 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
     return null;
   };
 
-  // 5) Cross-check intra-banco (otras cuentas del mismo banco) — match perfecto
-  // Solo aplica para los movimientos que aún no están duplicados en la cuenta destino.
-  const otherBankAccountIds = await prisma.bankAccount
-    .findMany({
-      where: {
-        bankCode: resolved.bankCode,
-        id: { not: resolved.id },
-      },
-      select: { id: true, accountNumber: true, displayNumber: true, holderName: true },
-    });
-  const otherIdsList = otherBankAccountIds.map((a) => a.id);
-  const otherIdToLabel = new Map(
-    otherBankAccountIds.map((a) => [
-      a.id,
-      buildAccountLabel(a.accountNumber, a.displayNumber, a.holderName),
-    ])
-  );
-
-  // Si hay otras cuentas del mismo banco, buscamos potenciales matches por
-  // (postDate, amount). Filtramos en memoria por el resto de campos.
-  let candidatesByDay: Map<string, Array<CrossCandidate>> = new Map();
-  if (otherIdsList.length > 0) {
-    const dayBucketsToCheck = new Set<string>();
-    for (const m of parsed.movements) {
-      dayBucketsToCheck.add(m.postDate.toISOString().slice(0, 10));
-    }
-    if (dayBucketsToCheck.size > 0) {
-      const days = Array.from(dayBucketsToCheck);
-      const minDay = new Date(days.sort()[0]);
-      const maxDay = new Date(days.sort().slice(-1)[0]);
-      // post_date dentro del rango (inclusivo)
-      const rangeEnd = new Date(maxDay);
-      rangeEnd.setDate(rangeEnd.getDate() + 1);
-
-      const candidates = await prisma.bankMovement.findMany({
-        where: {
-          accountId: { in: otherIdsList },
-          postDate: { gte: minDay, lt: rangeEnd },
-        },
-        select: {
-          accountId: true,
-          postDate: true,
-          amount: true,
-          externalId: true,
-          descriptionNorm: true,
-          counterpartyRut: true,
-        },
-      });
-
-      candidatesByDay = groupCandidatesByDay(candidates);
-    }
-  }
+  // 5) (Eliminado) Antes había un cross-check intra-banco que descartaba un
+  // movimiento si existía uno IDÉNTICO en otra cuenta del mismo banco. Era un
+  // falso positivo: dos cuentas pueden hacer transferencias reales idénticas
+  // (mismo día/monto/RUT) al mismo tercero, y la glosa no dice de qué cuenta
+  // salió, así que se perdían movimientos legítimos. Un movimiento de una
+  // cartola SIEMPRE pertenece a la cuenta de esa cartola.
 
   // 6) Construir items con su status
   const items: ImportPreviewItem[] = [];
   let toInsert = 0;
   let dupSame = 0;
-  let dupOther = 0;
 
   for (let i = 0; i < parsed.movements.length; i++) {
     const m = parsed.movements[i];
@@ -285,22 +239,6 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
         ),
       });
       dupSame++;
-      continue;
-    }
-
-    const dayKey = m.postDate.toISOString().slice(0, 10);
-    const dayCandidates = candidatesByDay.get(dayKey) ?? [];
-    const perfectMatch = findPerfectMatch(m, dayCandidates);
-    if (perfectMatch) {
-      items.push({
-        movement: m,
-        dedupKey: key,
-        status: "DUP_OTHER_ACCOUNT",
-        duplicateOfAccountId: perfectMatch.accountId,
-        duplicateOfAccountLabel:
-          otherIdToLabel.get(perfectMatch.accountId) ?? perfectMatch.accountId,
-      });
-      dupOther++;
       continue;
     }
 
@@ -357,7 +295,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
       fileMovements: parsed.movements.length,
       toInsert,
       duplicatesSameAccount: dupSame,
-      duplicatesOtherAccount: dupOther,
+      duplicatesOtherAccount: 0,
       parseErrors: parsed.errors.length,
       autoDescartados: items.filter((it) => it.status === "NEW" && it.autoDescartePatron).length,
     },
@@ -379,21 +317,26 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
     return { preview };
   }
 
-  // 7) Inserción real, en transacción
+  const newItems = items.filter((it) => it.status === "NEW");
+
+  // 7) Inserción real.
+  // Archivo ya importado (mismo hash) a esta cuenta: NO recreamos el
+  // StatementImport, pero SÍ insertamos los movimientos que falten (NEW) — p.ej.
+  // los que se recuperan tras corregir una regla de dedup. Así re-importar
+  // "rellena" lo que faltaba sin borrar ni recrear lo ya guardado (los ids se
+  // conservan → no se rompen las emisiones ya hechas).
   if (preview.alreadyImported) {
-    // No re-creamos StatementImport con el mismo fileHash. Pero si por alguna razón
-    // hay nuevos movimientos (file modificado pero mismo hash, raro), no haríamos nada.
-    // En la práctica esto significa: ya importado, no hay nada que hacer.
+    const importId = preview.alreadyImported.statementImportId;
+    if (newItems.length > 0) {
+      await prisma.$transaction((tx) =>
+        insertNewMovements(tx, resolved.id, importId, newItems, descartadoSet),
+      );
+    }
     return {
       preview,
-      inserted: {
-        statementImportId: preview.alreadyImported.statementImportId,
-        rowsInserted: 0,
-      },
+      inserted: { statementImportId: importId, rowsInserted: newItems.length },
     };
   }
-
-  const newItems = items.filter((it) => it.status === "NEW");
 
   const result = await prisma.$transaction(async (tx) => {
     const stmt = await tx.statementImport.create({
@@ -406,7 +349,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
         periodTo: parsed.periodTo,
         rowsTotal: parsed.movements.length,
         rowsInserted: newItems.length,
-        rowsDuplicated: dupSame + dupOther,
+        rowsDuplicated: dupSame,
         rowsFailed: parsed.errors.length,
         rawMetadata: {
           parserCode: parsed.parserCode,
@@ -418,51 +361,7 @@ export async function runImport(opts: RunImportOptions): Promise<ImportResult> {
     });
 
     if (newItems.length > 0) {
-      await tx.bankMovement.createMany({
-        data: newItems.map((it) => ({
-          accountId: resolved.id,
-          statementImportId: stmt.id,
-          externalId: it.movement.externalId,
-          postDate: it.movement.postDate,
-          transactionDate: it.movement.transactionDate,
-          amount: BigInt(it.movement.amount),
-          currency: it.movement.currency,
-          direction: it.movement.direction,
-          description: it.movement.description,
-          descriptionNorm: normalizeDescription(it.movement.description),
-          balanceAfter:
-            it.movement.balanceAfter !== null
-              ? BigInt(it.movement.balanceAfter)
-              : null,
-          counterpartyName: it.movement.counterpartyName,
-          counterpartyRut: it.movement.counterpartyRut,
-          counterpartyAccount: it.movement.counterpartyAccount,
-          counterpartyBank: it.movement.counterpartyBank,
-          branchLabel: it.movement.branchLabel,
-          txType: it.movement.txType,
-          dedupKey: it.dedupKey,
-          rawRow: it.movement.rawRow as object,
-          // Directo a "Movimientos descartados" si ya estaba descartado (registro
-          // durable) o si matcheó una regla de descarte automático.
-          descartadoAt:
-            descartadoSet.has(it.dedupKey) || it.autoDescartePatron ? new Date() : null,
-        })),
-        skipDuplicates: true,
-      });
-
-      // Registro durable de los descartados por regla (con la razón visible en
-      // la vista de descartados). skipDuplicates: si ya existía, se conserva.
-      const porRegla = newItems.filter((it) => it.autoDescartePatron && !descartadoSet.has(it.dedupKey));
-      if (porRegla.length > 0) {
-        await tx.movimientoDescartado.createMany({
-          data: porRegla.map((it) => ({
-            accountId: resolved.id,
-            dedupKey: it.dedupKey,
-            razon: `Regla automática: "${it.autoDescartePatron}"`,
-          })),
-          skipDuplicates: true,
-        });
-      }
+      await insertNewMovements(tx, resolved.id, stmt.id, newItems, descartadoSet);
     }
 
     return stmt;
@@ -594,53 +493,63 @@ function toResolved(
   };
 }
 
-/* --------------------------- Cross-check helpers --------------------------- */
-
-interface CrossCandidate {
-  accountId: string;
-  postDate: Date;
-  amount: bigint;
-  externalId: string | null;
-  descriptionNorm: string;
-  counterpartyRut: string | null;
-}
-
-function groupCandidatesByDay(candidates: CrossCandidate[]): Map<string, CrossCandidate[]> {
-  const map = new Map<string, CrossCandidate[]>();
-  for (const c of candidates) {
-    const day = c.postDate.toISOString().slice(0, 10);
-    const arr = map.get(day) ?? [];
-    arr.push(c);
-    map.set(day, arr);
-  }
-  return map;
-}
+/* ------------------------------ Inserción ------------------------------ */
 
 /**
- * Match PERFECTO ultra-conservador: todos los campos identificadores deben coincidir.
- * Si UN solo campo difiere (incluyendo nulos asimétricos), NO es match.
- *
- * Filosofía: "preferimos tener una de sobra a perder una". Por eso solo descartamos
- * cuando estamos absolutamente seguros de que es el mismo movimiento ya registrado.
+ * Inserta los movimientos NEW en la cuenta e import dados. Marca `descartadoAt`
+ * si el movimiento ya estaba descartado (registro durable) o matcheó una regla
+ * de descarte automático, y crea el registro durable del descarte por regla.
+ * Reutilizado por el import normal y por el "relleno" al re-importar un archivo
+ * ya cargado. `skipDuplicates` respeta la unicidad (accountId, dedupKey).
  */
-function findPerfectMatch(
-  m: NormalizedMovement,
-  candidates: CrossCandidate[]
-): CrossCandidate | null {
-  const mDescNorm = normalizeDescription(m.description);
-  const mAmount = BigInt(m.amount);
-  const mPostIso = m.postDate.toISOString().slice(0, 10);
+async function insertNewMovements(
+  tx: Prisma.TransactionClient,
+  accountId: string,
+  statementImportId: string,
+  newItems: ImportPreviewItem[],
+  descartadoSet: Set<string>,
+): Promise<void> {
+  await tx.bankMovement.createMany({
+    data: newItems.map((it) => ({
+      accountId,
+      statementImportId,
+      externalId: it.movement.externalId,
+      postDate: it.movement.postDate,
+      transactionDate: it.movement.transactionDate,
+      amount: BigInt(it.movement.amount),
+      currency: it.movement.currency,
+      direction: it.movement.direction,
+      description: it.movement.description,
+      descriptionNorm: normalizeDescription(it.movement.description),
+      balanceAfter:
+        it.movement.balanceAfter !== null ? BigInt(it.movement.balanceAfter) : null,
+      counterpartyName: it.movement.counterpartyName,
+      counterpartyRut: it.movement.counterpartyRut,
+      counterpartyAccount: it.movement.counterpartyAccount,
+      counterpartyBank: it.movement.counterpartyBank,
+      branchLabel: it.movement.branchLabel,
+      txType: it.movement.txType,
+      dedupKey: it.dedupKey,
+      rawRow: it.movement.rawRow as object,
+      descartadoAt:
+        descartadoSet.has(it.dedupKey) || it.autoDescartePatron ? new Date() : null,
+    })),
+    skipDuplicates: true,
+  });
 
-  for (const c of candidates) {
-    const cPostIso = c.postDate.toISOString().slice(0, 10);
-    if (cPostIso !== mPostIso) continue;
-    if (c.amount !== mAmount) continue;
-    if ((c.externalId ?? null) !== (m.externalId ?? null)) continue;
-    if ((c.counterpartyRut ?? null) !== (m.counterpartyRut ?? null)) continue;
-    if (c.descriptionNorm !== mDescNorm) continue;
-    return c;
+  const porRegla = newItems.filter(
+    (it) => it.autoDescartePatron && !descartadoSet.has(it.dedupKey),
+  );
+  if (porRegla.length > 0) {
+    await tx.movimientoDescartado.createMany({
+      data: porRegla.map((it) => ({
+        accountId,
+        dedupKey: it.dedupKey,
+        razon: `Regla automática: "${it.autoDescartePatron}"`,
+      })),
+      skipDuplicates: true,
+    });
   }
-  return null;
 }
 
 /* ------------------------------- Utilidades ------------------------------- */
