@@ -27,7 +27,10 @@ interface AsientoResp {
   to: string;
   rows: AsientoRowDTO[];
   totals: { debe: string; haber: string };
-  facets: { accounts: { id: string; label: string }[] };
+  facets: {
+    accounts: { id: string; label: string }[];
+    sucursales: { id: string; name: string }[];
+  };
 }
 
 /**
@@ -47,6 +50,9 @@ export function EgresosTercerosAsiento({
   const [data, setData] = useState<AsientoResp | null>(null);
   const [preview, setPreview] = useState<{ options: Asi1Options; filename: string } | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sucursalId, setSucursalId] = useState<string>("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
 
   useEffect(() => {
     let cancel = false;
@@ -55,6 +61,7 @@ export function EgresosTercerosAsiento({
       try {
         const p = new URLSearchParams({ from, to });
         if (accountId) p.set("accountId", accountId);
+        if (sucursalId) p.set("sucursalId", sucursalId);
         const res = await fetch(`/api/consolidados/egresos-terceros/asiento?${p}`);
         if (!cancel) setData(res.ok ? await res.json() : null);
       } finally {
@@ -64,7 +71,25 @@ export function EgresosTercerosAsiento({
     return () => {
       cancel = true;
     };
-  }, [from, to, accountId]);
+  }, [from, to, accountId, sucursalId, reloadKey]);
+
+  async function deshacer(consolidadoId: string) {
+    if (!confirm("¿Deshacer esta conciliación? El egreso vuelve a Pendientes.")) return;
+    setDeshaciendo(consolidadoId);
+    try {
+      const res = await fetch(
+        `/api/consolidados/egresos-terceros/asiento?consolidadoId=${consolidadoId}`,
+        { method: "DELETE" },
+      );
+      if (res.ok) setReloadKey((k) => k + 1);
+      else {
+        const j = await res.json().catch(() => ({}));
+        alert(j.error || "Error al deshacer");
+      }
+    } finally {
+      setDeshaciendo(null);
+    }
+  }
 
   const totals = useMemo(
     () => ({
@@ -100,7 +125,20 @@ export function EgresosTercerosAsiento({
 
   return (
     <div className="rounded-lg border border-border-soft bg-white overflow-hidden">
-      <div className="flex justify-end gap-2 p-2 border-b border-border-soft">
+      <div className="flex items-center gap-2 p-2 border-b border-border-soft">
+        <select
+          value={sucursalId}
+          onChange={(e) => setSucursalId(e.target.value)}
+          className="rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white"
+        >
+          <option value="">Todas las sucursales</option>
+          {data?.facets.sucursales.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        <div className="flex-1" />
         <button
           onClick={() => setPreview(buildAsiento())}
           disabled={!hasRows}
@@ -134,6 +172,7 @@ export function EgresosTercerosAsiento({
                 <th className="px-3 py-2 text-left">Glosa</th>
                 <th className="px-3 py-2 text-right">Debe</th>
                 <th className="px-3 py-2 text-right">Haber</th>
+                <th className="px-3 py-2 text-center">Acciones</th>
               </tr>
             </thead>
             <tbody>
@@ -171,6 +210,18 @@ export function EgresosTercerosAsiento({
                     <td className="px-3 py-1.5 text-right font-mono whitespace-nowrap">
                       {r.haber ? formatMoney(BigInt(r.haber)) : ""}
                     </td>
+                    <td className="px-3 py-1.5 text-center whitespace-nowrap">
+                      {isGroupStart && (
+                        <button
+                          onClick={() => deshacer(r.groupId)}
+                          disabled={deshaciendo === r.groupId}
+                          className="text-rose-700 hover:underline text-xs font-semibold disabled:opacity-50"
+                          title="Deshace esta conciliación: el egreso vuelve a Pendientes"
+                        >
+                          {deshaciendo === r.groupId ? "…" : "Deshacer"}
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -180,6 +231,7 @@ export function EgresosTercerosAsiento({
                 <td className="px-3 py-2 font-semibold" colSpan={5}>TOTAL</td>
                 <td className="px-3 py-2 text-right font-mono font-bold">{formatMoney(totals.debe)}</td>
                 <td className="px-3 py-2 text-right font-mono font-bold">{formatMoney(totals.haber)}</td>
+                <td />
               </tr>
             </tfoot>
           </table>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { denyUnless } from "@/lib/perms";
 import { loadEntidadesInternas } from "@/lib/internos/detect";
 import {
   buildRubroMap,
@@ -26,6 +27,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const { from, to } = parseRange(url.searchParams.get("from"), url.searchParams.get("to"));
   const accountId = url.searchParams.get("accountId") || null;
+  const sucursalRaw = url.searchParams.get("sucursalId");
+  const sucursalId = sucursalRaw && /^\d+$/.test(sucursalRaw) ? Number(sucursalRaw) : null;
 
   const concs = await prisma.consolidado.findMany({
     where: {
@@ -33,6 +36,7 @@ export async function GET(req: Request) {
       tesoreriaMovement: {
         tipoOperacion: "EGRESO",
         fecha: { gte: from, lt: to },
+        ...(sucursalId !== null ? { sucursalId } : {}),
       },
       ...(accountId ? { resolvedAccountId: accountId } : {}),
     },
@@ -172,6 +176,25 @@ export async function GET(req: Request) {
     }
   }
 
+  // Facet de sucursales: TODAS las presentes en el rango (sin el filtro de
+  // sucursal, para poder cambiar). Query liviana solo con los campos sucursal.
+  const sucFacetRows = await prisma.consolidado.findMany({
+    where: {
+      status: { in: ["AUTO_MATCHED", "MANUAL"] },
+      tesoreriaMovement: { tipoOperacion: "EGRESO", fecha: { gte: from, lt: to } },
+      ...(accountId ? { resolvedAccountId: accountId } : {}),
+    },
+    select: { tesoreriaMovement: { select: { sucursalId: true, sucursalName: true } } },
+    take: 5000,
+  });
+  const sucSet = new Map<number, string>();
+  for (const r of sucFacetRows) {
+    const tm = r.tesoreriaMovement;
+    if (!sucSet.has(tm.sucursalId)) {
+      sucSet.set(tm.sucursalId, tm.sucursalName ?? `Sucursal ${tm.sucursalId}`);
+    }
+  }
+
   return NextResponse.json({
     from: from.toISOString(),
     to: to.toISOString(),
@@ -179,8 +202,45 @@ export async function GET(req: Request) {
     totals: { debe: totalDebe.toString(), haber: totalHaber.toString() },
     facets: {
       accounts: [...accSet.entries()].map(([id, label]) => ({ id, label })).sort((a, b) => a.label.localeCompare(b.label)),
+      sucursales: [...sucSet.entries()]
+        .map(([id, name]) => ({ id: String(id), name }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
     },
   });
+}
+
+/**
+ * DELETE /api/consolidados/egresos-terceros/asiento?consolidadoId=<uuid>
+ *
+ * Deshace una conciliación de egreso: borra sus links y deja el Consolidado en
+ * NO_MATCH (vuelve a "Pendientes"). Consistente con el "reject" de ingresos.
+ * OJO: si el par OUT↔EGRESO es un 1:1 único, el auto-match puede re-vincularlo
+ * en la próxima "Re-evaluar todo"; para dejarlo distinto, re-vinculá a mano.
+ */
+export async function DELETE(req: Request) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const denied = await denyUnless(session, "conciliar");
+  if (denied) return denied;
+
+  const consolidadoId = new URL(req.url).searchParams.get("consolidadoId");
+  if (!consolidadoId) {
+    return NextResponse.json({ error: "Falta consolidadoId" }, { status: 400 });
+  }
+  const c = await prisma.consolidado.findUnique({
+    where: { id: consolidadoId },
+    select: { id: true },
+  });
+  if (!c) return NextResponse.json({ error: "Conciliación no encontrada" }, { status: 404 });
+
+  await prisma.$transaction(async (tx) => {
+    await tx.consolidadoLink.deleteMany({ where: { consolidadoId } });
+    await tx.consolidado.update({
+      where: { id: consolidadoId },
+      data: { status: "NO_MATCH", matchType: null, matchedAt: new Date() },
+    });
+  });
+  return NextResponse.json({ ok: true });
 }
 
 function parseRange(fromRaw: string | null, toRaw: string | null): { from: Date; to: Date } {
