@@ -171,7 +171,7 @@ export function ImportModal({ accounts, onClose, onImported }: Props) {
 
   async function importAll() {
     const importable = items.filter(
-      (it) => it.status === "previewed" && it.preview && !it.preview.alreadyImported
+      (it) => it.status === "previewed" && it.preview && it.preview.totals.toInsert > 0
     );
     if (importable.length === 0) return;
 
@@ -229,7 +229,7 @@ export function ImportModal({ accounts, onClose, onImported }: Props) {
 
   const previewing = items.filter((it) => it.status === "previewing").length;
   const importableItems = items.filter(
-    (it) => it.status === "previewed" && it.preview && !it.preview.alreadyImported
+    (it) => it.status === "previewed" && it.preview && it.preview.totals.toInsert > 0
   );
   const totalToInsert = importableItems.reduce(
     (acc, it) => acc + (it.preview?.totals.toInsert ?? 0),
@@ -801,6 +801,9 @@ function StatusLine({ item }: { item: FileItem }) {
         return (
           <div className="text-xs text-warn">
             Ya importado el {formatDate(p.alreadyImported.importedAt)}
+            {p.totals.toInsert > 0 && (
+              <> · {p.totals.toInsert} nuevo{p.totals.toInsert === 1 ? "" : "s"} por agregar</>
+            )}
           </div>
         );
       }
