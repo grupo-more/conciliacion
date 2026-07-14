@@ -10,17 +10,22 @@ import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
 import { consumedRefIds } from "@/lib/consolidados/emision-consumo";
 
 /**
- * GET /api/consolidados/dif-menor?from=YYYY-MM-DD&to=YYYY-MM-DD&accountId=
+ * GET /api/consolidados/dif-menor?from=YYYY-MM-DD&to=YYYY-MM-DD&accountId=&direction=IN|OUT
  *
- * Arma el asiento contable de los "diferencias menores": ingresos IN cuyo
- * monto absoluto está bajo el umbral configurable (default 100, inclusivo).
+ * Arma el asiento contable de los "diferencias menores": movimientos cuyo monto
+ * absoluto está bajo el umbral configurable (default 100, inclusivo).
  *
- * Cada BankMovement genera 2 filas:
- *  - Debe rubro de la cuenta (inferido por nombre del catálogo RubroLabel).
- *  - Haber rubro diferencia (configurable, default 2050).
+ *  - direction=IN (default): ingresos chicos (transferencias de prueba que
+ *    entran). Debe rubro cuenta / Haber rubro diferencia.
+ *  - direction=OUT: egresos chicos (transferencias de prueba que salen para
+ *    validar una cuenta destino). Asiento INVERTIDO: Debe rubro diferencia /
+ *    Haber rubro cuenta. Mismo rubro diferencia (2050), del otro lado.
  *
- * Excluye los Transbank (esos tienen su propio asiento y nunca son <100).
- * No hay deshacer porque no hay match contra TesoreriaMovement.
+ * Cada BankMovement genera 2 filas (banco + contracuenta diferencia). El rubro
+ * de la cuenta se infiere por nombre del catálogo RubroLabel.
+ *
+ * Excluye los Transbank (tienen su propio asiento) y las cuentas de uso parcial.
+ * No hay deshacer contra Tesorería; la resolución es vía emisión (folio).
  */
 export async function GET(req: Request) {
   const session = await getSession();
@@ -34,16 +39,25 @@ export async function GET(req: Request) {
     url.searchParams.get("to")
   );
   const accountId = url.searchParams.get("accountId") || null;
+  const direction = url.searchParams.get("direction") === "OUT" ? "OUT" : "IN";
 
   const settings = await getDifMenorSettings();
 
+  // Filtro de monto según dirección: IN = positivo (0, umbral]; OUT = negativo
+  // [-umbral, 0) (los egresos se guardan con monto negativo).
+  const amountWhere =
+    direction === "IN"
+      ? { gt: 0n, lte: BigInt(settings.threshold) }
+      : { lt: 0n, gte: -BigInt(settings.threshold) };
+  const origenEmision = direction === "OUT" ? "DIF_MENOR_EGRESO" : "DIF_MENOR";
+
   // Diferencias ya emitidas a gestión (folio): fuera del listado de esta tab.
-  const emitidos = await consumedRefIds("DIF_MENOR");
+  const emitidos = await consumedRefIds(origenEmision);
 
   const movements = await prisma.bankMovement.findMany({
     where: {
-      direction: "IN",
-      amount: { gt: 0n, lte: BigInt(settings.threshold) },
+      direction,
+      amount: amountWhere,
       postDate: { gte: from, lt: to },
       ...(accountId ? { accountId } : {}),
       ...(emitidos.size > 0 ? { id: { notIn: Array.from(emitidos) } } : {}),
@@ -108,7 +122,15 @@ export async function GET(req: Request) {
       (rubroBanco !== null ? labelByRubro.get(rubroBanco) : null) ??
       bm.account.bankName;
 
-    // 1) Lado banco — Debe
+    // Lados del asiento según dirección:
+    //   IN  (ingreso): banco DEBE  / diferencia HABER
+    //   OUT (egreso):  banco HABER / diferencia DEBE  (invertido)
+    const bancoDebe = direction === "IN" ? abs.toString() : null;
+    const bancoHaber = direction === "IN" ? null : abs.toString();
+    const difDebe = direction === "IN" ? null : abs.toString();
+    const difHaber = direction === "IN" ? abs.toString() : null;
+
+    // 1) Lado banco
     rows.push({
       groupId,
       side: "BANCO",
@@ -119,14 +141,13 @@ export async function GET(req: Request) {
       cuenta: bm.account.displayNumber || bm.account.accountNumber,
       cliente,
       glosa,
-      debe: abs.toString(),
-      haber: null,
+      debe: bancoDebe,
+      haber: bancoHaber,
       bankMovementId: bm.id,
       totalMonto: abs.toString(),
     });
-    totalDebe += abs;
 
-    // 2) Contracuenta diferencia — Haber
+    // 2) Contracuenta diferencia
     rows.push({
       groupId,
       side: "DIFERENCIA",
@@ -137,19 +158,22 @@ export async function GET(req: Request) {
       cuenta: bm.account.displayNumber || bm.account.accountNumber,
       cliente,
       glosa,
-      debe: null,
-      haber: abs.toString(),
+      debe: difDebe,
+      haber: difHaber,
       bankMovementId: bm.id,
       totalMonto: abs.toString(),
     });
+
+    // Cada movimiento aporta abs a ambos totales (siempre cuadra).
+    totalDebe += abs;
     totalHaber += abs;
   }
 
   // Facets de cuenta vistas en el rango completo (sin filtro de cuenta).
   const allInRange = await prisma.bankMovement.findMany({
     where: {
-      direction: "IN",
-      amount: { gt: 0n, lte: BigInt(settings.threshold) },
+      direction,
+      amount: amountWhere,
       postDate: { gte: from, lt: to },
       descartadoAt: null,
       account: { isNot: usoParcialAccountWhere },

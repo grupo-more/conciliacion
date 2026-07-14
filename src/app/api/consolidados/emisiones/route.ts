@@ -22,7 +22,13 @@ import { denyUnless } from "@/lib/perms";
  * DELETE ?id=<uuid>     → deshace: libera los consumos (las filas reaparecen).
  */
 
-const ORIGENES_DERIVADOS = ["OK", "ABONO_TRANSBANK", "DIF_MENOR", "TRASPASOS_INTERNOS"] as const;
+const ORIGENES_DERIVADOS = [
+  "OK",
+  "ABONO_TRANSBANK",
+  "DIF_MENOR",
+  "DIF_MENOR_EGRESO",
+  "TRASPASOS_INTERNOS",
+] as const;
 type OrigenDerivado = (typeof ORIGENES_DERIVADOS)[number];
 
 export async function GET(req: Request) {

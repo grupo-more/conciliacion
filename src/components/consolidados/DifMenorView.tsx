@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
 import { exportAsi1Xls, pickDescripcion, type Asi1Options } from "@/lib/asientos/exportAsi1";
 import { Asi1PreviewModal } from "./Asi1Preview";
-import { EmisionesPanel, EmisionesToggle, emitirDocumento } from "./EmisionesDerivadas";
+import {
+  EmisionesPanel,
+  EmisionesToggle,
+  emitirDocumento,
+  type OrigenDerivado,
+} from "./EmisionesDerivadas";
 
 interface DifMenorRow {
   groupId: string;
@@ -32,9 +37,13 @@ interface DifMenorResponse {
 }
 
 /**
- * Tab "Dif menor a 100" de Consolidados: muestra los BankMovements de tipo
- * abono pequeño (IN ≤ threshold) como asiento contable Debe/Haber, mandando
- * la contracuenta al rubro de diferencia configurado.
+ * Tab "Dif menor a 100" de Consolidados: muestra los BankMovements chicos
+ * (|monto| ≤ threshold) como asiento contable Debe/Haber, mandando la
+ * contracuenta al rubro de diferencia configurado. Toggle Ingresos/Egresos:
+ *  - Ingresos (IN):  banco DEBE  / diferencia HABER.
+ *  - Egresos  (OUT): banco HABER / diferencia DEBE (asiento invertido).
+ * Cada dirección tiene su propio origen de emisión (DIF_MENOR /
+ * DIF_MENOR_EGRESO), así el conteo y los "Emitidos" no se mezclan.
  *
  * El umbral y el rubro destino son editables desde Configuración.
  */
@@ -45,6 +54,10 @@ export function DifMenorView() {
   const [from, setFrom] = useState<string>(monthStart);
   const [to, setTo] = useState<string>(today);
   const [accountId, setAccountId] = useState<string>("");
+  const [direction, setDirection] = useState<"IN" | "OUT">("IN");
+
+  const esEgreso = direction === "OUT";
+  const origen: OrigenDerivado = esEgreso ? "DIF_MENOR_EGRESO" : "DIF_MENOR";
 
   const [data, setData] = useState<DifMenorResponse | null>(null);
   const [preview, setPreview] = useState<{ options: Asi1Options; filename: string } | null>(null);
@@ -53,7 +66,7 @@ export function DifMenorView() {
   async function load() {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ from, to });
+      const p = new URLSearchParams({ from, to, direction });
       if (accountId) p.set("accountId", accountId);
       const res = await fetch(`/api/consolidados/dif-menor?${p}`);
       if (!res.ok) {
@@ -69,7 +82,7 @@ export function DifMenorView() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to, accountId]);
+  }, [from, to, accountId, direction]);
 
   const totals = useMemo(() => {
     if (!data) return { debe: 0n, haber: 0n };
@@ -84,7 +97,7 @@ export function DifMenorView() {
     return {
       options: {
         fecha: to,
-        descripcion: `Diferencias menores ${formatDate(from)} al ${formatDate(to)}`,
+        descripcion: `Diferencias menores ${esEgreso ? "egresos " : ""}${formatDate(from)} al ${formatDate(to)}`,
         lineas: data.rows.map((r) => ({
           rubro: r.rubro ?? "",
           detalle: pickDescripcion(r.cliente, r.glosa, r.detalle),
@@ -92,7 +105,7 @@ export function DifMenorView() {
           haber: r.haber,
         })),
       },
-      filename: `dif_menor_${from}_${to}`,
+      filename: `dif_menor_${esEgreso ? "egreso_" : ""}${from}_${to}`,
     };
   }
 
@@ -119,7 +132,7 @@ export function DifMenorView() {
     setEmitiendo(true);
     setEmitirErr(null);
     try {
-      const r = await emitirDocumento({ origen: "DIF_MENOR", from, to, asiento: a, refIds });
+      const r = await emitirDocumento({ origen, from, to, asiento: a, refIds });
       if (!r.ok) setEmitirErr(r.error);
       else load();
     } finally {
@@ -131,18 +144,47 @@ export function DifMenorView() {
   const movimientosCount = data ? data.rows.length / 2 : 0;
   const threshold = data?.settings.threshold ?? 100;
 
+  const dirToggle = (
+    <div className="inline-flex rounded-md border border-border-soft overflow-hidden text-sm">
+      <button
+        onClick={() => {
+          setDirection("IN");
+          setAccountId("");
+        }}
+        className={`px-3 py-1.5 font-semibold ${!esEgreso ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
+      >
+        Ingresos
+      </button>
+      <button
+        onClick={() => {
+          setDirection("OUT");
+          setAccountId("");
+        }}
+        className={`px-3 py-1.5 font-semibold ${esEgreso ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
+      >
+        Egresos
+      </button>
+    </div>
+  );
+
   if (verEmitidos) {
     return (
       <div className="space-y-4">
-        <EmisionesToggle emitidos onChange={setVerEmitidos} />
-        <EmisionesPanel origen="DIF_MENOR" />
+        <div className="flex items-center gap-3 flex-wrap">
+          <EmisionesToggle emitidos onChange={setVerEmitidos} />
+          {dirToggle}
+        </div>
+        <EmisionesPanel origen={origen} />
       </div>
     );
   }
 
   return (
     <div className="space-y-4">
-      <EmisionesToggle emitidos={false} onChange={setVerEmitidos} />
+      <div className="flex items-center gap-3 flex-wrap">
+        <EmisionesToggle emitidos={false} onChange={setVerEmitidos} />
+        {dirToggle}
+      </div>
       {emitirErr && (
         <div className="rounded-lg px-3 py-2 text-sm bg-rose-50 text-rose-800 border border-rose-200">
           {emitirErr}
@@ -224,7 +266,7 @@ export function DifMenorView() {
         )}
         {!loading && !hasRows && (
           <div className="text-center py-8 text-sm text-text-muted">
-            No hay diferencias menores en este rango.
+            No hay diferencias menores {esEgreso ? "de egreso" : "de ingreso"} en este rango.
           </div>
         )}
         {!loading && hasRows && (

@@ -16,7 +16,12 @@ import { Asi1PreviewModal } from "./Asi1Preview";
  *   Descargar (Excel exacto) y Deshacer (libera los movimientos).
  */
 
-export type OrigenDerivado = "OK" | "ABONO_TRANSBANK" | "DIF_MENOR" | "TRASPASOS_INTERNOS";
+export type OrigenDerivado =
+  | "OK"
+  | "ABONO_TRANSBANK"
+  | "DIF_MENOR"
+  | "DIF_MENOR_EGRESO"
+  | "TRASPASOS_INTERNOS";
 
 interface EmisionDTO {
   id: string;
