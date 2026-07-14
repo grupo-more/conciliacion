@@ -909,10 +909,6 @@ function CuadraturaModal({
   busy: boolean;
 }) {
   const { cuadratura: c, asiento } = detalle;
-  const asi1Opts = {
-    fecha: c.hasta,
-    descripcion: `Cuadratura Transbank ${formatDate(c.desde)} al ${formatDate(c.hasta)}`,
-  };
   const periodo = `${formatDate(c.desde)} al ${formatDate(c.hasta)}`;
   const stamp = `${c.desde.slice(0, 10)}_${c.hasta.slice(0, 10)}`;
   return (
@@ -924,7 +920,7 @@ function CuadraturaModal({
           </h2>
           <div className="flex gap-2">
             <button
-              onClick={() => printAsi1(buildAsi1Options(asiento, asi1Opts))}
+              onClick={() => printAsi1(consolidacionOptions(asiento, c.hasta, periodo))}
               className="btn-ghost text-sm"
             >
               Imprimir
@@ -961,32 +957,29 @@ function CuadraturaModal({
 
 /* ============================ Export Excel ============================ */
 
-// Un solo asiento consolidado (rubros 17/200/708/1403) → formato ASI1 gestión.
-function buildAsi1Options(
-  a: Asiento,
-  opts: { fecha: string; descripcion: string },
-): Asi1Options {
-  return {
-    fecha: opts.fecha,
-    descripcion: opts.descripcion,
-    lineas: a.consolidacion.lineas.map((l) => ({
-      rubro: l.rubro,
-      detalle: l.detalle,
-      debe: l.debe,
-      haber: l.haber,
-    })),
-  };
-}
-
 /* ---- Separación por sucursal + consolidación (ZIP) y auditoría (multi-hoja) ---- */
 
-const mapLineas = (lineas: AsientoLinea[]): Asi1Options["lineas"] =>
-  lineas.map((l) => ({ rubro: l.rubro, detalle: l.detalle, debe: l.debe, haber: l.haber }));
+// En los .xls que van a gestión, la Descripción de CADA línea es la glosa del
+// período ("Cuadratura transbank del X al Y"), no el nombre del rubro que se
+// muestra en pantalla (Ventas/Tesorería/...) — pedido de contabilidad.
+const glosaPeriodo = (periodo: string) => `Cuadratura transbank del ${periodo}`;
+
+const mapLineas = (lineas: AsientoLinea[], glosa: string): Asi1Options["lineas"] =>
+  lineas.map((l) => ({ rubro: l.rubro, detalle: glosa, debe: l.debe, haber: l.haber }));
 
 /** Opciones ASI1 del asiento de UNA sucursal. */
 function sucursalOptions(s: SucursalAsiento, fecha: string, periodo: string): Asi1Options {
   const nombre = s.sucursalName ?? `#${s.sucursalId}`;
-  return { fecha, descripcion: `Cuadratura Transbank ${nombre} ${periodo}`, lineas: mapLineas(s.lineas) };
+  return {
+    fecha,
+    descripcion: `Cuadratura Transbank ${nombre} ${periodo}`,
+    // El sucursalId del POS (Dynatech) coincide con el nº de sucursal de
+    // gestión (ej. 9 = Iquique) → va en la celda "Sucursal:" del header.
+    // sucursalCodigo puede venir null en snapshots viejos (maestro sin match);
+    // sucursalId es el mismo id POS, así que sirve igual.
+    sucursal: s.sucursalCodigo ?? s.sucursalId,
+    lineas: mapLineas(s.lineas, glosaPeriodo(periodo)),
+  };
 }
 
 /** Opciones ASI1 del asiento de consolidación. */
@@ -994,7 +987,7 @@ function consolidacionOptions(a: Asiento, fecha: string, periodo: string): Asi1O
   return {
     fecha,
     descripcion: `Cuadratura Transbank consolidación ${periodo}`,
-    lineas: mapLineas(a.consolidacion.lineas),
+    lineas: mapLineas(a.consolidacion.lineas, glosaPeriodo(periodo)),
   };
 }
 
