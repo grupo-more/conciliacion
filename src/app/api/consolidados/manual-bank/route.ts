@@ -9,16 +9,17 @@ import { normalizeDescription } from "@/lib/cartolas/normalize";
 /**
  * POST /api/consolidados/manual-bank
  *
- * Crea un movimiento bancario MANUAL/ficticio (definido a mano) para cuadrar una
- * Tesorería real que la cartola NO capturó, y lo concilia con ella en un paso.
+ * Crea UN movimiento bancario MANUAL/ficticio (definido a mano) para cuadrar una
+ * o VARIAS Tesorerías reales que la cartola NO capturó, y las concilia en un paso.
  *
- * El monto del banco = el monto de la Tesorería (así el asiento OK cuadra por
- * construcción). El movimiento nace `manual=true`: se excluye de saldos/listados
- * de cartola y de Reportes — solo existe para darle rumbo a la Tesorería y que
- * deje de estar estancada.
+ * El monto del banco = la SUMA de las Tesorerías (así cuadra por construcción).
+ * Con varias tesorerías se crea 1 banco y N Consolidados, y cada link lleva su
+ * `amountAllocated` = el monto de esa tesorería (anidado). El movimiento nace
+ * `manual=true`: se excluye de saldos/listados de cartola y de Reportes — solo
+ * existe para darle rumbo a las Tesorerías y que dejen de estar estancadas.
  */
 const bodySchema = z.object({
-  tesoreriaId: z.string().uuid(),
+  tesoreriaIds: z.array(z.string().uuid()).min(1).max(200),
   accountId: z.string().uuid(),
   postDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   glosa: z.string().trim().min(1).max(300),
@@ -38,20 +39,24 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const { tesoreriaId, accountId, glosa, nota } = parsed.data;
+  const { accountId, glosa, nota } = parsed.data;
+  const tesoreriaIds = Array.from(new Set(parsed.data.tesoreriaIds));
   const [y, m, d] = parsed.data.postDate.split("-").map(Number);
   const postDate = new Date(y, m - 1, d, 0, 0, 0, 0);
 
-  const tm = await prisma.tesoreriaMovement.findUnique({
-    where: { id: tesoreriaId },
+  const tms = await prisma.tesoreriaMovement.findMany({
+    where: { id: { in: tesoreriaIds } },
     include: { consolidado: { include: { links: true } } },
   });
-  if (!tm) return NextResponse.json({ error: "La Tesorería no existe" }, { status: 404 });
+  if (tms.length !== tesoreriaIds.length) {
+    return NextResponse.json({ error: "Una o más Tesorerías no existen" }, { status: 404 });
+  }
 
-  // Si ya está vinculada a un banco (real o manual), no la pisamos.
-  if (tm.consolidado && tm.consolidado.links.length > 0) {
+  // Ninguna puede estar ya vinculada a un banco.
+  const yaVinculada = tms.find((t) => t.consolidado && t.consolidado.links.length > 0);
+  if (yaVinculada) {
     return NextResponse.json(
-      { error: "Esa Tesorería ya está vinculada. Desvinculá primero." },
+      { error: "Una de las Tesorerías ya está vinculada. Desvinculá primero." },
       { status: 409 },
     );
   }
@@ -62,9 +67,10 @@ export async function POST(req: Request) {
   });
   if (!account) return NextResponse.json({ error: "La cuenta no existe" }, { status: 404 });
 
-  // Banco = Tesorería (cuadra). El signo define la dirección (IN + / OUT −).
-  const amount = tm.monto;
+  // Banco = Σ Tesorerías (cuadra). El signo define la dirección (IN + / OUT −).
+  const amount = tms.reduce((acc, t) => acc + t.monto, 0n);
   const direction = amount >= 0n ? "IN" : "OUT";
+  const isMulti = tms.length > 1;
 
   const bankMovementId = await prisma.$transaction(async (tx) => {
     // Import centinela por cuenta: agrupa los movimientos manuales sin dejar
@@ -97,28 +103,36 @@ export async function POST(req: Request) {
       },
     });
 
-    const consolidado = tm.consolidado
-      ? await tx.consolidado.update({
-          where: { id: tm.consolidado.id },
-          data: {
-            status: "MANUAL",
-            matchType: "MANUAL",
-            resolvedAccountId: accountId,
-            matchedAt: new Date(),
-          },
-        })
-      : await tx.consolidado.create({
-          data: {
-            tesoreriaMovementId: tm.id,
-            status: "MANUAL",
-            matchType: "MANUAL",
-            resolvedAccountId: accountId,
-          },
-        });
+    // Un Consolidado por Tesorería; el banco manual se reparte entre ellas
+    // (cada link lleva el monto de su tesorería). Con 1 sola, allocated=null.
+    for (const t of tms) {
+      const consolidado = t.consolidado
+        ? await tx.consolidado.update({
+            where: { id: t.consolidado.id },
+            data: {
+              status: "MANUAL",
+              matchType: isMulti ? "SPLIT_INVERSE_MANUAL" : "MANUAL",
+              resolvedAccountId: accountId,
+              matchedAt: new Date(),
+            },
+          })
+        : await tx.consolidado.create({
+            data: {
+              tesoreriaMovementId: t.id,
+              status: "MANUAL",
+              matchType: isMulti ? "SPLIT_INVERSE_MANUAL" : "MANUAL",
+              resolvedAccountId: accountId,
+            },
+          });
 
-    await tx.consolidadoLink.create({
-      data: { consolidadoId: consolidado.id, bankMovementId: bm.id, amountAllocated: null },
-    });
+      await tx.consolidadoLink.create({
+        data: {
+          consolidadoId: consolidado.id,
+          bankMovementId: bm.id,
+          amountAllocated: isMulti ? t.monto : null,
+        },
+      });
+    }
 
     return bm.id;
   });

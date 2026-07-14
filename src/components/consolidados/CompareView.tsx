@@ -644,15 +644,15 @@ export function CompareView({
             >
               Limpiar selección
             </button>
-            {/* Tesorería sola (sin cartola que la cuadre): definir el banco a
-                mano. La cartola no capturó ese movimiento pero existe. */}
-            {selectedTesoreriaIds.size === 1 && selectedBankIds.size === 0 && (
+            {/* Tesorería(s) sin cartola que las cuadre: definir el banco a mano.
+                Con varias, se anidan en un solo banco manual (= la suma). */}
+            {selectedTesoreriaIds.size >= 1 && selectedBankIds.size === 0 && (
               <button
                 onClick={() => setManualBankOpen(true)}
                 className="btn-ghost text-sm border border-brand/40 text-brand"
-                title="La cartola no tiene este movimiento: definí el banco a mano para cuadrar esta Tesorería"
+                title="La cartola no tiene estos movimientos: definí un banco a mano para cuadrar la(s) Tesorería(s) seleccionada(s)"
               >
-                Crear banco manual
+                Crear banco manual{selectedTesoreriaIds.size > 1 ? ` (${selectedTesoreriaIds.size})` : ""}
               </button>
             )}
             {/* Si hay diferencia y el panel no está abierto, el botón abre el
@@ -877,9 +877,9 @@ export function CompareView({
         </div>
       )}
 
-      {manualBankOpen && selectedTesorerias.length === 1 && (
+      {manualBankOpen && selectedTesorerias.length >= 1 && (
         <ManualBankModal
-          tesoreria={selectedTesorerias[0]}
+          tesorerias={selectedTesorerias}
           accounts={data?.accounts ?? []}
           onClose={() => setManualBankOpen(false)}
           onCreated={async () => {
@@ -967,40 +967,46 @@ export function CompareView({
 
 /**
  * Modal para definir a mano el movimiento bancario que la cartola no capturó y
- * conciliar la Tesorería con él. El monto del banco se iguala a la Tesorería
- * (así el asiento OK cuadra). Queda `manual=true` (excluido de saldos/cartolas).
+ * conciliar la(s) Tesorería(s) con él. El monto del banco = la SUMA de las
+ * Tesorerías (así cuadra); con varias se anidan en un solo banco manual. Queda
+ * `manual=true` (excluido de saldos/cartolas).
  */
 function ManualBankModal({
-  tesoreria,
+  tesorerias,
   accounts,
   onClose,
   onCreated,
 }: {
-  tesoreria: TesoreriaCompareDTO;
+  tesorerias: TesoreriaCompareDTO[];
   accounts: CompareResponse["accounts"];
   onClose: () => void;
   onCreated: () => void | Promise<void>;
 }) {
+  const first = tesorerias[0];
+  const multi = tesorerias.length > 1;
+
   const defaultAccount = useMemo(() => {
-    const banco = (tesoreria.banco ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+    const banco = (first.banco ?? "").toLowerCase().replace(/\s+/g, " ").trim();
     const hit = banco
       ? accounts.find((a) =>
           `${a.bankName} ${a.holderName ?? ""}`.toLowerCase().includes(banco),
         )
       : undefined;
     return hit?.id ?? accounts[0]?.id ?? "";
-  }, [accounts, tesoreria.banco]);
+  }, [accounts, first.banco]);
 
   const [accountId, setAccountId] = useState(defaultAccount);
-  const [postDate, setPostDate] = useState(tesoreria.fecha.slice(0, 10));
+  const [postDate, setPostDate] = useState(first.fecha.slice(0, 10));
   const [glosa, setGlosa] = useState(
-    tesoreria.glosa || tesoreria.clienteName || "Movimiento manual",
+    multi
+      ? `Movimiento manual (${tesorerias.length} movs)`
+      : first.glosa || first.clienteName || "Movimiento manual",
   );
   const [nota, setNota] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  const monto = BigInt(tesoreria.monto);
+  const monto = tesorerias.reduce((acc, t) => acc + BigInt(t.monto), 0n);
 
   async function submit() {
     if (!accountId) {
@@ -1014,7 +1020,7 @@ function ManualBankModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          tesoreriaId: tesoreria.id,
+          tesoreriaIds: tesorerias.map((t) => t.id),
           accountId,
           postDate,
           glosa: glosa.trim(),
@@ -1043,10 +1049,20 @@ function ManualBankModal({
       >
         <h3 className="font-bold text-text">Crear movimiento bancario manual</h3>
         <p className="text-xs text-text-muted">
-          Para cuadrar la Tesorería de{" "}
-          <strong>{tesoreria.clienteName ?? "—"}</strong> ({formatMoney(monto)}) que
-          la cartola no capturó. El monto del banco se iguala a la Tesorería. Queda
-          marcado como <strong>manual</strong> y no suma a los saldos.
+          {multi ? (
+            <>
+              Para cuadrar <strong>{tesorerias.length} Tesorerías</strong> ({formatMoney(monto)})
+              que la cartola no capturó. Se crea un solo banco manual = la suma, y cada
+              Tesorería queda anidada.
+            </>
+          ) : (
+            <>
+              Para cuadrar la Tesorería de{" "}
+              <strong>{first.clienteName ?? "—"}</strong> ({formatMoney(monto)}) que la
+              cartola no capturó. El monto del banco se iguala a la Tesorería.
+            </>
+          )}{" "}
+          Queda marcado como <strong>manual</strong> y no suma a los saldos.
         </p>
         <div>
           <label className="label">Cuenta bancaria</label>
@@ -1075,7 +1091,7 @@ function ManualBankModal({
             />
           </div>
           <div className="flex-1">
-            <label className="label">Monto (= Tesorería)</label>
+            <label className="label">Monto (= {multi ? "Σ Tesorerías" : "Tesorería"})</label>
             <input className="input font-mono" value={formatMoney(monto)} disabled readOnly />
           </div>
         </div>
