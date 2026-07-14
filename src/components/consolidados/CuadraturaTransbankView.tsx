@@ -959,13 +959,15 @@ function CuadraturaModal({
 
 /* ---- Separación por sucursal + consolidación (ZIP) y auditoría (multi-hoja) ---- */
 
-// En los .xls que van a gestión, la Descripción de CADA línea es la glosa del
+// En los .xls POR SUCURSAL, la Descripción de CADA línea es la glosa del
 // período ("Cuadratura transbank del X al Y"), no el nombre del rubro que se
 // muestra en pantalla (Ventas/Tesorería/...) — pedido de contabilidad.
+// En consolidacion.xls NO: ahí cada línea es una sucursal distinta y la
+// Descripción debe seguir siendo su nombre.
 const glosaPeriodo = (periodo: string) => `Cuadratura transbank del ${periodo}`;
 
-const mapLineas = (lineas: AsientoLinea[], glosa: string): Asi1Options["lineas"] =>
-  lineas.map((l) => ({ rubro: l.rubro, detalle: glosa, debe: l.debe, haber: l.haber }));
+const mapLineas = (lineas: AsientoLinea[], glosa?: string): Asi1Options["lineas"] =>
+  lineas.map((l) => ({ rubro: l.rubro, detalle: glosa ?? l.detalle, debe: l.debe, haber: l.haber }));
 
 /** Opciones ASI1 del asiento de UNA sucursal. */
 function sucursalOptions(s: SucursalAsiento, fecha: string, periodo: string): Asi1Options {
@@ -982,12 +984,12 @@ function sucursalOptions(s: SucursalAsiento, fecha: string, periodo: string): As
   };
 }
 
-/** Opciones ASI1 del asiento de consolidación. */
+/** Opciones ASI1 del asiento de consolidación (Descripción = nombre sucursal). */
 function consolidacionOptions(a: Asiento, fecha: string, periodo: string): Asi1Options {
   return {
     fecha,
     descripcion: `Cuadratura Transbank consolidación ${periodo}`,
-    lineas: mapLineas(a.consolidacion.lineas, glosaPeriodo(periodo)),
+    lineas: mapLineas(a.consolidacion.lineas),
   };
 }
 

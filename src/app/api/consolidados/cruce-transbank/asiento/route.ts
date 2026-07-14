@@ -30,7 +30,11 @@ export async function GET(req: Request) {
   const sucursalId = sucursalIdRaw ? parseInt(sucursalIdRaw, 10) : null;
 
   const settings = await getCuadraturaSettings();
-  const rubroPorSucursal = await loadRubroPorSucursal();
+  // Rubros para el asiento de consolidación. El match POS→rubro es por NOMBRE
+  // contra la pestaña Rubros (ej. rubro 202 llamado "El Bosque"), NO por el
+  // maestro de Sucursales (ese módulo es solo para Asientos manuales). El mapa
+  // final POS sucursalId → rubro se arma por path con sus items (mapRubroPorSucursal).
+  const sucursalRubros = await loadSucursalRubros();
 
   // Asiento de una cuadratura ya generada (desde sus items persistidos).
   if (cuadraturaId) {
@@ -53,6 +57,7 @@ export async function GET(req: Request) {
       opBoleta: i.opBoleta,
       medioPago: i.medioPago,
     }));
+    const rubroPorSucursal = mapRubroPorSucursal(items, sucursalRubros);
     return NextResponse.json({
       cuadratura: serializeCuadratura(cuad, cuad.items.length),
       asiento: buildCuadraturaAsiento(
@@ -99,6 +104,7 @@ export async function GET(req: Request) {
     opBoleta: p.opBoleta,
     medioPago: p.medioPago,
   }));
+  const rubroPorSucursal = mapRubroPorSucursal(items, sucursalRubros);
 
   // Facets de sucursal: las presentes en los pendientes del rango (sin filtro).
   const allPending = sucursalId == null ? pending : await getPendingPairs(from, to);
@@ -231,17 +237,52 @@ export async function DELETE(req: Request) {
 }
 
 /**
- * Mapa POS sucursalId → rubro contable, a partir del enlace explícito
- * Rubros → Sucursal (RubroLabel.sucursalId → Sucursal.codigo = POS id).
+ * Rubros contables candidatos para el asiento de consolidación: TODOS los de la
+ * pestaña Rubros (código + nombre). El match a la sucursal del POS es por nombre
+ * (mapRubroPorSucursal), sin pasar por el maestro de Sucursales.
  */
-async function loadRubroPorSucursal(): Promise<Map<number, number>> {
-  const rows = await prisma.rubroLabel.findMany({
-    where: { sucursalId: { not: null } },
-    select: { rubro: true, sucursal: { select: { codigo: true } } },
-  });
-  const m = new Map<number, number>();
-  for (const r of rows) if (r.sucursal?.codigo != null) m.set(r.sucursal.codigo, r.rubro);
-  return m;
+async function loadSucursalRubros(): Promise<{ rubro: number; name: string }[]> {
+  return prisma.rubroLabel.findMany({ select: { rubro: true, name: true } });
+}
+
+/** Normaliza un nombre para comparar: minúsculas, sin acentos/ñ, espacios simples. */
+function normNombre(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Mapa POS sucursalId → rubro contable, resuelto por NOMBRE contra la pestaña
+ * Rubros (ej. el POS manda sucursalId 2 / "BOSQUE" → rubro 202 "El Bosque").
+ * Cruce Transbank NO usa el maestro de Sucursales (ese es solo para Asientos
+ * manuales). Cada sucursal del POS matchea el rubro cuyo nombre coincide (exacto
+ * normalizado; si no, contención única). Sin match → no entra al mapa y el
+ * asiento cae al número POS (comportamiento previo, visible como "sin rubro").
+ */
+function mapRubroPorSucursal(
+  items: { sucursalId: number; sucursalName: string | null }[],
+  rubros: { rubro: number; name: string }[],
+): Map<number, number> {
+  const byNorm = rubros.map((r) => ({ rubro: r.rubro, norm: normNombre(r.name) }));
+  const map = new Map<number, number>();
+  for (const it of items) {
+    if (map.has(it.sucursalId)) continue;
+    const posName = normNombre(it.sucursalName ?? "");
+    if (!posName) continue;
+    let hit = byNorm.find((r) => r.norm === posName);
+    if (!hit) {
+      const cands = byNorm.filter(
+        (r) => r.norm && (r.norm.includes(posName) || posName.includes(r.norm)),
+      );
+      if (cands.length === 1) hit = cands[0];
+    }
+    if (hit) map.set(it.sucursalId, hit.rubro);
+  }
+  return map;
 }
 
 function serializeCuadratura(
