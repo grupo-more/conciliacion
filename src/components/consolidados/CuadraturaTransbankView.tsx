@@ -937,7 +937,14 @@ function CuadraturaModal({
               className="btn-ghost text-sm"
               title="Un Excel con todas las sucursales + consolidación (para auditar)"
             >
-              Auditar
+              Auditar (Excel)
+            </button>
+            <button
+              onClick={() => printAuditoria(asiento, `${formatDate(c.desde)} → ${formatDate(c.hasta)}`)}
+              className="btn-ghost text-sm"
+              title="PDF imprimible con el asiento y el detalle de movimientos por sucursal (Imprimir → Guardar como PDF)"
+            >
+              Auditar (PDF)
             </button>
             {onDeshacer && (
               <button onClick={onDeshacer} disabled={busy} className="btn-ghost text-sm text-rose-700">
@@ -1015,4 +1022,86 @@ function descargarAuditoria(a: Asiento, fecha: string, periodo: string, filename
   }));
   sheets.push({ name: "Consolidacion", options: consolidacionOptions(a, fecha, periodo) });
   exportAsi1MultiSheet(sheets, filename);
+}
+
+/**
+ * Auditoría en PDF (vía window.print → "Guardar como PDF"). Por sucursal: el
+ * asiento + el DETALLE de movimientos (fecha/OP/medio/montos), más el asiento de
+ * consolidación al final. El <title> fija el nombre del PDF ("Cuadratura <rango>").
+ * Pensado para revisar movimientos a ojo (el Excel es para procesar).
+ */
+function printAuditoria(a: Asiento, tituloRango: string) {
+  const w = window.open("", "_blank");
+  if (!w) {
+    alert("Habilitá las ventanas emergentes para generar el PDF.");
+    return;
+  }
+  const esc = (s: string) =>
+    (s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] ?? c);
+  const m = (s: string | null) => (s ? formatMoney(BigInt(s)) : "");
+
+  const sucSections = a.sucursales
+    .map((s) => {
+      const nombre = esc(s.sucursalName ?? `#${s.sucursalId}`);
+      const codigo = s.sucursalCodigo != null ? ` (${s.sucursalCodigo})` : "";
+      const asiento = s.lineas
+        .map(
+          (l) => `<tr><td class="c">${l.rubro}</td><td>${esc(l.side)} · ${esc(
+            l.detalle,
+          )}</td><td class="n">${m(l.debe)}</td><td class="n">${m(l.haber)}</td></tr>`,
+        )
+        .join("");
+      const movs = s.movimientos
+        .map(
+          (mv) => `<tr><td>${mv.fecha ? formatDate(mv.fecha) : "—"}</td><td class="mono">${esc(
+            mv.opBoleta ?? "—",
+          )}</td><td>${esc(mv.medioPago ?? "—")}</td><td class="n">${m(mv.dynatech)}</td><td class="n">${m(
+            mv.transbankBruto,
+          )}</td><td class="n">${m(mv.transbank)}</td><td class="n">${m(
+            mv.comisionCartola,
+          )}</td><td class="n">${m(mv.diferencia)}</td></tr>`,
+        )
+        .join("");
+      return `<section class="suc"><h2>${nombre}${codigo} <span class="cnt">· ${s.count} mov</span></h2>
+        <table class="asiento"><thead><tr><th>Rubro</th><th>Detalle</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${asiento}</tbody></table>
+        <table class="movs"><thead><tr><th>Fecha</th><th>OP/Boleta</th><th>Medio</th><th>Boleta</th><th>Transbank</th><th>Neto</th><th>Com. cartola</th><th>Dif (1403)</th></tr></thead><tbody>${
+          movs || '<tr><td colspan="8" class="c">Sin detalle</td></tr>'
+        }</tbody></table></section>`;
+    })
+    .join("");
+
+  const consol = a.consolidacion.lineas
+    .map(
+      (l) => `<tr><td class="c">${l.rubro}</td><td>${esc(l.side)} · ${esc(
+        l.detalle,
+      )}</td><td class="n">${m(l.debe)}</td><td class="n">${m(l.haber)}</td></tr>`,
+    )
+    .join("");
+
+  const titulo = `Cuadratura ${esc(tituloRango)}`;
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${titulo}</title>
+    <style>
+      * { font-family: Arial, sans-serif; }
+      body { padding: 24px; color: #111; }
+      h1 { font-size: 18px; margin: 0 0 16px; }
+      section.suc { margin-bottom: 22px; page-break-inside: avoid; }
+      h2 { font-size: 13px; margin: 0 0 6px; border-bottom: 2px solid #333; padding-bottom: 3px; }
+      h2 .cnt { font-weight: 400; color: #666; font-size: 11px; }
+      h3 { font-size: 14px; margin: 20px 0 6px; }
+      table { border-collapse: collapse; width: 100%; font-size: 11px; margin-bottom: 8px; }
+      th, td { border: 1px solid #bbb; padding: 2px 5px; }
+      th { background: #f0f0f0; text-align: left; }
+      td.n { text-align: right; font-variant-numeric: tabular-nums; }
+      td.c { text-align: center; }
+      td.mono { font-family: monospace; }
+      table.asiento { width: auto; min-width: 380px; }
+      @media print { body { padding: 0; } }
+    </style></head><body>
+    <h1>${titulo}</h1>
+    ${sucSections}
+    <h3>Asiento de consolidación</h3>
+    <table class="asiento"><thead><tr><th>Rubro</th><th>Detalle</th><th>Debe</th><th>Haber</th></tr></thead><tbody>${consol}</tbody></table>
+    <script>window.onload = function(){ window.print(); }</script>
+    </body></html>`);
+  w.document.close();
 }
