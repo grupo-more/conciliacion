@@ -13,6 +13,7 @@ import {
 } from "./types";
 import { ConsolidadoDetail } from "./ConsolidadoDetail";
 import { usePermisos } from "@/lib/use-permisos";
+import { TABS_CONSOLIDADOS } from "@/lib/perms-shared";
 import { CompareView } from "./CompareView";
 import { OKView } from "./OKView";
 import { AbonoTransbankView } from "./AbonoTransbankView";
@@ -37,7 +38,7 @@ type Tab =
   | "proveedores";
 
 export function ConsolidadosView() {
-  const { can } = usePermisos();
+  const { can, canVerTab, loaded } = usePermisos();
   const [tab, setTab] = useState<Tab>("list");
   const [period, setPeriod] = useState<Period>("month");
   const [statusFilter, setStatusFilter] = useState<Set<ConsolidadoStatus>>(new Set());
@@ -137,6 +138,15 @@ export function ConsolidadosView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
+  // Si el perfil oculta la tab activa, saltar a la primera visible.
+  useEffect(() => {
+    if (loaded && !canVerTab(tab)) {
+      const first = TABS_CONSOLIDADOS.find((t) => canVerTab(t));
+      if (first && first !== tab) setTab(first);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, tab]);
+
   function toggleStatus(s: ConsolidadoStatus) {
     setStatusFilter((prev) => {
       const next = new Set(prev);
@@ -210,80 +220,102 @@ export function ConsolidadosView() {
 
       {/* Tabs */}
       <div className="border-b border-border-soft">
-        <nav className="flex gap-1">
-          <TabButton active={tab === "list"} onClick={() => setTab("list")}>
-            Lista
-          </TabButton>
-          <TabButton active={tab === "compare"} onClick={() => setTab("compare")}>
-            Comparar Ingresos
-          </TabButton>
-          <TabButton
-            active={tab === "compare-egresos"}
-            onClick={() => setTab("compare-egresos")}
-          >
-            Comparar Egresos
-          </TabButton>
-          <TabButton active={tab === "ok"} onClick={() => setTab("ok")}>
-            OK
-          </TabButton>
-          <TabButton
-            active={tab === "abono-transbank"}
-            onClick={() => setTab("abono-transbank")}
-          >
-            Abono Transbank
-          </TabButton>
-          <TabButton
-            active={tab === "cruce-transbank"}
-            onClick={() => setTab("cruce-transbank")}
-          >
-            Cruce Transbank
-          </TabButton>
-          <TabButton
-            active={tab === "egresos-terceros"}
-            onClick={() => setTab("egresos-terceros")}
-          >
-            Egresos a terceros
-          </TabButton>
-          <TabButton
-            active={tab === "traspasos-internos"}
-            onClick={() => setTab("traspasos-internos")}
-          >
-            Traspasos internos
-          </TabButton>
-          <TabButton
-            active={tab === "dif-menor"}
-            onClick={() => setTab("dif-menor")}
-          >
-            Dif menor a 100
-          </TabButton>
-          <TabButton
-            active={tab === "asientos-manuales"}
-            onClick={() => setTab("asientos-manuales")}
-          >
-            Asientos manuales
-          </TabButton>
-          <TabButton
-            active={tab === "proveedores"}
-            onClick={() => setTab("proveedores")}
-          >
-            Proveedores
-          </TabButton>
+        <nav className="flex gap-1 flex-wrap">
+          {canVerTab("list") && (
+            <TabButton active={tab === "list"} onClick={() => setTab("list")}>
+              Lista
+            </TabButton>
+          )}
+          {canVerTab("compare") && (
+            <TabButton active={tab === "compare"} onClick={() => setTab("compare")}>
+              Comparar Ingresos
+            </TabButton>
+          )}
+          {canVerTab("compare-egresos") && (
+            <TabButton
+              active={tab === "compare-egresos"}
+              onClick={() => setTab("compare-egresos")}
+            >
+              Comparar Egresos
+            </TabButton>
+          )}
+          {canVerTab("ok") && (
+            <TabButton active={tab === "ok"} onClick={() => setTab("ok")}>
+              OK
+            </TabButton>
+          )}
+          {canVerTab("abono-transbank") && (
+            <TabButton
+              active={tab === "abono-transbank"}
+              onClick={() => setTab("abono-transbank")}
+            >
+              Abono Transbank
+            </TabButton>
+          )}
+          {canVerTab("cruce-transbank") && (
+            <TabButton
+              active={tab === "cruce-transbank"}
+              onClick={() => setTab("cruce-transbank")}
+            >
+              Cruce Transbank
+            </TabButton>
+          )}
+          {canVerTab("egresos-terceros") && (
+            <TabButton
+              active={tab === "egresos-terceros"}
+              onClick={() => setTab("egresos-terceros")}
+            >
+              Egresos a terceros
+            </TabButton>
+          )}
+          {canVerTab("traspasos-internos") && (
+            <TabButton
+              active={tab === "traspasos-internos"}
+              onClick={() => setTab("traspasos-internos")}
+            >
+              Traspasos internos
+            </TabButton>
+          )}
+          {canVerTab("dif-menor") && (
+            <TabButton
+              active={tab === "dif-menor"}
+              onClick={() => setTab("dif-menor")}
+            >
+              Dif menor a 100
+            </TabButton>
+          )}
+          {canVerTab("asientos-manuales") && (
+            <TabButton
+              active={tab === "asientos-manuales"}
+              onClick={() => setTab("asientos-manuales")}
+            >
+              Asientos manuales
+            </TabButton>
+          )}
+          {canVerTab("proveedores") && (
+            <TabButton
+              active={tab === "proveedores"}
+              onClick={() => setTab("proveedores")}
+            >
+              Proveedores
+            </TabButton>
+          )}
         </nav>
       </div>
 
-      {/* Contenido por tab */}
-      {tab === "compare" && <CompareView direction="IN" />}
-      {tab === "compare-egresos" && <CompareView direction="OUT" />}
-      {tab === "ok" && <OKView />}
-      {tab === "abono-transbank" && <AbonoTransbankView />}
-      {tab === "cruce-transbank" && <CruceTransbankView />}
-      {tab === "egresos-terceros" && <EgresosTercerosView />}
-      {tab === "traspasos-internos" && <TraspasosInternosView />}
-      {tab === "dif-menor" && <DifMenorView />}
-      {tab === "asientos-manuales" && <AsientosManualesView />}
-      {tab === "proveedores" && <AsientosManualesView queue="proveedores" />}
+      {/* Contenido por tab (gateado por perfil) */}
+      {tab === "compare" && canVerTab("compare") && <CompareView direction="IN" />}
+      {tab === "compare-egresos" && canVerTab("compare-egresos") && <CompareView direction="OUT" />}
+      {tab === "ok" && canVerTab("ok") && <OKView />}
+      {tab === "abono-transbank" && canVerTab("abono-transbank") && <AbonoTransbankView />}
+      {tab === "cruce-transbank" && canVerTab("cruce-transbank") && <CruceTransbankView />}
+      {tab === "egresos-terceros" && canVerTab("egresos-terceros") && <EgresosTercerosView />}
+      {tab === "traspasos-internos" && canVerTab("traspasos-internos") && <TraspasosInternosView />}
+      {tab === "dif-menor" && canVerTab("dif-menor") && <DifMenorView />}
+      {tab === "asientos-manuales" && canVerTab("asientos-manuales") && <AsientosManualesView />}
+      {tab === "proveedores" && canVerTab("proveedores") && <AsientosManualesView queue="proveedores" />}
 
-      {tab === "list" && (
+      {tab === "list" && canVerTab("list") && (
         <>
           {/* Banner de resultado del run */}
           {runResult && (

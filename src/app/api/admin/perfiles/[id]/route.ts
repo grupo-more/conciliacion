@@ -13,7 +13,11 @@ import { requireAccion, normalizePermisos } from "@/lib/perms";
 const patchSchema = z.object({
   nombre: z.string().trim().min(1).max(80).optional(),
   permisos: z
-    .object({ modulos: z.record(z.boolean()), acciones: z.record(z.boolean()) })
+    .object({
+      modulos: z.record(z.boolean()),
+      acciones: z.record(z.boolean()),
+      tabs: z.record(z.boolean()).optional(),
+    })
     .optional(),
 });
 

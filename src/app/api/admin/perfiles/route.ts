@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { requireAccion, normalizePermisos, MODULOS, ACCIONES } from "@/lib/perms";
+import { requireAccion, normalizePermisos, MODULOS, ACCIONES, TABS_CONSOLIDADOS } from "@/lib/perms";
 
 /**
  * Gestión de perfiles (Configuración → Usuarios y perfiles).
@@ -21,6 +21,7 @@ export async function GET() {
   return NextResponse.json({
     modulos: MODULOS,
     acciones: ACCIONES,
+    tabs: TABS_CONSOLIDADOS,
     perfiles: perfiles.map((p) => ({
       id: p.id,
       nombre: p.nombre,
@@ -34,6 +35,7 @@ export async function GET() {
 const permisosSchema = z.object({
   modulos: z.record(z.boolean()),
   acciones: z.record(z.boolean()),
+  tabs: z.record(z.boolean()).optional(),
 });
 const createSchema = z.object({
   nombre: z.string().trim().min(1).max(80),

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Accion, Modulo, Permisos } from "@/lib/perms-shared";
+import type { Accion, Modulo, Permisos, TabConsolidados } from "@/lib/perms-shared";
 
 /**
  * Hook de permisos para la UI. Trae /api/auth/me una vez por carga de página
@@ -55,6 +55,10 @@ export function usePermisos() {
   const loaded = me !== null;
   const can = (a: Accion): boolean => !loaded || me.esAdmin || me.permisos.acciones[a] === true;
   const canVer = (m: Modulo): boolean => !loaded || me.esAdmin || me.permisos.modulos[m] === true;
+  // Tab de Consolidados visible: default TRUE (solo se oculta si el perfil la
+  // desmarcó). Mientras carga o admin → visible.
+  const canVerTab = (t: TabConsolidados): boolean =>
+    !loaded || me.esAdmin || me.permisos.tabs?.[t] !== false;
 
-  return { me, loaded, can, canVer };
+  return { me, loaded, can, canVer, canVerTab };
 }

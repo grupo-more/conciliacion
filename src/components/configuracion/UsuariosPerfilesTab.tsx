@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { MODULO_LABELS, ACCION_LABELS, type Permisos } from "@/lib/perms-shared";
+import {
+  MODULO_LABELS,
+  ACCION_LABELS,
+  TAB_CONSOLIDADOS_LABELS,
+  type Permisos,
+} from "@/lib/perms-shared";
 
 /**
  * Configuración → Usuarios y perfiles.
@@ -33,6 +38,7 @@ export function UsuariosPerfilesTab() {
   const [perfiles, setPerfiles] = useState<PerfilRow[]>([]);
   const [modulos, setModulos] = useState<string[]>([]);
   const [acciones, setAcciones] = useState<string[]>([]);
+  const [tabs, setTabs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
@@ -48,6 +54,7 @@ export function UsuariosPerfilesTab() {
       setPerfiles(p.perfiles ?? []);
       setModulos(p.modulos ?? []);
       setAcciones(p.acciones ?? []);
+      setTabs(p.tabs ?? []);
     } finally {
       setLoading(false);
     }
@@ -115,6 +122,7 @@ export function UsuariosPerfilesTab() {
             perfiles={perfiles}
             modulos={modulos}
             acciones={acciones}
+            tabs={tabs}
             onChanged={(m) => {
               flash("ok", m);
               load();
@@ -283,12 +291,14 @@ function PerfilesSection({
   perfiles,
   modulos,
   acciones,
+  tabs,
   onChanged,
   onError,
 }: {
   perfiles: PerfilRow[];
   modulos: string[];
   acciones: string[];
+  tabs: string[];
   onChanged: (msg: string) => void;
   onError: (msg: string) => void;
 }) {
@@ -302,6 +312,8 @@ function PerfilesSection({
       const permisos = {
         modulos: Object.fromEntries(modulos.map((m) => [m, true])),
         acciones: Object.fromEntries(acciones.map((a) => [a, false])),
+        // Tabs de Consolidados: todas visibles al crear (se ocultan a mano).
+        tabs: Object.fromEntries(tabs.map((t) => [t, true])),
       };
       const res = await fetch("/api/admin/perfiles", {
         method: "POST",
@@ -332,7 +344,7 @@ function PerfilesSection({
 
       <div className="grid gap-3 lg:grid-cols-2">
         {perfiles.map((p) => (
-          <PerfilCard key={p.id} perfil={p} modulos={modulos} acciones={acciones} onChanged={onChanged} onError={onError} />
+          <PerfilCard key={p.id} perfil={p} modulos={modulos} acciones={acciones} tabs={tabs} onChanged={onChanged} onError={onError} />
         ))}
       </div>
     </section>
@@ -343,12 +355,14 @@ function PerfilCard({
   perfil,
   modulos,
   acciones,
+  tabs,
   onChanged,
   onError,
 }: {
   perfil: PerfilRow;
   modulos: string[];
   acciones: string[];
+  tabs: string[];
   onChanged: (msg: string) => void;
   onError: (msg: string) => void;
 }) {
@@ -356,11 +370,13 @@ function PerfilCard({
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  function toggle(familia: "modulos" | "acciones", key: string) {
-    setPermisos((prev) => ({
-      ...prev,
-      [familia]: { ...prev[familia], [key]: !(prev[familia] as Record<string, boolean>)[key] },
-    }));
+  function toggle(familia: "modulos" | "acciones" | "tabs", key: string) {
+    setPermisos((prev) => {
+      const fam = (prev[familia] ?? {}) as Record<string, boolean>;
+      // Tabs: el default es VISIBLE (true); módulos/acciones default false.
+      const current = familia === "tabs" ? fam[key] !== false : fam[key] === true;
+      return { ...prev, [familia]: { ...fam, [key]: !current } };
+    });
     setDirty(true);
   }
 
@@ -393,6 +409,8 @@ function PerfilCard({
 
   const labelM = (k: string) => (MODULO_LABELS as Record<string, string>)[k] ?? k;
   const labelA = (k: string) => (ACCION_LABELS as Record<string, string>)[k] ?? k;
+  const labelT = (k: string) => (TAB_CONSOLIDADOS_LABELS as Record<string, string>)[k] ?? k;
+  const tabsMap = (permisos.tabs ?? {}) as Record<string, boolean>;
 
   return (
     <div className="rounded-lg border border-border-soft bg-white p-4 space-y-3">
@@ -433,41 +451,62 @@ function PerfilCard({
           Este perfil bypasea todas las variables: siempre ve y puede todo. No es editable ni eliminable.
         </p>
       ) : (
-        <div className="grid sm:grid-cols-2 gap-4">
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-text-muted font-semibold mb-1.5">
-              Módulos visibles
+        <div className="space-y-4">
+          <div className="grid sm:grid-cols-2 gap-4">
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-text-muted font-semibold mb-1.5">
+                Módulos visibles
+              </div>
+              <div className="space-y-1">
+                {modulos.map((m) => (
+                  <label key={m} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={permisos.modulos[m as keyof Permisos["modulos"]] === true}
+                      onChange={() => toggle("modulos", m)}
+                    />
+                    {labelM(m)}
+                  </label>
+                ))}
+              </div>
             </div>
-            <div className="space-y-1">
-              {modulos.map((m) => (
-                <label key={m} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={permisos.modulos[m as keyof Permisos["modulos"]] === true}
-                    onChange={() => toggle("modulos", m)}
-                  />
-                  {labelM(m)}
-                </label>
-              ))}
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-text-muted font-semibold mb-1.5">
+                Acciones permitidas
+              </div>
+              <div className="space-y-1">
+                {acciones.map((a) => (
+                  <label key={a} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={permisos.acciones[a as keyof Permisos["acciones"]] === true}
+                      onChange={() => toggle("acciones", a)}
+                    />
+                    {labelA(a)}
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="text-[11px] uppercase tracking-wide text-text-muted font-semibold mb-1.5">
-              Acciones permitidas
+          {tabs.length > 0 && (
+            <div>
+              <div className="text-[11px] uppercase tracking-wide text-text-muted font-semibold mb-1.5">
+                Tabs de Consolidados visibles
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1">
+                {tabs.map((t) => (
+                  <label key={t} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={tabsMap[t] !== false}
+                      onChange={() => toggle("tabs", t)}
+                    />
+                    {labelT(t)}
+                  </label>
+                ))}
+              </div>
             </div>
-            <div className="space-y-1">
-              {acciones.map((a) => (
-                <label key={a} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={permisos.acciones[a as keyof Permisos["acciones"]] === true}
-                    onChange={() => toggle("acciones", a)}
-                  />
-                  {labelA(a)}
-                </label>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>
