@@ -21,7 +21,8 @@ export type OrigenDerivado =
   | "ABONO_TRANSBANK"
   | "DIF_MENOR"
   | "DIF_MENOR_EGRESO"
-  | "TRASPASOS_INTERNOS";
+  | "TRASPASOS_INTERNOS"
+  | "EGRESOS_TERCEROS";
 
 interface EmisionDTO {
   id: string;

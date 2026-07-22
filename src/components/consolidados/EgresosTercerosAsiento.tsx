@@ -4,9 +4,11 @@ import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
 import { exportAsi1Xls, pickDescripcion, type Asi1Options } from "@/lib/asientos/exportAsi1";
 import { Asi1PreviewModal } from "./Asi1Preview";
+import { EmisionesPanel, EmisionesToggle, emitirDocumento } from "./EmisionesDerivadas";
 
 interface AsientoRowDTO {
   groupId: string;
+  tesoreriaId: string;
   side: "GASTO" | "BANCO";
   fecha: string;
   rubro: number | null;
@@ -53,6 +55,9 @@ export function EgresosTercerosAsiento({
   const [sucursalId, setSucursalId] = useState<string>("");
   const [reloadKey, setReloadKey] = useState(0);
   const [deshaciendo, setDeshaciendo] = useState<string | null>(null);
+  const [verEmitidos, setVerEmitidos] = useState(false);
+  const [emitiendo, setEmitiendo] = useState(false);
+  const [emitirErr, setEmitirErr] = useState<string | null>(null);
 
   useEffect(() => {
     let cancel = false;
@@ -123,8 +128,49 @@ export function EgresosTercerosAsiento({
     if (a) exportAsi1Xls(a.options, a.filename);
   }
 
+  const movimientosCount = data ? new Set(data.rows.map((r) => r.tesoreriaId)).size : 0;
+
+  async function emitir() {
+    const a = buildAsiento();
+    if (!a || !data) return;
+    const refIds = Array.from(new Set(data.rows.map((r) => r.tesoreriaId)));
+    if (
+      !confirm(
+        `Se emitirán ${refIds.length} egreso(s) a terceros como un documento con folio nuevo. ` +
+          `Saldrán de esta vista y quedarán en "Emitidos" (re-descargables, deshacer disponible). ¿Continuar?`,
+      )
+    )
+      return;
+    setEmitiendo(true);
+    setEmitirErr(null);
+    try {
+      const r = await emitirDocumento({ origen: "EGRESOS_TERCEROS", from, to, asiento: a, refIds });
+      if (!r.ok) setEmitirErr(r.error);
+      else setReloadKey((k) => k + 1);
+    } finally {
+      setEmitiendo(false);
+    }
+  }
+
+  if (verEmitidos) {
+    return (
+      <div className="space-y-4">
+        <EmisionesToggle emitidos onChange={setVerEmitidos} />
+        <EmisionesPanel origen="EGRESOS_TERCEROS" />
+      </div>
+    );
+  }
+
   return (
-    <div className="rounded-lg border border-border-soft bg-white overflow-hidden">
+    <div className="space-y-4">
+      <EmisionesToggle emitidos={false} onChange={setVerEmitidos} />
+      {emitirErr && (
+        <div className="rounded-lg px-3 py-2 text-sm bg-rose-50 text-rose-800 border border-rose-200">
+          {emitirErr}
+          <button onClick={() => setEmitirErr(null)} className="ml-2 underline">cerrar</button>
+        </div>
+      )}
+      <div className="rounded-lg border border-border-soft bg-white overflow-hidden">
       <div className="flex items-center gap-2 p-2 border-b border-border-soft">
         <select
           value={sucursalId}
@@ -149,9 +195,17 @@ export function EgresosTercerosAsiento({
         <button
           onClick={exportXlsx}
           disabled={!hasRows}
-          className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          className="rounded-md border border-border-soft px-3 py-1.5 text-sm font-semibold hover:bg-bg-soft disabled:opacity-50"
         >
           Descargar Excel
+        </button>
+        <button
+          onClick={emitir}
+          disabled={!hasRows || emitiendo}
+          className="rounded-md bg-brand text-white px-3 py-1.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          title="Descarga el documento y mueve estos egresos a Emitidos (para no re-generarlos)"
+        >
+          {emitiendo ? "Emitiendo…" : `Emitir documento${hasRows ? ` (${movimientosCount})` : ""}`}
         </button>
       </div>
       {loading && <div className="text-center py-8 text-sm text-text-muted">Cargando…</div>}
@@ -245,6 +299,7 @@ export function EgresosTercerosAsiento({
           onClose={() => setPreview(null)}
         />
       )}
+      </div>
     </div>
   );
 }

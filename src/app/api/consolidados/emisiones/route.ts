@@ -28,6 +28,7 @@ const ORIGENES_DERIVADOS = [
   "DIF_MENOR",
   "DIF_MENOR_EGRESO",
   "TRASPASOS_INTERNOS",
+  "EGRESOS_TERCEROS",
 ] as const;
 type OrigenDerivado = (typeof ORIGENES_DERIVADOS)[number];
 

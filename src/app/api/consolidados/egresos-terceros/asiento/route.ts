@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { denyUnless } from "@/lib/perms";
+import { consumedRefIds } from "@/lib/consolidados/emision-consumo";
 import { loadEntidadesInternas } from "@/lib/internos/detect";
 import {
   buildRubroMap,
@@ -30,9 +31,15 @@ export async function GET(req: Request) {
   const sucursalRaw = url.searchParams.get("sucursalId");
   const sucursalId = sucursalRaw && /^\d+$/.test(sucursalRaw) ? Number(sucursalRaw) : null;
 
+  // Ya emitidos a gestión (folio): salen del listado "Por emitir". Se
+  // identifican por tesoreriaMovementId (estable: la sync lo upserta por
+  // externalId, no cambia de id al re-sincronizar → no se orfanan).
+  const emitidos = await consumedRefIds("EGRESOS_TERCEROS");
+
   const concs = await prisma.consolidado.findMany({
     where: {
       status: { in: ["AUTO_MATCHED", "MANUAL"] },
+      ...(emitidos.size > 0 ? { tesoreriaMovementId: { notIn: Array.from(emitidos) } } : {}),
       tesoreriaMovement: {
         tipoOperacion: "EGRESO",
         fecha: { gte: from, lt: to },
@@ -82,6 +89,8 @@ export async function GET(req: Request) {
 
   type Row = {
     groupId: string;
+    /** tesoreriaMovementId: clave estable de emisión (ver más arriba). */
+    tesoreriaId: string;
     side: "GASTO" | "BANCO";
     fecha: string;
     rubro: number | null;
@@ -121,6 +130,7 @@ export async function GET(req: Request) {
     // Lado GASTO (debe) — uno por consolidado (1 documento de Tesorería).
     rows.push({
       groupId: c.id,
+      tesoreriaId: c.tesoreriaMovementId,
       side: "GASTO",
       fecha: tm.fecha.toISOString(),
       rubro: rubroGasto,
@@ -149,6 +159,7 @@ export async function GET(req: Request) {
         c.overrideRubroBanco ?? rubroByAccount.get(bm.accountId) ?? tm.rubroBanco;
       rows.push({
         groupId: c.id,
+        tesoreriaId: c.tesoreriaMovementId,
         side: "BANCO",
         fecha: bm.postDate.toISOString(),
         rubro: rubroBanco,

@@ -7,7 +7,13 @@ import { prisma } from "@/lib/db";
  * un movimiento emitido sigue contando como resuelto en todo el sistema.
  */
 export async function consumedRefIds(
-  origen: "OK" | "ABONO_TRANSBANK" | "DIF_MENOR" | "DIF_MENOR_EGRESO" | "TRASPASOS_INTERNOS",
+  origen:
+    | "OK"
+    | "ABONO_TRANSBANK"
+    | "DIF_MENOR"
+    | "DIF_MENOR_EGRESO"
+    | "TRASPASOS_INTERNOS"
+    | "EGRESOS_TERCEROS",
 ): Promise<Set<string>> {
   const rows = await prisma.emisionConsumo.findMany({
     where: { emision: { origen } },
