@@ -64,6 +64,7 @@ export async function GET(req: Request) {
       clienteName: true,
       clienteRut: true,
       esExcepcion: true,
+      acreedorTesoreriaAt: true,
       consolidado: { select: { status: true } },
     },
     orderBy: [{ fecha: "desc" }],
@@ -83,12 +84,17 @@ export async function GET(req: Request) {
     "excepcion",
     "sin_match",
     "fuera_scope",
+    "acreedor",
   ]);
   const porAging = mkAmountMap<AgingBucket>([...AGING_BUCKETS]);
   const porBanco = new Map<string, { count: number; monto: bigint }>();
 
   for (const tm of movements) {
-    const motivo = dynatechMotivo(tm.consolidado?.status, tm.esExcepcion);
+    const motivo = dynatechMotivo(
+      tm.consolidado?.status,
+      tm.esExcepcion,
+      tm.acreedorTesoreriaAt !== null,
+    );
     if (motivoFilter && motivo !== motivoFilter) continue;
 
     const abs = tm.monto < 0n ? -tm.monto : tm.monto;

@@ -76,7 +76,9 @@ async function doRun(opts: { dryRun?: boolean }): Promise<DynatechEgresosSummary
       orderBy: { postDate: "asc" },
     }),
     prisma.tesoreriaMovement.findMany({
-      where: { tipoOperacion: "EGRESO" },
+      // Derivados a "Acreedores tesorería": cuadre 100% manual en su tab,
+      // fuera del auto-match.
+      where: { tipoOperacion: "EGRESO", acreedorTesoreriaAt: null },
       include: { consolidado: { select: { id: true, status: true } } },
       orderBy: { fecha: "asc" },
     }),

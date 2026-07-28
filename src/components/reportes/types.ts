@@ -7,6 +7,7 @@ export type DynatechMotivo =
   | "sugerido"
   | "revisar"
   | "excepcion"
+  | "acreedor"
   | "sin_match"
   | "fuera_scope";
 
@@ -137,6 +138,7 @@ export const MOTIVO_LABEL: Record<DynatechMotivo, string> = {
   excepcion: "Excepción API",
   sin_match: "Sin match",
   fuera_scope: "Fuera de scope",
+  acreedor: "Acreedores tesorería",
 };
 
 export const MOTIVO_COLOR: Record<DynatechMotivo, string> = {
@@ -146,6 +148,7 @@ export const MOTIVO_COLOR: Record<DynatechMotivo, string> = {
   excepcion: "bg-violet-100 text-violet-800 border-violet-300",
   sin_match: "bg-rose-100 text-rose-800 border-rose-300",
   fuera_scope: "bg-zinc-200 text-zinc-700 border-zinc-300",
+  acreedor: "bg-fuchsia-100 text-fuchsia-800 border-fuchsia-300",
 };
 
 export const MOTIVO_ACCION: Record<DynatechMotivo, string> = {
@@ -155,6 +158,7 @@ export const MOTIVO_ACCION: Record<DynatechMotivo, string> = {
   excepcion: "Depósito a otro banco — revisar cross-banco",
   sin_match: "Falta cartola o no hay contraparte",
   fuera_scope: "Configurar alias del banco",
+  acreedor: "Cuadrar a mano en Consolidados → Acreedores tesorería",
 };
 
 export const AGING_BUCKETS: AgingBucket[] = ["0-7", "8-30", "31-60", "60+"];

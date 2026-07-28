@@ -58,7 +58,18 @@ export async function GET(req: Request) {
   //   OUT           → Comparar Egresos:  cartola OUT ↔ Tesorería EGRESO (Dynatech).
   // Los montos de OUT y EGRESO se guardan con el MISMO signo (ver
   // match-dynatech-terceros.ts), así que el balance de manual-link cuadra igual.
-  const direction = url.searchParams.get("direction") === "OUT" ? "OUT" : "IN";
+  // Cola de trabajo:
+  //   normal (default) → Comparar Ingresos/Egresos: excluye las tesorerías
+  //     derivadas a "Acreedores tesorería".
+  //   acreedores → tab "Acreedores tesorería": SOLO las derivadas (siempre
+  //     EGRESO/OUT). Sus depósitos llegan con días de desfase, así que el lado
+  //     banco se amplía hacia adelante más allá del rango elegido.
+  const cola =
+    url.searchParams.get("cola") === "acreedores" ? "acreedores" : "normal";
+  const direction =
+    cola === "acreedores" || url.searchParams.get("direction") === "OUT"
+      ? "OUT"
+      : "IN";
   const tipoOperacion = direction === "OUT" ? "EGRESO" : "INGRESO";
 
   // Default: ultimos 30 dias
@@ -70,6 +81,15 @@ export async function GET(req: Request) {
     ? new Date(untilRaw + "T23:59:59")
     : new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
+  // Acreedores: el cargo bancario puede aparecer varios días (o semanas)
+  // después de la tesorería, incluso repartido. El rango de fechas filtra las
+  // tesorerías; el lado banco se amplía +60 días para que el depósito
+  // desfasado esté a la vista sin que el operador mueva los filtros.
+  const bankUntil =
+    cola === "acreedores"
+      ? new Date(until.getTime() + 60 * 24 * 60 * 60 * 1000)
+      : until;
+
   // Bank movements
   // Excluimos de Comparar tanto Transbank como las "diferencias menores":
   // ambos tienen asiento contable propio en Consolidados y no se concilian
@@ -77,7 +97,7 @@ export async function GET(req: Request) {
   const difSettings = await getDifMenorSettings();
   const bankWhere: Prisma.BankMovementWhereInput = {
     direction,
-    postDate: { gte: since, lte: until },
+    postDate: { gte: since, lte: bankUntil },
     ...(accountId ? { accountId } : {}),
     // Descartados: no corresponden al sistema, no se comparan acá.
     descartadoAt: null,
@@ -167,12 +187,14 @@ export async function GET(req: Request) {
   }
 
   // Tesoreria movements
-  // Comparar es el banco de trabajo de INGRESOS (Tesoreria IN <-> cartola IN).
-  // Los egresos se concilian contra cartola OUT por el motor y se revisan en
-  // las tabs de egresos internos/terceros, asi que no se mezclan aca.
+  // El lado Tesorería se filtra por tipoOperacion según la dirección elegida:
+  // INGRESO para Comparar Ingresos, EGRESO para Comparar Egresos / Acreedores.
   const tesoreriaWhere = {
     fecha: { gte: since, lte: until },
     tipoOperacion,
+    // Cola: en modo normal se excluyen las derivadas a "Acreedores tesorería"
+    // (se trabajan en su tab); en modo acreedores se muestran SOLO esas.
+    acreedorTesoreriaAt: cola === "acreedores" ? { not: null } : null,
     // Anulados en origen no son candidatos para comparar/conciliar.
     estadoActual: { not: "ANU" },
     // Ventas con tarjeta (claseOperacion="TBK"): NO se concilian acá. Llegan

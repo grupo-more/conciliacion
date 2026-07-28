@@ -113,10 +113,16 @@ function defaultUntil(): string {
 
 export function CompareView({
   direction = "IN",
+  cola = "normal",
 }: {
   /** IN  → Comparar Ingresos: cartola IN ↔ Tesorería INGRESO (default).
    *  OUT → Comparar Egresos:  cartola OUT ↔ Tesorería EGRESO (Dynatech). */
   direction?: "IN" | "OUT";
+  /** normal → Comparar (excluye derivadas a Acreedores).
+   *  acreedores → tab "Acreedores tesorería": solo las tesorerías EGRESO
+   *  derivadas a mano; el lado banco se amplía +60 días (depósitos con
+   *  desfase). El cuadre sigue siendo el mismo manual-link. */
+  cola?: "normal" | "acreedores";
 } = {}) {
   // Si se llega aca desde Cartolas (atajo "Conciliar pendientes"), trae el
   // accountId en el query string para pre-filtrar.
@@ -214,6 +220,7 @@ export function CompareView({
       params.set("onlyUnmatched", String(onlyUnmatched));
       params.set("hideInternal", String(hideInternal));
       params.set("direction", direction);
+      if (cola === "acreedores") params.set("cola", "acreedores");
       const res = await fetch(`/api/consolidados/compare?${params}`);
       if (res.ok) {
         setData(await res.json());
@@ -477,6 +484,41 @@ export function CompareView({
     }
   }
 
+  // Derivar a / devolver de la cola "Acreedores tesorería" (solo egresos).
+  const [movingAcreedores, setMovingAcreedores] = useState(false);
+
+  /** Deriva las tesorerías seleccionadas a Acreedores (marcar=true) o las
+   *  devuelve a Comparar Egresos (marcar=false). Identificación 100% manual:
+   *  el operador las reconoce a ojo, por eso es reversible. */
+  async function moveAcreedores(marcar: boolean) {
+    const ids = Array.from(selectedTesoreriaIds);
+    if (ids.length === 0) return;
+    const msg = marcar
+      ? `${ids.length} movimiento(s) de Tesorería se moverán a la tab "Acreedores tesorería" para cuadrarlos a mano contra cartola. Salen de esta lista (reversible). ¿Continuar?`
+      : `${ids.length} movimiento(s) volverán a Comparar Egresos. ¿Continuar?`;
+    if (!confirm(msg)) return;
+    setMovingAcreedores(true);
+    setLinkError(null);
+    try {
+      const res = await fetch("/api/consolidados/acreedores-tesoreria", {
+        method: marcar ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tesoreriaIds: ids }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setLinkError(d.error || "Error al mover a Acreedores");
+        return;
+      }
+      if (d.bloqueados?.length > 0) alert(d.mensaje);
+      setSelectedTesoreriaIds(new Set());
+      setSelectedBankIds(new Set());
+      await load();
+    } finally {
+      setMovingAcreedores(false);
+    }
+  }
+
   /** Cuando hay un sibling sugerido, este atajo lo incluye en la selección
    *  para que el operador cierre el match directamente como split inverso
    *  (sin ajuste). */
@@ -595,6 +637,18 @@ export function CompareView({
         </label>
       </div>
 
+      {/* Contexto de la cola de acreedores */}
+      {cola === "acreedores" && (
+        <div className="rounded-md border border-violet-300 bg-violet-50 text-violet-900 text-sm px-3 py-2">
+          <strong>Acreedores tesorería:</strong> egresos derivados a mano desde
+          Comparar Egresos. El depósito suele llegar con días de desfase, así
+          que el lado banco muestra cartola hasta <strong>60 días después</strong> del
+          rango elegido. El cuadre es manual (podés vincular 1 tesorería con
+          varias cartolas o viceversa). Si derivaste algo por error,
+          seleccionalo y usá &quot;Devolver a Comparar&quot;.
+        </div>
+      )}
+
       {/* Leyenda de colores (oculta en móvil) */}
       <div className="hidden md:flex items-center gap-3 text-[11px] text-text-muted px-1">
         <span className="font-semibold uppercase tracking-wider">Leyenda:</span>
@@ -655,6 +709,29 @@ export function CompareView({
                 Crear banco manual{selectedTesoreriaIds.size > 1 ? ` (${selectedTesoreriaIds.size})` : ""}
               </button>
             )}
+            {/* Acreedores tesorería: identificación manual — el feed no trae
+                nada que los distinga. Derivar los saca de esta cola (y de los
+                motores) hacia la tab "Acreedores tesorería"; devolver deshace. */}
+            {direction === "OUT" &&
+              selectedTesoreriaIds.size >= 1 &&
+              selectedBankIds.size === 0 && (
+                <button
+                  onClick={() => void moveAcreedores(cola === "normal")}
+                  disabled={movingAcreedores}
+                  className="btn-ghost text-sm border border-violet-400/60 text-violet-700 disabled:opacity-50"
+                  title={
+                    cola === "normal"
+                      ? "Estos egresos corresponden a acreedores: se cuadran a mano en la tab Acreedores tesorería (el depósito llega con días de desfase)"
+                      : "Devolver a Comparar Egresos (deshacer la derivación)"
+                  }
+                >
+                  {movingAcreedores
+                    ? "Moviendo…"
+                    : cola === "normal"
+                      ? `Mover a Acreedores tesorería${selectedTesoreriaIds.size > 1 ? ` (${selectedTesoreriaIds.size})` : ""}`
+                      : `Devolver a Comparar${selectedTesoreriaIds.size > 1 ? ` (${selectedTesoreriaIds.size})` : ""}`}
+                </button>
+              )}
             {/* Si hay diferencia y el panel no está abierto, el botón abre el
                 panel de ajuste en lugar de intentar vincular. */}
             <button

@@ -28,6 +28,7 @@ type Tab =
   | "list"
   | "compare"
   | "compare-egresos"
+  | "acreedores-tesoreria"
   | "ok"
   | "abono-transbank"
   | "cruce-transbank"
@@ -239,6 +240,14 @@ export function ConsolidadosView() {
               Comparar Egresos
             </TabButton>
           )}
+          {canVerTab("acreedores-tesoreria") && (
+            <TabButton
+              active={tab === "acreedores-tesoreria"}
+              onClick={() => setTab("acreedores-tesoreria")}
+            >
+              Acreedores tesorería
+            </TabButton>
+          )}
           {canVerTab("ok") && (
             <TabButton active={tab === "ok"} onClick={() => setTab("ok")}>
               OK
@@ -306,6 +315,9 @@ export function ConsolidadosView() {
       {/* Contenido por tab (gateado por perfil) */}
       {tab === "compare" && canVerTab("compare") && <CompareView direction="IN" />}
       {tab === "compare-egresos" && canVerTab("compare-egresos") && <CompareView direction="OUT" />}
+      {tab === "acreedores-tesoreria" && canVerTab("acreedores-tesoreria") && (
+        <CompareView direction="OUT" cola="acreedores" />
+      )}
       {tab === "ok" && canVerTab("ok") && <OKView />}
       {tab === "abono-transbank" && canVerTab("abono-transbank") && <AbonoTransbankView />}
       {tab === "cruce-transbank" && canVerTab("cruce-transbank") && <CruceTransbankView />}

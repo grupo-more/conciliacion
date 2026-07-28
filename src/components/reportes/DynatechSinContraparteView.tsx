@@ -20,6 +20,7 @@ const MOTIVO_KEYS: DynatechMotivo[] = [
   "excepcion",
   "sin_match",
   "fuera_scope",
+  "acreedor",
 ];
 
 /**

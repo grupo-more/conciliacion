@@ -123,7 +123,8 @@ export type DynatechMotivo =
   | "revisar"
   | "excepcion"
   | "sin_match"
-  | "fuera_scope";
+  | "fuera_scope"
+  | "acreedor";
 
 export const MOTIVO_LABEL: Record<DynatechMotivo, string> = {
   sin_procesar: "Sin procesar",
@@ -132,6 +133,7 @@ export const MOTIVO_LABEL: Record<DynatechMotivo, string> = {
   excepcion: "Excepción API",
   sin_match: "Sin match",
   fuera_scope: "Fuera de scope",
+  acreedor: "Acreedores tesorería",
 };
 
 /** Pista de accion para cada motivo — se muestra en la UI/Excel. */
@@ -142,12 +144,17 @@ export const MOTIVO_ACCION: Record<DynatechMotivo, string> = {
   excepcion: "Depósito a otro banco — revisar cross-banco",
   sin_match: "Falta cartola o no hay contraparte",
   fuera_scope: "Configurar alias del banco",
+  acreedor: "Cuadrar a mano en Consolidados → Acreedores tesorería",
 };
 
 export function dynatechMotivo(
   status: string | null | undefined,
   esExcepcion: boolean,
+  esAcreedor = false,
 ): DynatechMotivo {
+  // Derivado a la cola manual "Acreedores tesorería": sigue pendiente (marcado
+  // ≠ resuelto), pero con motivo propio para que la cola no quede invisible.
+  if (esAcreedor) return "acreedor";
   if (!status || status === "UNPROCESSED") return "sin_procesar";
   switch (status) {
     case "SUGGESTED":

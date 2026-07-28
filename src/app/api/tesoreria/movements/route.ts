@@ -140,6 +140,8 @@ export async function GET(req: Request) {
           estadoActual: true,
           anulado: true,
           items: true,
+          acreedorTesoreriaAt: true,
+          acreedorTesoreriaById: true,
           syncedAt: true,
         },
         orderBy: [{ fecha: "desc" }],

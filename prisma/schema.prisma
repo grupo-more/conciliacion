@@ -255,6 +255,14 @@ model TesoreriaMovement {
   items              Json
   rawJson            Json     @map("raw_json")
 
+  // Derivado a la cola manual "Acreedores tesorería" (solo EGRESO). El operador
+  // lo identifica a ojo — no hay dato del feed que lo distinga — y desde ahí se
+  // cuadra a mano contra cartola (los depósitos llegan con días de desfase).
+  // Marcado ≠ resuelto: sigue pendiente hasta que se vincule. Reversible.
+  // Mientras esté marcado queda fuera de Comparar y de los motores automáticos.
+  acreedorTesoreriaAt   DateTime? @map("acreedor_tesoreria_at")
+  acreedorTesoreriaById String?   @map("acreedor_tesoreria_by_id")
+
   syncedAt           DateTime @default(now()) @map("synced_at")
 
   consolidado Consolidado?
@@ -268,6 +276,7 @@ model TesoreriaMovement {
   @@index([esExcepcion])
   @@index([tipoOperacion])
   @@index([estadoActual])
+  @@index([acreedorTesoreriaAt])
 }
 
 model TesoreriaSyncRun {

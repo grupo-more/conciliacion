@@ -633,9 +633,14 @@ async function doRunConsolidados(opts: RunOptions = {}): Promise<RunSummary> {
     // de doble asiento si una coincidía por monto/fecha con la cartola.
     // (`not` deja pasar los null, así que las clases vacías se mantienen.)
     prisma.tesoreriaMovement.findMany({
-      // Excluye TBK (cuadra en Cruce Transbank) y los fuera-de-alcance
-      // (COMPRA CUENTA APP MORE GIROS): no entran al motor.
-      where: { claseOperacion: { not: "TBK" }, ...excluirFueraAlcanceWhere },
+      // Excluye TBK (cuadra en Cruce Transbank), los fuera-de-alcance
+      // (COMPRA CUENTA APP MORE GIROS) y los derivados a "Acreedores
+      // tesorería" (cuadre 100% manual en su tab): no entran al motor.
+      where: {
+        claseOperacion: { not: "TBK" },
+        acreedorTesoreriaAt: null,
+        ...excluirFueraAlcanceWhere,
+      },
       orderBy: { fecha: "asc" },
     }),
     preserveManual
