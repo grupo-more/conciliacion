@@ -192,7 +192,8 @@ export async function computeBancoSinConciliar(
       continue;
     }
 
-    // 6) Dif menor (IN ≤ umbral) → tiene asiento propio en "Dif menor".
+    // 6) Dif menor (|monto| ≤ umbral, IN u OUT) → tiene asiento propio en
+    // "Dif menor" (toggle Ingresos/Egresos).
     if (isDifMenor(bm, difThreshold)) {
       resDifMenorCount++;
       resDifMenorMonto += abs;

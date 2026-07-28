@@ -106,8 +106,14 @@ export async function GET(req: Request) {
           { description: { contains: "transba", mode: "insensitive" } },
         ],
       },
+      // Dif menor ingresos (IN chicos, monto positivo).
       {
         amount: { gt: 0n, lte: BigInt(difSettings.threshold) },
+      },
+      // Dif menor egresos (OUT chicos, monto negativo): mismo umbral, tienen
+      // su asiento en "Dif menor a 100 → Egresos".
+      {
+        amount: { lt: 0n, gte: -BigInt(difSettings.threshold) },
       },
     ],
   };

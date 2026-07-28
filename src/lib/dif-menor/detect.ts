@@ -41,15 +41,18 @@ export async function getDifMenorSettings(): Promise<DifMenorSettings> {
 
 /**
  * Predicado JS puro: el movimiento es candidato a "dif menor".
- * Solo aplica a abonos IN cuyo monto absoluto está dentro del umbral.
+ * Aplica en ambas direcciones: abonos IN (pruebas que entran) y cargos OUT
+ * (pruebas que salen para validar una cuenta destino), siempre que el monto
+ * absoluto esté dentro del umbral. Cada dirección tiene su propio asiento en
+ * la tab "Dif menor a 100" (toggle Ingresos/Egresos).
  */
 export function isDifMenor(
   m: { amount: bigint; direction: string },
   threshold: number
 ): boolean {
-  if (m.direction !== "IN") return false;
+  if (m.direction !== "IN" && m.direction !== "OUT") return false;
   const abs = m.amount < 0n ? -m.amount : m.amount;
-  return abs <= BigInt(threshold);
+  return abs > 0n && abs <= BigInt(threshold);
 }
 
 /**

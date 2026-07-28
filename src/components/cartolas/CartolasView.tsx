@@ -834,6 +834,20 @@ function computeRowStatus(m: MovementDTO): RowStatus {
     };
   }
 
+  // ── Dif menor (|monto| ≤ umbral, IN u OUT) → asiento propio en su tab.
+  // Va ANTES de la rama genérica de OUT para que los egresos chicos de prueba
+  // no aparezcan como "Sin conciliar".
+  if (m.difMenor) {
+    return {
+      label: "Dif menor",
+      title:
+        "Transferencia chica (bajo el umbral configurado). Tiene asiento propio en Consolidados → tab Dif menor a 100.",
+      borderCls: "w-[3px] bg-violet-500",
+      badgeCls: "border-violet-400/40 bg-violet-50 text-violet-700",
+      rowBg: "bg-violet-50/30",
+    };
+  }
+
   // ── Egreso (cargo/OUT) sin resolver → pendiente, requiere acción ──
   if (m.direction === "OUT") {
     return {
@@ -855,16 +869,6 @@ function computeRowStatus(m: MovementDTO): RowStatus {
       borderCls: "w-[3px] bg-sky-500",
       badgeCls: "border-sky-400/40 bg-sky-50 text-sky-700",
       rowBg: "bg-sky-50/30",
-    };
-  }
-  if (m.difMenor) {
-    return {
-      label: "Dif menor",
-      title:
-        "Transferencia chica (bajo el umbral configurado). Tiene asiento propio en Consolidados → tab Dif menor a 100.",
-      borderCls: "w-[3px] bg-violet-500",
-      badgeCls: "border-violet-400/40 bg-violet-50 text-violet-700",
-      rowBg: "bg-violet-50/30",
     };
   }
   return {
