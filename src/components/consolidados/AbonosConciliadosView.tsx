@@ -36,8 +36,8 @@ interface AbonosConciliadosResponse {
 
 /**
  * Subtab "Abonos conciliados" de Cruce Transbank: abonos/cargos del settlement
- * AJENOS a la operación de la empresa (jamás tendrán POS), derivados a mano
- * desde Movimientos con la acción "Abono conciliado". Se contabilizan por el
+ * que no corresponden a operaciones de la empresa (nunca tendrán POS),
+ * derivados a mano desde Movimientos con la acción "Abono conciliado". Se contabilizan por el
  * NETO, siempre Debe rubroDebe / Haber rubroHaber (un cargo queda negativo, no
  * se invierte). Rubros editables en Configuración → Abonos Transbank.
  * Resolución vía emisión (folio), como Dif menor. "Devolver" deshace la marca.

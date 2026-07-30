@@ -15,8 +15,8 @@ interface Settings {
 
 /**
  * Tab "Abonos Transbank" en Configuración. Edita los 2 rubros del asiento de
- * Cruce Transbank → Abonos conciliados (abonos/cargos ajenos a la empresa):
- * Debe rubroDebe (default 200) / Haber rubroHaber (default 1403), por el neto.
+ * Cruce Transbank → Abonos conciliados (abonos/cargos sin operación de la
+ * empresa asociada): Debe rubroDebe (200) / Haber rubroHaber (1403), por el neto.
  */
 export function AbonosTransbankTab() {
   const [rubros, setRubros] = useState<Rubro[]>([]);
@@ -115,12 +115,12 @@ export function AbonosTransbankTab() {
   return (
     <div className="space-y-4 max-w-2xl">
       <div>
-        <h2 className="text-base font-semibold">Abonos Transbank (ajenos)</h2>
+        <h2 className="text-base font-semibold">Abonos Transbank conciliados</h2>
         <p className="text-sm text-text-muted mt-0.5">
           Rubros del asiento de Consolidados → Cruce Transbank → Abonos
           conciliados: abonos o cargos del settlement que no corresponden a
-          operaciones de la empresa (jamás tendrán POS). Se contabilizan por el
-          neto, siempre con el mismo lado: Debe / Haber.
+          operaciones de la empresa (no tienen POS que los respalde). Se
+          contabilizan por el neto, siempre con el mismo lado: Debe / Haber.
         </p>
       </div>
 

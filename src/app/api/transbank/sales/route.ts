@@ -54,7 +54,7 @@ export async function GET(req: Request) {
     prisma.transbankSale.findMany({ where, orderBy: { fechaVenta: "desc" } }),
     prisma.transbankSale.groupBy({ by: ["sucursalId"], orderBy: [{ sucursalId: "asc" }] }),
     prisma.tbkTesoreria.findMany(),
-    // Los "Abonos conciliados" (ajenos a la empresa) NO entran al match: no
+    // Los "Abonos conciliados" (sin operación de la empresa asociada) NO entran al match: no
     // pueden robar un POS por el fallback monto+fecha. En el listado cuentan
     // como conciliados (tienen su asiento propio en Cruce Transbank).
     prisma.transbankSale.findMany({ where: { abonoConciliadoAt: null } }),
@@ -122,8 +122,8 @@ export async function GET(req: Request) {
       numeroBoleta: s.numeroBoleta,
       tid: s.tid,
       conciliado: conc,
-      // Marcado como abono/cargo ajeno a la empresa (asiento propio en
-      // Cruce Transbank → Abonos conciliados).
+      // Marcado como abono/cargo sin operación de la empresa asociada
+      // (asiento propio en Cruce Transbank → Abonos conciliados).
       abonoConciliado: s.abonoConciliadoAt !== null,
     })),
     facets: {

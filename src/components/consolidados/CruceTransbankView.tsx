@@ -93,14 +93,16 @@ export function CruceTransbankView() {
     }
   }
 
-  // Deriva un abono/cargo ajeno a la empresa (Settlement sin POS que jamás
-  // tendrá POS) a la subtab "Abonos conciliados" (asiento directo Debe/Haber).
+  // Deriva un abono/cargo que no corresponde a operaciones de la empresa
+  // (Settlement que nunca tendrá POS) a la subtab "Abonos conciliados"
+  // (asiento directo Debe/Haber).
   async function onAbonoConciliado(row: CruceRow) {
     if (!row.transbankSaleId) return;
     if (
       !confirm(
-        "¿Marcar este abono como AJENO a la empresa? Se moverá a la subtab \"Abonos conciliados\" " +
-          "para contabilizarlo directo Debe/Haber (reversible con \"Devolver\").",
+        "¿Marcar este movimiento como abono conciliado? No corresponde a operaciones de la empresa, " +
+          "por lo que se moverá a la subtab \"Abonos conciliados\" para contabilizarlo directo " +
+          "Debe/Haber (reversible con \"Devolver\").",
       )
     )
       return;
@@ -207,7 +209,7 @@ export function CruceTransbankView() {
         <button
           onClick={() => setMode("abonos")}
           className={`px-3 py-1.5 font-semibold ${mode === "abonos" ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
-          title="Abonos/cargos de Transbank ajenos a la empresa (sin POS): asiento directo Debe/Haber"
+          title="Abonos/cargos de Transbank que no corresponden a operaciones de la empresa (sin POS): asiento directo Debe/Haber"
         >
           Abonos conciliados
         </button>
@@ -417,7 +419,7 @@ export function CruceTransbankView() {
                             onClick={() => onAbonoConciliado(r)}
                             disabled={busy}
                             className="ml-2 text-fuchsia-700 hover:underline text-xs disabled:opacity-50"
-                            title="Abono/cargo ajeno a la empresa (jamás tendrá POS): moverlo a la subtab Abonos conciliados para contabilizarlo directo Debe/Haber"
+                            title="Abono/cargo sin operación de la empresa asociada (nunca tendrá POS): moverlo a la subtab Abonos conciliados para contabilizarlo directo Debe/Haber"
                           >
                             Abono conciliado
                           </button>

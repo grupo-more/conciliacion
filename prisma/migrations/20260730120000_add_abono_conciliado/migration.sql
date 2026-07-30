@@ -1,6 +1,6 @@
--- "Abonos conciliados" (Cruce Transbank): abonos/cargos de Transbank ajenos a
--- la operación de la empresa (nunca tendrán POS). Se identifican a mano y se
--- contabilizan directo Debe/Haber contra rubros configurables (neto).
+-- "Abonos conciliados" (Cruce Transbank): abonos/cargos de Transbank que no
+-- corresponden a operaciones de la empresa (nunca tendrán POS). Se identifican
+-- a mano y se contabilizan directo Debe/Haber contra rubros configurables (neto).
 
 -- AlterTable: marca reversible en el settlement
 ALTER TABLE "TransbankSale" ADD COLUMN "abono_conciliado_at" TIMESTAMP(3);

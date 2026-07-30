@@ -10,7 +10,8 @@ import { denyUnless } from "@/lib/perms";
  * PATCH /api/abono-conciliado-settings → actualiza rubroDebe y/o rubroHaber.
  *
  * Usados por Cruce Transbank → "Abonos conciliados": abonos/cargos de Transbank
- * ajenos a la empresa, contabilizados Debe rubroDebe / Haber rubroHaber (neto).
+ * sin operación de la empresa asociada, contabilizados Debe rubroDebe / Haber
+ * rubroHaber (neto).
  */
 export async function GET() {
   const session = await getSession();

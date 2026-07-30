@@ -8,8 +8,8 @@ import { consumedRefIds } from "@/lib/consolidados/emision-consumo";
 
 /**
  * "Abonos conciliados" (Cruce Transbank): abonos/cargos del settlement de
- * Transbank AJENOS a la operación de la empresa — jamás tendrán POS que los
- * respalde, así que no se cuadran: se identifican a mano en Movimientos y se
+ * Transbank que no corresponden a operaciones de la empresa — nunca tendrán
+ * POS que los respalde, así que no se cuadran: se identifican a mano en Movimientos y se
  * contabilizan directo contra 2 rubros configurables, por el NETO (totalAbono):
  *
  *   Debe rubroDebe (default 200) / Haber rubroHaber (default 1403)

@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db";
 
 /**
  * Settings de "Abonos conciliados" (Cruce Transbank): abonos/cargos de
- * Transbank ajenos a la operación de la empresa (jamás tendrán POS). Se
+ * Transbank sin operación de la empresa asociada (nunca tendrán POS). Se
  * identifican a mano y se contabilizan directo por el NETO (totalAbono):
  *   Debe rubroDebe (default 200) / Haber rubroHaber (default 1403)
  * El monto va tal cual (un cargo queda negativo en el asiento, no se invierte).
