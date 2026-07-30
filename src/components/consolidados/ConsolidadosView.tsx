@@ -290,7 +290,7 @@ export function ConsolidadosView() {
               active={tab === "dif-menor"}
               onClick={() => setTab("dif-menor")}
             >
-              Dif menor a 100
+              Diferencias y comisiones
             </TabButton>
           )}
           {canVerTab("asientos-manuales") && (

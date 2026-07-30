@@ -93,8 +93,10 @@ export const BANK_TAG_LABEL: Record<BankTag, string> = {
 
 // Transbank / abonos de tarjetas (settlement, no van al motor de ingresos).
 const TRANSBANK_RE = /\b(transbank|redbank|t\.?b\.?k)\b/i;
-// Comisiones, mantenciones, impuestos y cargos del propio banco.
-const COMISION_RE =
+// Comisiones, mantenciones, impuestos y cargos del propio banco. Exportado:
+// también lo usa el módulo "Diferencias y comisiones" (dif-menor/detect.ts)
+// para RESOLVER estos cargos con asiento automático, no solo etiquetarlos.
+export const COMISION_RE =
   /(comisi[oó]n|mantenci[oó]n|impuesto|iva\b|cargo\b|gasto\s+banc|cobro\b)/i;
 
 /** `esInterno` lo decide el caller (detectInterno !== null), por orden de confianza. */

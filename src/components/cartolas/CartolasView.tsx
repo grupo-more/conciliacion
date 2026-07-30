@@ -474,6 +474,9 @@ export function CartolasView() {
                   <span className="inline-block w-1 h-3 bg-violet-500 rounded-sm" /> Dif menor
                 </span>
                 <span className="inline-flex items-center gap-1">
+                  <span className="inline-block w-1 h-3 bg-teal-500 rounded-sm" /> Comisión
+                </span>
+                <span className="inline-flex items-center gap-1">
                   <span className="inline-block w-1 h-3 bg-rose-500 rounded-sm" /> Descartado
                 </span>
                 <span className="inline-flex items-center gap-1">
@@ -831,6 +834,19 @@ function computeRowStatus(m: MovementDTO): RowStatus {
       borderCls: "w-[3px] bg-success",
       badgeCls: "border-success/40 bg-success/10 text-success",
       rowBg: "",
+    };
+  }
+
+  // ── Comisión/cargo del propio banco → asiento automático en "Diferencias y
+  // comisiones". Va ANTES de la rama genérica de OUT.
+  if (m.comision) {
+    return {
+      label: "Comisión",
+      title:
+        "Comisión o cargo del propio banco (sin contraparte). Tiene asiento automático en Consolidados → Diferencias y comisiones.",
+      borderCls: "w-[3px] bg-teal-500",
+      badgeCls: "border-teal-400/40 bg-teal-50 text-teal-700",
+      rowBg: "bg-teal-50/30",
     };
   }
 

@@ -4,25 +4,31 @@ import { prisma } from "@/lib/db";
 import {
   getDifMenorSettings,
   inferRubroByAccount,
+  isComisionBancaria,
 } from "@/lib/dif-menor/detect";
 import { transbankPrismaWhere } from "@/lib/transbank/detect";
 import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
 import { consumedRefIds } from "@/lib/consolidados/emision-consumo";
 
 /**
- * GET /api/consolidados/dif-menor?from=YYYY-MM-DD&to=YYYY-MM-DD&accountId=&direction=IN|OUT
+ * GET /api/consolidados/dif-menor?from&to&accountId=&direction=IN|OUT&modo=dif|comision
  *
- * Arma el asiento contable de los "diferencias menores": movimientos cuyo monto
- * absoluto está bajo el umbral configurable (default 100, inclusivo).
+ * Tab "Diferencias y comisiones". Dos modos:
  *
+ * modo=dif (default) — "diferencias menores": |monto| ≤ umbral configurable.
  *  - direction=IN (default): ingresos chicos (transferencias de prueba que
  *    entran). Debe rubro cuenta / Haber rubro diferencia.
  *  - direction=OUT: egresos chicos (transferencias de prueba que salen para
  *    validar una cuenta destino). Asiento INVERTIDO: Debe rubro diferencia /
  *    Haber rubro cuenta. Mismo rubro diferencia (2050), del otro lado.
+ *    Excluye los que matchean comisión (esa población va al modo comision).
  *
- * Cada BankMovement genera 2 filas (banco + contracuenta diferencia). El rubro
- * de la cuenta se infiere por nombre del catálogo RubroLabel.
+ * modo=comision — comisiones/cargos del propio banco: OUT SIN contraparte cuya
+ *  glosa matchea COMISION_RE (cualquier monto). Asiento: Debe rubroComision
+ *  (1503) / Haber rubro cuenta.
+ *
+ * Cada BankMovement genera 2 filas (banco + contracuenta). El rubro de la
+ * cuenta se infiere por nombre del catálogo RubroLabel.
  *
  * Excluye los Transbank (tienen su propio asiento) y las cuentas de uso parcial.
  * No hay deshacer contra Tesorería; la resolución es vía emisión (folio).
@@ -39,22 +45,29 @@ export async function GET(req: Request) {
     url.searchParams.get("to")
   );
   const accountId = url.searchParams.get("accountId") || null;
-  const direction = url.searchParams.get("direction") === "OUT" ? "OUT" : "IN";
+  const modo = url.searchParams.get("modo") === "comision" ? "comision" : "dif";
+  // Comisiones son siempre cargos (OUT).
+  const direction =
+    modo === "comision" || url.searchParams.get("direction") === "OUT" ? "OUT" : "IN";
 
   const settings = await getDifMenorSettings();
 
   // Filtro de monto según dirección: IN = positivo (0, umbral]; OUT = negativo
-  // [-umbral, 0) (los egresos se guardan con monto negativo).
+  // [-umbral, 0) (los egresos se guardan con monto negativo). Comisiones: sin
+  // filtro de monto (cualquier cargo del banco).
   const amountWhere =
-    direction === "IN"
-      ? { gt: 0n, lte: BigInt(settings.threshold) }
-      : { lt: 0n, gte: -BigInt(settings.threshold) };
-  const origenEmision = direction === "OUT" ? "DIF_MENOR_EGRESO" : "DIF_MENOR";
+    modo === "comision"
+      ? { lt: 0n }
+      : direction === "IN"
+        ? { gt: 0n, lte: BigInt(settings.threshold) }
+        : { lt: 0n, gte: -BigInt(settings.threshold) };
+  const origenEmision =
+    modo === "comision" ? "COMISION" : direction === "OUT" ? "DIF_MENOR_EGRESO" : "DIF_MENOR";
 
-  // Diferencias ya emitidas a gestión (folio): fuera del listado de esta tab.
+  // Movimientos ya emitidos a gestión (folio): fuera del listado de esta tab.
   const emitidos = await consumedRefIds(origenEmision);
 
-  const movements = await prisma.bankMovement.findMany({
+  const movementsRaw = await prisma.bankMovement.findMany({
     where: {
       direction,
       amount: amountWhere,
@@ -87,6 +100,17 @@ export async function GET(req: Request) {
     take: 2000,
   });
 
+  // El predicado de comisión usa regex sobre la glosa (no expresable en
+  // Prisma), así que se aplica acá:
+  //  - modo comision: SOLO los que matchean.
+  //  - modo dif + OUT: se EXCLUYEN los que matchean (prioridad: comisión).
+  const movements =
+    modo === "comision"
+      ? movementsRaw.filter((m) => isComisionBancaria(m))
+      : direction === "OUT"
+        ? movementsRaw.filter((m) => !isComisionBancaria(m))
+        : movementsRaw;
+
   // Inferir el rubro de cada cuenta involucrada en los movimientos.
   const accountIdsInUse = Array.from(
     new Set(movements.map((m) => m.accountId))
@@ -94,7 +118,7 @@ export async function GET(req: Request) {
   const rubroByAccount = await inferRubroByAccount(accountIdsInUse);
 
   // Etiquetas: los rubros usados (banco + diferencia)
-  const rubrosNeeded = new Set<number>([settings.rubroDiferencia]);
+  const rubrosNeeded = new Set<number>([settings.rubroDiferencia, settings.rubroComision]);
   for (const r of rubroByAccount.values()) rubrosNeeded.add(r);
   const rubroLabels =
     rubrosNeeded.size > 0
@@ -104,8 +128,12 @@ export async function GET(req: Request) {
         })
       : [];
   const labelByRubro = new Map(rubroLabels.map((r) => [r.rubro, r.name]));
-  const labelDiferencia =
-    labelByRubro.get(settings.rubroDiferencia) ?? "Diferencia";
+  // Contracuenta según modo: diferencia (2050) o comisión (1503).
+  const rubroContracuenta =
+    modo === "comision" ? settings.rubroComision : settings.rubroDiferencia;
+  const labelContracuenta =
+    labelByRubro.get(rubroContracuenta) ??
+    (modo === "comision" ? "Comisiones bancarias" : "Diferencia");
 
   const rows: DifMenorRow[] = [];
   let totalDebe = 0n;
@@ -147,14 +175,14 @@ export async function GET(req: Request) {
       totalMonto: abs.toString(),
     });
 
-    // 2) Contracuenta diferencia
+    // 2) Contracuenta (diferencia o comisión según modo)
     rows.push({
       groupId,
       side: "DIFERENCIA",
       fecha: bm.postDate.toISOString(),
-      rubro: settings.rubroDiferencia,
-      rubroLabel: labelDiferencia,
-      detalle: labelDiferencia,
+      rubro: rubroContracuenta,
+      rubroLabel: labelContracuenta,
+      detalle: labelContracuenta,
       cuenta: bm.account.displayNumber || bm.account.accountNumber,
       cliente,
       glosa,
@@ -170,6 +198,8 @@ export async function GET(req: Request) {
   }
 
   // Facets de cuenta vistas en el rango completo (sin filtro de cuenta).
+  // Se trae la glosa/contraparte para poder aplicar el mismo predicado del
+  // listado (comisión = regex, no expresable en Prisma).
   const allInRange = await prisma.bankMovement.findMany({
     where: {
       direction,
@@ -179,10 +209,21 @@ export async function GET(req: Request) {
       account: { isNot: usoParcialAccountWhere },
       NOT: [{ AND: transbankPrismaWhere.AND }],
     },
-    select: { accountId: true },
-    distinct: ["accountId"],
+    select: {
+      accountId: true,
+      direction: true,
+      description: true,
+      counterpartyRut: true,
+      counterpartyName: true,
+    },
   });
-  const facetAccountIds = allInRange.map((r) => r.accountId);
+  const allFiltered =
+    modo === "comision"
+      ? allInRange.filter((m) => isComisionBancaria(m))
+      : direction === "OUT"
+        ? allInRange.filter((m) => !isComisionBancaria(m))
+        : allInRange;
+  const facetAccountIds = Array.from(new Set(allFiltered.map((r) => r.accountId)));
   const accountList =
     facetAccountIds.length > 0
       ? await prisma.bankAccount.findMany({

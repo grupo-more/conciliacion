@@ -450,10 +450,15 @@ model ConsolidadoLink {
 // umbral (transferencias chicas de "prueba" antes de la real) y los manda
 // contra un rubro de diferencia, para no ensuciar la conciliación.
 // Tabla con un único row (id = "default") editable desde Configuración.
+// Settings de la tab "Diferencias y comisiones" (ex "Dif menor a 100"):
+//  - threshold/rubroDiferencia: transferencias chicas (|monto| <= umbral).
+//  - rubroComision: comisiones/cargos del banco (OUT sin contraparte cuya glosa
+//    matchea COMISION_RE) -> asiento Debe rubroComision / Haber rubro banco.
 model DifMenorSettings {
   id              String   @id @default("default")
   threshold       Int      @default(100)  // CLP, inclusivo (<= threshold)
   rubroDiferencia Int      @default(2050) @map("rubro_diferencia")
+  rubroComision   Int      @default(1503) @map("rubro_comision")
   updatedAt       DateTime @updatedAt @map("updated_at")
 }
 

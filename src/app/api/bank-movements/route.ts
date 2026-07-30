@@ -3,7 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { isTransbank } from "@/lib/transbank/detect";
-import { getDifMenorSettings, isDifMenor } from "@/lib/dif-menor/detect";
+import { getDifMenorSettings, isDifMenor, isComisionBancaria } from "@/lib/dif-menor/detect";
 import {
   isUsoParcialAccount,
   usoParcialAccountWhere,
@@ -425,7 +425,9 @@ export async function GET(req: Request) {
         egresoConciliado,
         asientoManual: m.asientoManual != null,
         transbank: isTransbank(m),
-        difMenor: !isTransbank(m) && isDifMenor(m, difThreshold),
+        comision: !isTransbank(m) && isComisionBancaria(m),
+        // Prioridad: un cargo chico con glosa de comisión es comisión, no dif menor.
+        difMenor: !isTransbank(m) && !isComisionBancaria(m) && isDifMenor(m, difThreshold),
         noRelevante: isUsoParcialAccount(m.account),
         descartadoAt: m.descartadoAt?.toISOString() ?? null,
       };

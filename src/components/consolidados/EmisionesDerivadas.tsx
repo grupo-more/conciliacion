@@ -20,6 +20,7 @@ export type OrigenDerivado =
   | "OK"
   | "ABONO_TRANSBANK"
   | "ABONO_CONCILIADO"
+  | "COMISION"
   | "DIF_MENOR"
   | "DIF_MENOR_EGRESO"
   | "TRASPASOS_INTERNOS"

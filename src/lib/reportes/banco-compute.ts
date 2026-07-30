@@ -14,7 +14,7 @@
 import { prisma } from "@/lib/db";
 import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
 import { isTransbank } from "@/lib/transbank/detect";
-import { getDifMenorSettings, isDifMenor } from "@/lib/dif-menor/detect";
+import { getDifMenorSettings, isDifMenor, isComisionBancaria } from "@/lib/dif-menor/detect";
 import { isUsoParcialAccount } from "@/lib/cuentas/uso-parcial";
 import { matchMirror, type BankMovementForMatch } from "@/lib/internos/match";
 import {
@@ -134,6 +134,8 @@ export async function computeBancoSinConciliar(
   let resEgresoMonto = 0n;
   let resDifMenorCount = 0;
   let resDifMenorMonto = 0n;
+  let resComisionCount = 0;
+  let resComisionMonto = 0n;
   let resAsientoCount = 0;
   let resAsientoMonto = 0n;
   let noRelevanteCount = 0;
@@ -192,8 +194,17 @@ export async function computeBancoSinConciliar(
       continue;
     }
 
-    // 6) Dif menor (|monto| ≤ umbral, IN u OUT) → tiene asiento propio en
-    // "Dif menor" (toggle Ingresos/Egresos).
+    // 6) Comisión/cargo del propio banco (OUT sin contraparte, glosa matchea
+    // COMISION_RE) → asiento automático en "Diferencias y comisiones". Va
+    // ANTES de dif menor: un cargo chico con glosa de comisión es comisión.
+    if (isComisionBancaria(bm)) {
+      resComisionCount++;
+      resComisionMonto += abs;
+      continue;
+    }
+
+    // 7) Dif menor (|monto| ≤ umbral, IN u OUT) → tiene asiento propio en
+    // "Diferencias y comisiones" (toggle Ingresos/Egresos).
     if (isDifMenor(bm, difThreshold)) {
       resDifMenorCount++;
       resDifMenorMonto += abs;
@@ -273,6 +284,7 @@ export async function computeBancoSinConciliar(
         traspasos: { count: resTraspasoCount, monto: resTraspasoMonto.toString() },
         egresos: { count: resEgresoCount, monto: resEgresoMonto.toString() },
         difMenor: { count: resDifMenorCount, monto: resDifMenorMonto.toString() },
+        comision: { count: resComisionCount, monto: resComisionMonto.toString() },
         asientoManual: { count: resAsientoCount, monto: resAsientoMonto.toString() },
         noRelevante: { count: noRelevanteCount, monto: noRelevanteMonto.toString() },
       },

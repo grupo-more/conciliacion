@@ -71,7 +71,7 @@ export const TAB_CONSOLIDADOS_LABELS: Record<TabConsolidados, string> = {
   "cruce-transbank": "Cruce Transbank",
   "egresos-terceros": "Egresos a terceros",
   "traspasos-internos": "Traspasos internos",
-  "dif-menor": "Dif menor a 100",
+  "dif-menor": "Diferencias y comisiones",
   "asientos-manuales": "Asientos manuales",
   proveedores: "Proveedores",
 };

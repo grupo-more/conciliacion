@@ -11,17 +11,20 @@ interface Rubro {
 interface Settings {
   threshold: number;
   rubroDiferencia: number;
+  rubroComision: number;
 }
 
 /**
- * Tab "Dif menor a 100" en Configuración. Permite editar el umbral (CLP)
- * y el rubro contable de destino (lado Haber del asiento) usados por el
- * módulo Consolidados → Dif menor a 100.
+ * Tab "Diferencias y comisiones" en Configuración. Edita el umbral (CLP) y los
+ * rubros de destino del módulo Consolidados → Diferencias y comisiones:
+ * rubroDiferencia (transferencias chicas) y rubroComision (comisiones/cargos
+ * del propio banco).
  */
 export function DifMenorTab() {
   const [rubros, setRubros] = useState<Rubro[]>([]);
   const [threshold, setThreshold] = useState<string>("100");
   const [rubroDiferencia, setRubroDiferencia] = useState<string>("");
+  const [rubroComision, setRubroComision] = useState<string>("");
   const [original, setOriginal] = useState<Settings | null>(null);
 
   const [loading, setLoading] = useState(true);
@@ -45,7 +48,12 @@ export function DifMenorTab() {
       const r = await rRes.json();
       setThreshold(String(s.threshold));
       setRubroDiferencia(String(s.rubroDiferencia));
-      setOriginal({ threshold: s.threshold, rubroDiferencia: s.rubroDiferencia });
+      setRubroComision(String(s.rubroComision));
+      setOriginal({
+        threshold: s.threshold,
+        rubroDiferencia: s.rubroDiferencia,
+        rubroComision: s.rubroComision,
+      });
       setRubros(r.rubros);
     } finally {
       setLoading(false);
@@ -60,12 +68,13 @@ export function DifMenorTab() {
     setError(null);
     const thNum = Number(threshold);
     const rdNum = Number(rubroDiferencia);
+    const rcNum = Number(rubroComision);
     if (!Number.isInteger(thNum) || thNum <= 0) {
       setError("El umbral debe ser un entero positivo (en CLP).");
       return;
     }
-    if (!Number.isInteger(rdNum) || rdNum <= 0) {
-      setError("Seleccioná un rubro válido.");
+    if (!Number.isInteger(rdNum) || rdNum <= 0 || !Number.isInteger(rcNum) || rcNum <= 0) {
+      setError("Seleccioná rubros válidos en ambos destinos.");
       return;
     }
     setSaving(true);
@@ -73,7 +82,7 @@ export function DifMenorTab() {
       const res = await fetch("/api/dif-menor-settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ threshold: thNum, rubroDiferencia: rdNum }),
+        body: JSON.stringify({ threshold: thNum, rubroDiferencia: rdNum, rubroComision: rcNum }),
       });
       if (!res.ok) {
         const e = await res.json().catch(() => ({}));
@@ -91,17 +100,17 @@ export function DifMenorTab() {
   const dirty =
     original !== null &&
     (Number(threshold) !== original.threshold ||
-      Number(rubroDiferencia) !== original.rubroDiferencia);
+      Number(rubroDiferencia) !== original.rubroDiferencia ||
+      Number(rubroComision) !== original.rubroComision);
 
   return (
     <div className="space-y-4 max-w-2xl">
       <div>
-        <h2 className="text-base font-semibold">Dif menor a 100</h2>
+        <h2 className="text-base font-semibold">Diferencias y comisiones</h2>
         <p className="text-sm text-text-muted mt-0.5">
-          Configura el umbral y el rubro destino para el módulo de diferencias
-          chicas (Consolidados → Dif menor a 100). Todos los ingresos bancarios
-          menores o iguales al umbral se contabilizan automáticamente contra el
-          rubro de diferencia.
+          Configura el módulo Consolidados → Diferencias y comisiones: el umbral
+          y rubro de las transferencias chicas (ingresos/egresos de prueba), y el
+          rubro destino de las comisiones y cargos del propio banco.
         </p>
       </div>
 
@@ -166,6 +175,34 @@ export function DifMenorTab() {
             <p className="text-xs text-text-muted mt-1">
               El rubro contable contra el que se mandan estas transferencias
               chicas. Por defecto 2050.
+            </p>
+          </div>
+
+          <div>
+            <label htmlFor="dif-rubro-comision" className="block text-sm font-medium mb-1">
+              Rubro de comisiones bancarias (lado Debe)
+            </label>
+            <select
+              id="dif-rubro-comision"
+              value={rubroComision}
+              onChange={(e) => setRubroComision(e.target.value)}
+              className="w-full rounded-md border border-border-soft px-3 py-1.5 text-sm bg-white"
+            >
+              <option value="">— Seleccionar —</option>
+              {rubros
+                .slice()
+                .sort((a, b) => a.rubro - b.rubro)
+                .map((r) => (
+                  <option key={r.rubro} value={r.rubro}>
+                    {r.rubro} — {r.name}
+                    {r.isDifference ? " (diferencia)" : ""}
+                  </option>
+                ))}
+            </select>
+            <p className="text-xs text-text-muted mt-1">
+              Destino de las comisiones/cargos del propio banco (cargos sin
+              contraparte cuya glosa menciona comisión, mantención, impuesto,
+              IVA o cobro). Por defecto 1503.
             </p>
           </div>
 

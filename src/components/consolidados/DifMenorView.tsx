@@ -30,22 +30,24 @@ interface DifMenorRow {
 interface DifMenorResponse {
   from: string;
   to: string;
-  settings: { threshold: number; rubroDiferencia: number };
+  settings: { threshold: number; rubroDiferencia: number; rubroComision: number };
   rows: DifMenorRow[];
   totals: { debe: string; haber: string };
   facets: { accounts: { id: string; label: string }[] };
 }
 
+type Modo = "ingresos" | "egresos" | "comisiones";
+
 /**
- * Tab "Dif menor a 100" de Consolidados: muestra los BankMovements chicos
- * (|monto| ≤ threshold) como asiento contable Debe/Haber, mandando la
- * contracuenta al rubro de diferencia configurado. Toggle Ingresos/Egresos:
- *  - Ingresos (IN):  banco DEBE  / diferencia HABER.
- *  - Egresos  (OUT): banco HABER / diferencia DEBE (asiento invertido).
- * Cada dirección tiene su propio origen de emisión (DIF_MENOR /
- * DIF_MENOR_EGRESO), así el conteo y los "Emitidos" no se mezclan.
+ * Tab "Diferencias y comisiones" de Consolidados (ex "Dif menor a 100").
+ * Muestra movimientos solo-banco como asiento contable Debe/Haber automático,
+ * en 3 modos con emisión independiente (el conteo y los Emitidos no se mezclan):
+ *  - Ingresos (IN ≤ umbral):  banco DEBE / diferencia HABER. Origen DIF_MENOR.
+ *  - Egresos  (OUT ≤ umbral): banco HABER / diferencia DEBE. Origen DIF_MENOR_EGRESO.
+ *  - Comisiones (OUT sin contraparte, glosa comisión/cargo, cualquier monto):
+ *    banco HABER / rubro comisión DEBE. Origen COMISION.
  *
- * El umbral y el rubro destino son editables desde Configuración.
+ * Umbral y ambos rubros destino son editables desde Configuración.
  */
 export function DifMenorView() {
   const today = todayIso();
@@ -54,10 +56,15 @@ export function DifMenorView() {
   const [from, setFrom] = useState<string>(monthStart);
   const [to, setTo] = useState<string>(today);
   const [accountId, setAccountId] = useState<string>("");
-  const [direction, setDirection] = useState<"IN" | "OUT">("IN");
+  const [modo, setModo] = useState<Modo>("ingresos");
 
-  const esEgreso = direction === "OUT";
-  const origen: OrigenDerivado = esEgreso ? "DIF_MENOR_EGRESO" : "DIF_MENOR";
+  const esEgreso = modo === "egresos";
+  const esComision = modo === "comisiones";
+  const origen: OrigenDerivado = esComision
+    ? "COMISION"
+    : esEgreso
+      ? "DIF_MENOR_EGRESO"
+      : "DIF_MENOR";
 
   const [data, setData] = useState<DifMenorResponse | null>(null);
   const [preview, setPreview] = useState<{ options: Asi1Options; filename: string } | null>(null);
@@ -66,7 +73,9 @@ export function DifMenorView() {
   async function load() {
     setLoading(true);
     try {
-      const p = new URLSearchParams({ from, to, direction });
+      const p = new URLSearchParams({ from, to });
+      p.set("direction", modo === "ingresos" ? "IN" : "OUT");
+      if (esComision) p.set("modo", "comision");
       if (accountId) p.set("accountId", accountId);
       const res = await fetch(`/api/consolidados/dif-menor?${p}`);
       if (!res.ok) {
@@ -82,7 +91,7 @@ export function DifMenorView() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to, accountId, direction]);
+  }, [from, to, accountId, modo]);
 
   const totals = useMemo(() => {
     if (!data) return { debe: 0n, haber: 0n };
@@ -94,10 +103,13 @@ export function DifMenorView() {
 
   function buildAsiento(): { options: Asi1Options; filename: string } | null {
     if (!data || data.rows.length === 0) return null;
+    const descripcion = esComision
+      ? `Comisiones bancarias ${formatDate(from)} al ${formatDate(to)}`
+      : `Diferencias menores ${esEgreso ? "egresos " : ""}${formatDate(from)} al ${formatDate(to)}`;
     return {
       options: {
         fecha: to,
-        descripcion: `Diferencias menores ${esEgreso ? "egresos " : ""}${formatDate(from)} al ${formatDate(to)}`,
+        descripcion,
         lineas: data.rows.map((r) => ({
           rubro: r.rubro ?? "",
           detalle: pickDescripcion(r.cliente, r.glosa, r.detalle),
@@ -105,7 +117,9 @@ export function DifMenorView() {
           haber: r.haber,
         })),
       },
-      filename: `dif_menor_${esEgreso ? "egreso_" : ""}${from}_${to}`,
+      filename: esComision
+        ? `comisiones_${from}_${to}`
+        : `dif_menor_${esEgreso ? "egreso_" : ""}${from}_${to}`,
     };
   }
 
@@ -122,9 +136,10 @@ export function DifMenorView() {
     const a = buildAsiento();
     if (!a || !data) return;
     const refIds = Array.from(new Set(data.rows.map((r) => r.bankMovementId)));
+    const que = esComision ? "comisión(es) bancaria(s)" : "diferencia(s) menor(es)";
     if (
       !confirm(
-        `Se emitirán ${refIds.length} diferencia(s) menor(es) como un documento con folio nuevo. ` +
+        `Se emitirán ${refIds.length} ${que} como un documento con folio nuevo. ` +
           `Saldrán de esta vista y quedarán en "Emitidos" (re-descargables, deshacer disponible). ¿Continuar?`,
       )
     )
@@ -144,26 +159,28 @@ export function DifMenorView() {
   const movimientosCount = data ? data.rows.length / 2 : 0;
   const threshold = data?.settings.threshold ?? 100;
 
+  const modoBtn = (m: Modo, label: string, title?: string) => (
+    <button
+      onClick={() => {
+        setModo(m);
+        setAccountId("");
+      }}
+      className={`px-3 py-1.5 font-semibold ${modo === m ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
+      title={title}
+    >
+      {label}
+    </button>
+  );
+
   const dirToggle = (
     <div className="inline-flex rounded-md border border-border-soft overflow-hidden text-sm">
-      <button
-        onClick={() => {
-          setDirection("IN");
-          setAccountId("");
-        }}
-        className={`px-3 py-1.5 font-semibold ${!esEgreso ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
-      >
-        Ingresos
-      </button>
-      <button
-        onClick={() => {
-          setDirection("OUT");
-          setAccountId("");
-        }}
-        className={`px-3 py-1.5 font-semibold ${esEgreso ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
-      >
-        Egresos
-      </button>
+      {modoBtn("ingresos", "Ingresos")}
+      {modoBtn("egresos", "Egresos")}
+      {modoBtn(
+        "comisiones",
+        "Comisiones",
+        "Comisiones y cargos del propio banco (sin contraparte): asiento automático Debe rubro comisión / Haber banco",
+      )}
     </div>
   );
 
@@ -224,7 +241,15 @@ export function DifMenorView() {
           ))}
         </select>
         <span className="text-xs text-text-muted">
-          Umbral actual: <strong>{formatMoney(threshold)}</strong>
+          {esComision ? (
+            <>
+              Rubro comisión: <strong>{data?.settings.rubroComision ?? 1503}</strong>
+            </>
+          ) : (
+            <>
+              Umbral actual: <strong>{formatMoney(threshold)}</strong>
+            </>
+          )}
           {hasRows && (
             <>
               {" · "}
@@ -266,7 +291,9 @@ export function DifMenorView() {
         )}
         {!loading && !hasRows && (
           <div className="text-center py-8 text-sm text-text-muted">
-            No hay diferencias menores {esEgreso ? "de egreso" : "de ingreso"} en este rango.
+            {esComision
+              ? "No hay comisiones bancarias por emitir en este rango."
+              : `No hay diferencias menores ${esEgreso ? "de egreso" : "de ingreso"} en este rango.`}
           </div>
         )}
         {!loading && hasRows && (

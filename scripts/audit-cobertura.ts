@@ -21,7 +21,7 @@
 import { PrismaClient } from "@prisma/client";
 import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
 import { isTransbank } from "@/lib/transbank/detect";
-import { getDifMenorSettings, isDifMenor } from "@/lib/dif-menor/detect";
+import { getDifMenorSettings, isDifMenor, isComisionBancaria } from "@/lib/dif-menor/detect";
 import { isUsoParcialAccount } from "@/lib/cuentas/uso-parcial";
 import { matchMirror, type BankMovementForMatch } from "@/lib/internos/match";
 
@@ -88,7 +88,8 @@ async function main() {
     if (paired.has(b.id)) hits.push("traspaso");
     if (isUsoParcialAccount(b.account)) hits.push("no_relevante");
     if (b.egresoConciliacionLinks.some((l) => l.conciliacion && CONCILIADO.has(l.conciliacion.status))) hits.push("egreso");
-    if (isDifMenor(b, dif.threshold)) hits.push("dif_menor");
+    if (isComisionBancaria(b)) hits.push("comision");
+    else if (isDifMenor(b, dif.threshold)) hits.push("dif_menor");
     if (b.asientoManual?.estado === "GENERADO") hits.push("asiento_manual");
 
     if (hits.length > 1) {
@@ -106,6 +107,7 @@ async function main() {
       : hits.includes("traspaso") ? "traspaso"
       : hits.includes("no_relevante") ? "no_relevante"
       : hits.includes("egreso") ? "egreso"
+      : hits.includes("comision") ? "comision"
       : hits.includes("dif_menor") ? "dif_menor"
       : hits.includes("asiento_manual") ? "asiento_manual"
       : "BRECHA";

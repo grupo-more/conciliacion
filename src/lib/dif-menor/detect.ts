@@ -1,27 +1,31 @@
 /**
- * Detección de "diferencias menores" en cartolas bancarias.
+ * Detección del módulo "Diferencias y comisiones" (ex "Dif menor a 100").
+ * Dos poblaciones de movimientos solo-banco que se resuelven con asiento
+ * automático (nunca tendrán contraparte en Tesorería):
  *
- * Patrón: clientes que hacen transferencias chicas (de $1, $50, $100) como
- * prueba para verificar que están usando la cuenta correcta antes de mandar
- * la transferencia real. Esa plata entra al banco como un IN pero NO tiene
- * contraparte en Tesorería (no es una venta), así que queda eternamente
- * "sin matchear" y ensucia la conciliación.
+ * 1) DIFERENCIAS MENORES: transferencias chicas (|monto| ≤ umbral) que los
+ *    clientes hacen como prueba antes de mandar la transferencia real.
+ *    Asiento: Debe rubro cuenta / Haber rubroDiferencia (2050); egresos
+ *    invertido.
  *
- * El módulo "Dif menor a 100" arma un asiento contable directo:
- *   Debe rubro de la cuenta (inferido del nombre del catálogo)
- *   Haber rubro 2050 (diferencia, configurable)
+ * 2) COMISIONES BANCARIAS: cargos del propio banco (comisión, mantención,
+ *    impuesto, IVA, cobros) — OUT SIN contraparte cuya glosa matchea
+ *    COMISION_RE. Asiento: Debe rubroComision (1503) / Haber rubro cuenta.
  *
- * El umbral (default 100, inclusivo) y el rubro destino son editables desde
- * Configuración → tab "Dif menor a 100".
+ * Umbral y los dos rubros destino son editables desde Configuración →
+ * "Diferencias y comisiones". Un OUT chico que matchea comisión se trata como
+ * COMISIÓN (tiene prioridad sobre dif menor).
  */
 
 import { prisma } from "@/lib/db";
+import { COMISION_RE } from "@/lib/reportes/classify";
 
 export const DIF_MENOR_SETTINGS_ID = "default";
 
 export interface DifMenorSettings {
   threshold: number;
   rubroDiferencia: number;
+  rubroComision: number;
 }
 
 /**
@@ -32,11 +36,29 @@ export async function getDifMenorSettings(): Promise<DifMenorSettings> {
   const row = await prisma.difMenorSettings.findUnique({
     where: { id: DIF_MENOR_SETTINGS_ID },
   });
-  if (!row) return { threshold: 100, rubroDiferencia: 2050 };
+  if (!row) return { threshold: 100, rubroDiferencia: 2050, rubroComision: 1503 };
   return {
     threshold: row.threshold,
     rubroDiferencia: row.rubroDiferencia,
+    rubroComision: row.rubroComision,
   };
+}
+
+/**
+ * Predicado JS puro: el movimiento es una COMISIÓN/cargo del propio banco.
+ * Solo cargos (OUT) SIN contraparte (las comisiones nunca traen RUT/nombre;
+ * una transferencia real sí — es la salvaguarda contra falsos positivos del
+ * patrón amplio) cuya glosa matchea COMISION_RE.
+ */
+export function isComisionBancaria(m: {
+  direction: string;
+  description: string | null;
+  counterpartyRut?: string | null;
+  counterpartyName?: string | null;
+}): boolean {
+  if (m.direction !== "OUT") return false;
+  if ((m.counterpartyRut ?? "").trim() || (m.counterpartyName ?? "").trim()) return false;
+  return COMISION_RE.test(m.description ?? "");
 }
 
 /**

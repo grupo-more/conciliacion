@@ -7,10 +7,12 @@ import { denyUnless } from "@/lib/perms";
 
 /**
  * GET  /api/dif-menor-settings → devuelve el setting actual (1 row).
- * PATCH /api/dif-menor-settings → actualiza threshold y/o rubroDiferencia.
+ * PATCH /api/dif-menor-settings → actualiza threshold, rubroDiferencia y/o
+ *        rubroComision.
  *
- * El módulo "Dif menor a 100" usa este setting para decidir qué movimientos
- * son "diferencias chicas" y a qué rubro contable los manda en el asiento.
+ * El módulo "Diferencias y comisiones" usa este setting para decidir qué
+ * movimientos son diferencias chicas / comisiones bancarias y a qué rubros
+ * contables los manda en el asiento.
  */
 export async function GET() {
   const session = await getSession();
@@ -31,6 +33,7 @@ export async function GET() {
   return NextResponse.json({
     threshold: row.threshold,
     rubroDiferencia: row.rubroDiferencia,
+    rubroComision: row.rubroComision,
     updatedAt: row.updatedAt.toISOString(),
   });
 }
@@ -38,6 +41,7 @@ export async function GET() {
 const patchSchema = z.object({
   threshold: z.number().int().positive().max(100_000_000).optional(),
   rubroDiferencia: z.number().int().positive().optional(),
+  rubroComision: z.number().int().positive().optional(),
 });
 
 export async function PATCH(req: Request) {
@@ -57,38 +61,35 @@ export async function PATCH(req: Request) {
     );
   }
 
-  const { threshold, rubroDiferencia } = parsed.data;
+  const { threshold, rubroDiferencia, rubroComision } = parsed.data;
 
-  // Validar que el rubro existe en RubroLabel (si se pasó).
-  if (rubroDiferencia !== undefined) {
+  // Validar que los rubros existan en RubroLabel (si se pasaron).
+  for (const rubro of [rubroDiferencia, rubroComision]) {
+    if (rubro === undefined) continue;
     const exists = await prisma.rubroLabel.findUnique({
-      where: { rubro: rubroDiferencia },
+      where: { rubro },
       select: { rubro: true },
     });
     if (!exists) {
-      return NextResponse.json(
-        { error: `El rubro ${rubroDiferencia} no existe` },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: `El rubro ${rubro} no existe` }, { status: 400 });
     }
   }
 
+  const cambios = {
+    ...(threshold !== undefined ? { threshold } : {}),
+    ...(rubroDiferencia !== undefined ? { rubroDiferencia } : {}),
+    ...(rubroComision !== undefined ? { rubroComision } : {}),
+  };
   const updated = await prisma.difMenorSettings.upsert({
     where: { id: DIF_MENOR_SETTINGS_ID },
-    update: {
-      ...(threshold !== undefined ? { threshold } : {}),
-      ...(rubroDiferencia !== undefined ? { rubroDiferencia } : {}),
-    },
-    create: {
-      id: DIF_MENOR_SETTINGS_ID,
-      ...(threshold !== undefined ? { threshold } : {}),
-      ...(rubroDiferencia !== undefined ? { rubroDiferencia } : {}),
-    },
+    update: cambios,
+    create: { id: DIF_MENOR_SETTINGS_ID, ...cambios },
   });
 
   return NextResponse.json({
     threshold: updated.threshold,
     rubroDiferencia: updated.rubroDiferencia,
+    rubroComision: updated.rubroComision,
     updatedAt: updated.updatedAt.toISOString(),
   });
 }

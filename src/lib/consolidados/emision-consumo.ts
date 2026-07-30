@@ -12,6 +12,7 @@ export async function consumedRefIds(
     | "ABONO_TRANSBANK"
     | "DIF_MENOR"
     | "DIF_MENOR_EGRESO"
+    | "COMISION"
     | "TRASPASOS_INTERNOS"
     | "EGRESOS_TERCEROS"
     | "ABONO_CONCILIADO",

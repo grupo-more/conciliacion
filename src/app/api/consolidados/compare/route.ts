@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@prisma/client";
-import { getDifMenorSettings } from "@/lib/dif-menor/detect";
+import { getDifMenorSettings, isComisionBancaria } from "@/lib/dif-menor/detect";
 import { parseGlosa } from "@/lib/consolidados/glosa";
 import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
 import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
@@ -170,6 +170,12 @@ export async function GET(req: Request) {
   // Defensivo: si no hay entidades cargadas o el filtro esta apagado,
   // bankMovements queda igual a la query original — cero impacto.
   let bankMovements = bankMovementsRaw;
+  // Comisiones/cargos del propio banco: tienen asiento automático en
+  // "Diferencias y comisiones" y jamás tendrán contraparte en Tesorería —
+  // fuera de Comparar. (Regex sobre glosa: no expresable en el where.)
+  if (direction === "OUT") {
+    bankMovements = bankMovements.filter((bm) => !isComisionBancaria(bm));
+  }
   if (hideInternal) {
     try {
       const entidades = await loadEntidadesInternas(prisma);

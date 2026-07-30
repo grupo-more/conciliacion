@@ -48,10 +48,13 @@ export interface MovementDTO {
    *  Estos movimientos no se concilian con Tesorería — tienen su propio asiento
    *  en el tab "Abono Transbank" de Consolidados. */
   transbank: boolean;
-  /** True si el movimiento es una "diferencia menor" (IN ≤ threshold configurable,
-   *  excluyendo Transbank). Tiene su propio asiento en el tab "Dif menor a 100"
-   *  de Consolidados. Mutuamente excluyente con transbank. */
+  /** True si el movimiento es una "diferencia menor" (|monto| ≤ threshold
+   *  configurable, excluyendo Transbank y comisiones). Tiene su propio asiento
+   *  en la tab "Diferencias y comisiones" de Consolidados. */
   difMenor: boolean;
+  /** True si es una comisión/cargo del propio banco (OUT sin contraparte, glosa
+   *  matchea el patrón). Asiento automático en "Diferencias y comisiones". */
+  comision: boolean;
   /** True si la cuenta es de "uso parcial": solo sus traspasos internos importan
    *  (viven en Traspasos internos). El resto NO cuenta como sin conciliar. */
   noRelevante: boolean;

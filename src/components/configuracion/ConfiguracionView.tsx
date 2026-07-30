@@ -61,7 +61,7 @@ export function ConfiguracionView({ user }: Props) {
                 Mapeo de cuentas
               </TabButton>
               <TabButton active={tab === "dif-menor"} onClick={() => setTab("dif-menor")}>
-                Dif menor a 100
+                Diferencias y comisiones
               </TabButton>
               <TabButton
                 active={tab === "abonos-transbank"}

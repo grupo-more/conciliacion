@@ -68,6 +68,7 @@ export interface BancoResponse {
       traspasos: AmountCell;
       egresos: AmountCell;
       difMenor: AmountCell;
+      comision: AmountCell;
       asientoManual: AmountCell;
       noRelevante: AmountCell;
     };
