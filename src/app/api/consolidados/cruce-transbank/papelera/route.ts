@@ -9,12 +9,16 @@ import { denyUnless } from "@/lib/perms";
  * Papelera de la cuadratura Transbank: pares cuadrados apartados para que NO
  * entren al asiento. Mientras el row exista, el par queda fuera de "por cuadrar".
  *
- * GET    → lista los apartados (con flag recuperable según expiresAt).
- * POST   → apartar un par (lo manda a la papelera, 30 días de ventana).
- * DELETE ?id=  → restaurar (solo dentro de la ventana; vuelve a "por cuadrar").
+ * Los apartados NO expiran: son restaurables siempre (decisión jul-2026; antes
+ * había ventana de 30 días). `expiresAt` se sigue escribiendo solo como dato
+ * histórico — nada lo consulta.
+ *
+ * GET    → lista los apartados.
+ * POST   → apartar un par (lo manda a la papelera).
+ * DELETE ?id=  → restaurar (vuelve a "por cuadrar").
  */
 
-const DIAS_VENTANA = 30;
+const DIAS_VENTANA = 30; // informativo: solo alimenta expiresAt (sin efecto)
 
 export async function GET() {
   const session = await getSession();
@@ -24,7 +28,6 @@ export async function GET() {
     orderBy: { createdAt: "desc" },
     take: 2000,
   });
-  const now = Date.now();
   return NextResponse.json({
     apartados: rows.map((r) => ({
       id: r.id,
@@ -39,8 +42,8 @@ export async function GET() {
       montoComision: r.montoComision.toString(),
       motivo: r.motivo,
       createdAt: r.createdAt.toISOString(),
-      expiresAt: r.expiresAt.toISOString(),
-      recuperable: r.expiresAt.getTime() > now,
+      // Sin expiración: todo apartado es restaurable mientras exista.
+      recuperable: true,
     })),
   });
 }
@@ -115,14 +118,6 @@ export async function DELETE(req: Request) {
 
   const row = await prisma.cuadraturaTransbankApartado.findUnique({ where: { id } });
   if (!row) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-
-  // Pasada la ventana, el apartado es definitivo: ya no se puede restaurar.
-  if (row.expiresAt.getTime() <= Date.now()) {
-    return NextResponse.json(
-      { error: "Venció la ventana de restauración. Este apartado es definitivo." },
-      { status: 409 },
-    );
-  }
 
   await prisma.cuadraturaTransbankApartado.delete({ where: { id } });
   return NextResponse.json({ ok: true });

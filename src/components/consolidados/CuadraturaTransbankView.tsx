@@ -106,8 +106,6 @@ interface Apartado {
   montoComision: string;
   motivo: string | null;
   createdAt: string;
-  expiresAt: string;
-  recuperable: boolean;
 }
 
 function money(s: string | null) {
@@ -830,8 +828,8 @@ function PapeleraBlock({
   if (apartados.length === 0)
     return (
       <div className="p-4 text-sm text-text-muted">
-        La papelera está vacía. Los movimientos que apartes desde el desglose aparecen acá (con 30 días para
-        restaurarlos).
+        La papelera está vacía. Los movimientos que apartes desde el desglose aparecen acá, restaurables en
+        cualquier momento.
       </div>
     );
   return (
@@ -839,19 +837,20 @@ function PapeleraBlock({
       <table className="w-full text-sm">
         <thead className="bg-bg-soft text-xs uppercase tracking-wider text-text-muted">
           <tr>
-            <th className="px-3 py-2 text-left">Apartado</th>
+            <th className="px-3 py-2 text-left" title="Fecha de la operación (POS)">Fecha mov.</th>
+            <th className="px-3 py-2 text-left" title="Fecha en que se envió a la papelera">Apartado el</th>
             <th className="px-3 py-2 text-left">Sucursal</th>
             <th className="px-3 py-2 text-left">OP / Boleta</th>
             <th className="px-3 py-2 text-right">Dynatech</th>
             <th className="px-3 py-2 text-right">Transbank</th>
             <th className="px-3 py-2 text-left">Motivo</th>
-            <th className="px-3 py-2 text-left">Estado</th>
             <th className="px-3 py-2 text-center">Acción</th>
           </tr>
         </thead>
         <tbody>
           {apartados.map((a) => (
             <tr key={a.id} className="border-t border-border-soft/60 hover:bg-bg-soft/40">
+              <td className="px-3 py-2 whitespace-nowrap">{a.fecha ? formatDate(a.fecha) : "—"}</td>
               <td className="px-3 py-2 whitespace-nowrap text-text-muted">{formatDate(a.createdAt)}</td>
               <td className="px-3 py-2 whitespace-nowrap">
                 {a.sucursalName ?? `#${a.sucursalId}`}
@@ -865,19 +864,8 @@ function PapeleraBlock({
               <td className="px-3 py-2 max-w-[220px] truncate" title={a.motivo ?? ""}>
                 {a.motivo || <span className="text-text-dim">—</span>}
               </td>
-              <td className="px-3 py-2 whitespace-nowrap">
-                {a.recuperable ? (
-                  <span className="text-xs text-text-muted">
-                    Recuperable hasta <b>{formatDate(a.expiresAt)}</b>
-                  </span>
-                ) : (
-                  <span className="inline-block rounded-full bg-zinc-100 text-zinc-700 border border-zinc-200 px-2 py-0.5 text-[11px] font-semibold">
-                    Definitivo
-                  </span>
-                )}
-              </td>
               <td className="px-3 py-2 text-center whitespace-nowrap">
-                {a.recuperable && onRestaurar ? (
+                {onRestaurar ? (
                   <button
                     onClick={() => onRestaurar(a.id)}
                     disabled={busy}

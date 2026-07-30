@@ -139,7 +139,10 @@ export function TraspasosInternosView() {
           // XX.XXX.XXX-X" — sin valor en el documento. La descripción correcta
           // de cada línea es la CUENTA (banco · titular · n°), igual que la
           // columna Detalle de la vista.
-          detalle: r.detalle || pickDescripcion(r.contraparte, r.glosa, r.detalle),
+          // La fecha del movimiento va CONCATENADA a la descripción (pedido
+          // explícito: no agrandar la tabla con otra columna). Así también
+          // queda en el Excel de gestión y en el snapshot de la emisión.
+          detalle: `${r.detalle || pickDescripcion(r.contraparte, r.glosa, r.detalle)} · ${formatDate(r.fecha)}`,
           debe: r.debe,
           haber: r.haber,
         })),
