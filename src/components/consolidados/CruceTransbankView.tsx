@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatMoney, formatDate } from "@/lib/format";
 import { CuadraturaTransbankView } from "./CuadraturaTransbankView";
+import { AbonosConciliadosView } from "./AbonosConciliadosView";
 import { usePermisos } from "@/lib/use-permisos";
 
 type Estado = "cuadrado" | "pos_sin_settlement" | "settlement_sin_pos";
@@ -60,7 +61,7 @@ export function CruceTransbankView() {
   const [to, setTo] = useState<string>(todayIso());
   const [sucursalId, setSucursalId] = useState<string>("");
   const [estado, setEstado] = useState<Estado | "">("");
-  const [mode, setMode] = useState<"movimientos" | "asiento">("movimientos");
+  const [mode, setMode] = useState<"movimientos" | "asiento" | "abonos">("movimientos");
 
   const [data, setData] = useState<CruceResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -86,6 +87,36 @@ export function CruceTransbankView() {
       else {
         const j = await res.json().catch(() => ({}));
         setBanner({ kind: "err", msg: j.error || "Error al desvincular" });
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Deriva un abono/cargo ajeno a la empresa (Settlement sin POS que jamás
+  // tendrá POS) a la subtab "Abonos conciliados" (asiento directo Debe/Haber).
+  async function onAbonoConciliado(row: CruceRow) {
+    if (!row.transbankSaleId) return;
+    if (
+      !confirm(
+        "¿Marcar este abono como AJENO a la empresa? Se moverá a la subtab \"Abonos conciliados\" " +
+          "para contabilizarlo directo Debe/Haber (reversible con \"Devolver\").",
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/consolidados/cruce-transbank/abonos-conciliados", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transbankSaleIds: [row.transbankSaleId] }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setBanner({ kind: "ok", msg: j.mensaje || "Abono movido a Abonos conciliados." });
+        load();
+      } else {
+        setBanner({ kind: "err", msg: j.error || "Error al mover el abono" });
       }
     } finally {
       setBusy(false);
@@ -173,6 +204,13 @@ export function CruceTransbankView() {
         >
           Conciliados (asiento)
         </button>
+        <button
+          onClick={() => setMode("abonos")}
+          className={`px-3 py-1.5 font-semibold ${mode === "abonos" ? "bg-brand text-white" : "bg-white text-text-muted hover:bg-bg-soft"}`}
+          title="Abonos/cargos de Transbank ajenos a la empresa (sin POS): asiento directo Debe/Haber"
+        >
+          Abonos conciliados
+        </button>
       </div>
 
       {/* Filtros + resumen (estilo egresos) */}
@@ -252,7 +290,9 @@ export function CruceTransbankView() {
         </div>
       )}
 
-      {mode === "asiento" ? (
+      {mode === "abonos" ? (
+        <AbonosConciliadosView from={from} to={to} sucursalId={sucursalId} />
+      ) : mode === "asiento" ? (
         <CuadraturaTransbankView from={from} to={to} sucursalId={sucursalId} />
       ) : (
         <>
@@ -365,13 +405,23 @@ export function CruceTransbankView() {
                         </button>
                       )}
                       {can("conciliar") && r.estado === "settlement_sin_pos" && (
-                        <button
-                          onClick={() => setPosFicticioTarget(r)}
-                          className="text-brand hover:underline text-xs"
-                          title="Crear un POS ficticio (manual) para cuadrar este abono"
-                        >
-                          Crear POS
-                        </button>
+                        <>
+                          <button
+                            onClick={() => setPosFicticioTarget(r)}
+                            className="text-brand hover:underline text-xs"
+                            title="Crear un POS ficticio (manual) para cuadrar este abono"
+                          >
+                            Crear POS
+                          </button>
+                          <button
+                            onClick={() => onAbonoConciliado(r)}
+                            disabled={busy}
+                            className="ml-2 text-fuchsia-700 hover:underline text-xs disabled:opacity-50"
+                            title="Abono/cargo ajeno a la empresa (jamás tendrá POS): moverlo a la subtab Abonos conciliados para contabilizarlo directo Debe/Haber"
+                          >
+                            Abono conciliado
+                          </button>
+                        </>
                       )}
                       {can("conciliar") && r.estado === "cuadrado" && r.ficticio && (
                         <button

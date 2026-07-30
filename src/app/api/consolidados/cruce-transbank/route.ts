@@ -33,7 +33,9 @@ export async function GET(req: Request) {
       orderBy: { fecha: "desc" },
     }),
     prisma.transbankSale.findMany({
-      where: { fechaVenta: { gte: from, lt: to } },
+      // Excluye los "Abonos conciliados" (abonos/cargos ajenos a la empresa,
+      // marcados a mano): tienen asiento propio en su subtab, no se cruzan.
+      where: { fechaVenta: { gte: from, lt: to }, abonoConciliadoAt: null },
       orderBy: { fechaVenta: "desc" },
     }),
     prisma.cruceTransbankLink.findMany({

@@ -19,6 +19,7 @@ import { Asi1PreviewModal } from "./Asi1Preview";
 export type OrigenDerivado =
   | "OK"
   | "ABONO_TRANSBANK"
+  | "ABONO_CONCILIADO"
   | "DIF_MENOR"
   | "DIF_MENOR_EGRESO"
   | "TRASPASOS_INTERNOS"

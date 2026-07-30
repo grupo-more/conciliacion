@@ -457,6 +457,16 @@ model DifMenorSettings {
   updatedAt       DateTime @updatedAt @map("updated_at")
 }
 
+// Rubros del asiento de "Abonos conciliados" (Cruce Transbank): abonos/cargos
+// de Transbank ajenos a la empresa, contabilizados Debe rubroDebe / Haber
+// rubroHaber por el neto (totalAbono). Editables en Configuración.
+model AbonoConciliadoSettings {
+  id        String   @id @default("default")
+  rubroDebe  Int     @default(200)  @map("rubro_debe")
+  rubroHaber Int     @default(1403) @map("rubro_haber")
+  updatedAt DateTime @updatedAt @map("updated_at")
+}
+
 // ============================ Transbank ============================
 //
 // Dos fuentes nuevas que se cuadran entre si en la tab "Cruce Transbank":
@@ -517,9 +527,18 @@ model TransbankSale {
   rawRow          Json     @map("raw_row")
   createdAt       DateTime @default(now()) @map("created_at")
 
+  // "Abono conciliado": abono/cargo de Transbank AJENO a la operación de la
+  // empresa (jamás tendrá POS). Se identifica a mano en Cruce Transbank →
+  // Movimientos y pasa a la subtab "Abonos conciliados", donde se contabiliza
+  // directo Debe/Haber contra los rubros de AbonoConciliadoSettings (neto).
+  // Reversible. Mientras esté marcado queda fuera del cruce y la cuadratura.
+  abonoConciliadoAt   DateTime? @map("abono_conciliado_at")
+  abonoConciliadoById String?   @map("abono_conciliado_by_id")
+
   @@index([sucursalId, fechaVenta])
   @@index([numeroBoleta])
   @@index([montoVenta])
+  @@index([abonoConciliadoAt])
 }
 
 // Registro POS de una venta con tarjeta (feed /api/tbk-tesoreria). Mismo

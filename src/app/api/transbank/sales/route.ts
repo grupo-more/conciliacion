@@ -54,7 +54,10 @@ export async function GET(req: Request) {
     prisma.transbankSale.findMany({ where, orderBy: { fechaVenta: "desc" } }),
     prisma.transbankSale.groupBy({ by: ["sucursalId"], orderBy: [{ sucursalId: "asc" }] }),
     prisma.tbkTesoreria.findMany(),
-    prisma.transbankSale.findMany(),
+    // Los "Abonos conciliados" (ajenos a la empresa) NO entran al match: no
+    // pueden robar un POS por el fallback monto+fecha. En el listado cuentan
+    // como conciliados (tienen su asiento propio en Cruce Transbank).
+    prisma.transbankSale.findMany({ where: { abonoConciliadoAt: null } }),
     prisma.cruceTransbankLink.findMany({ select: { tbkTesoreriaId: true, transbankSaleId: true } }),
   ]);
 
@@ -65,6 +68,8 @@ export async function GET(req: Request) {
   // mismo, y no se cruzan boletas recicladas de otra sucursal/fecha.
   const { settlementOnly } = matchCruce(allPos, allSett, manualLinks);
   const sinPos = new Set(settlementOnly.map((s) => s.id));
+  // Un marcado "abono conciliado" no está en settlementOnly (se excluyó del
+  // match), así que cae al lado conciliado — correcto: está tratado.
   const isConciliado = (s: { id: string }) => !sinPos.has(s.id);
 
   const withC = allRows.map((s) => ({ s, conc: isConciliado(s) }));
@@ -117,6 +122,9 @@ export async function GET(req: Request) {
       numeroBoleta: s.numeroBoleta,
       tid: s.tid,
       conciliado: conc,
+      // Marcado como abono/cargo ajeno a la empresa (asiento propio en
+      // Cruce Transbank → Abonos conciliados).
+      abonoConciliado: s.abonoConciliadoAt !== null,
     })),
     facets: {
       sucursales: sucursales

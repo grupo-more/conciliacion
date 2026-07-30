@@ -13,7 +13,8 @@ export async function consumedRefIds(
     | "DIF_MENOR"
     | "DIF_MENOR_EGRESO"
     | "TRASPASOS_INTERNOS"
-    | "EGRESOS_TERCEROS",
+    | "EGRESOS_TERCEROS"
+    | "ABONO_CONCILIADO",
 ): Promise<Set<string>> {
   const rows = await prisma.emisionConsumo.findMany({
     where: { emision: { origen } },

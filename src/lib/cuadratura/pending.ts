@@ -38,7 +38,9 @@ export async function getPendingPairs(
       orderBy: { fecha: "desc" },
     }),
     prisma.transbankSale.findMany({
-      where: { fechaVenta: { gte: from, lt: to } },
+      // Excluye los "Abonos conciliados" (ajenos a la empresa): tienen asiento
+      // propio en su subtab, no entran a la cuadratura.
+      where: { fechaVenta: { gte: from, lt: to }, abonoConciliadoAt: null },
       orderBy: { fechaVenta: "desc" },
     }),
     prisma.cruceTransbankLink.findMany({

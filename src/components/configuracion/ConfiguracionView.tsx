@@ -5,6 +5,7 @@ import { PerfilTab } from "./PerfilTab";
 import { RubrosTab } from "./RubrosTab";
 import { BankAliasesTab } from "./BankAliasesTab";
 import { DifMenorTab } from "./DifMenorTab";
+import { AbonosTransbankTab } from "./AbonosTransbankTab";
 import { EntidadesInternasTab } from "./EntidadesInternasTab";
 import { SucursalesTab } from "./SucursalesTab";
 import { UsuariosPerfilesTab } from "./UsuariosPerfilesTab";
@@ -17,6 +18,7 @@ type Tab =
   | "rubros"
   | "aliases"
   | "dif-menor"
+  | "abonos-transbank"
   | "entidades-internas"
   | "sucursales"
   | "descartes"
@@ -62,6 +64,12 @@ export function ConfiguracionView({ user }: Props) {
                 Dif menor a 100
               </TabButton>
               <TabButton
+                active={tab === "abonos-transbank"}
+                onClick={() => setTab("abonos-transbank")}
+              >
+                Abonos Transbank
+              </TabButton>
+              <TabButton
                 active={tab === "entidades-internas"}
                 onClick={() => setTab("entidades-internas")}
               >
@@ -91,6 +99,7 @@ export function ConfiguracionView({ user }: Props) {
         {verConfig && tab === "rubros" && <RubrosTab />}
         {verConfig && tab === "aliases" && <BankAliasesTab />}
         {verConfig && tab === "dif-menor" && <DifMenorTab />}
+        {verConfig && tab === "abonos-transbank" && <AbonosTransbankTab />}
         {verConfig && tab === "entidades-internas" && <EntidadesInternasTab />}
         {verConfig && tab === "sucursales" && <SucursalesTab />}
         {verConfig && tab === "descartes" && <DescartesTab />}
