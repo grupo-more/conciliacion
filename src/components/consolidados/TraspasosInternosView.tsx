@@ -140,9 +140,11 @@ export function TraspasosInternosView() {
           // de cada línea es la CUENTA (banco · titular · n°), igual que la
           // columna Detalle de la vista.
           // La fecha del movimiento va CONCATENADA a la descripción (pedido
-          // explícito: no agrandar la tabla con otra columna). Así también
-          // queda en el Excel de gestión y en el snapshot de la emisión.
-          detalle: `${r.detalle || pickDescripcion(r.contraparte, r.glosa, r.detalle)} · ${formatDate(r.fecha)}`,
+          // explícito: no agrandar la tabla con otra columna), PRIMERO y con
+          // separador " - " para legibilidad. Así también queda en el Excel de
+          // gestión y en el snapshot de la emisión. La vista previa/impresión
+          // la detectan al inicio y la muestran en negrita.
+          detalle: `${formatDate(r.fecha)} - ${r.detalle || pickDescripcion(r.contraparte, r.glosa, r.detalle)}`,
           debe: r.debe,
           haber: r.haber,
         })),

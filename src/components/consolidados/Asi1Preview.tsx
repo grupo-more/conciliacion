@@ -78,6 +78,18 @@ function esc(s: string): string {
   return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] || c);
 }
 
+/**
+ * Si la descripción empieza con una fecha "dd-mm-yyyy - " (convención de las
+ * tabs que concatenan la fecha del movimiento), la separa para mostrarla en
+ * negrita. El Excel no soporta negrita parcial en la celda: allá va plana.
+ */
+const DETALLE_FECHA_RE = /^(\d{2}-\d{2}-\d{4}) - (.*)$/;
+
+function splitDetalleFecha(detalle: string): { fecha: string; resto: string } | null {
+  const m = detalle.match(DETALLE_FECHA_RE);
+  return m ? { fecha: m[1], resto: m[2] } : null;
+}
+
 /** Abre una ventana con el asiento en HTML e imprime. */
 export function printAsi1(o: Asi1Options) {
   const w = window.open("", "_blank");
@@ -91,19 +103,21 @@ export function printAsi1(o: Asi1Options) {
   const tipo = o.tipoAsiento ?? 0;
   const estado = o.estado ?? "CON";
   const body = rows
-    .map(
-      (r) => `<tr>
+    .map((r) => {
+      const df = splitDetalleFecha(r.detalle);
+      const detalleHtml = df ? `<b>${df.fecha}</b> - ${esc(df.resto)}` : esc(r.detalle);
+      return `<tr>
         <td class="c">${r.linea}</td>
         <td class="c">${esc(r.rubro)}</td>
         <td class="c">${esc(r.cliente)}</td>
-        <td>${esc(r.detalle)}</td>
+        <td>${detalleHtml}</td>
         <td class="c">${r.cotizacion}</td>
         <td class="n">${r.debeME}</td>
         <td class="n">${r.haberME}</td>
         <td class="n">${r.debeMN}</td>
         <td class="n">${r.haberMN}</td>
-      </tr>`,
-    )
+      </tr>`;
+    })
     .join("");
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Asiento</title>
     <style>
@@ -147,6 +161,17 @@ export function printAsi1(o: Asi1Options) {
     <script>window.onload = function(){ window.print(); }</script>
     </body></html>`);
   w.document.close();
+}
+
+/** Descripción de línea: si empieza con "dd-mm-yyyy - ", la fecha va en negrita. */
+function DetalleCell({ detalle }: { detalle: string }) {
+  const df = splitDetalleFecha(detalle);
+  if (!df) return <>{detalle}</>;
+  return (
+    <>
+      <b className="whitespace-nowrap">{df.fecha}</b> - {df.resto}
+    </>
+  );
 }
 
 export function Asi1PreviewModal({
@@ -226,7 +251,9 @@ export function Asi1PreviewModal({
                   <td className="px-2 py-1 text-center">{r.linea}</td>
                   <td className="px-2 py-1 text-center font-mono">{r.rubro}</td>
                   <td className="px-2 py-1 text-center">{r.cliente}</td>
-                  <td className="px-2 py-1">{r.detalle}</td>
+                  <td className="px-2 py-1">
+                    <DetalleCell detalle={r.detalle} />
+                  </td>
                   <td className="px-2 py-1 text-center">{r.cotizacion}</td>
                   <td className="px-2 py-1 text-right font-mono">{r.debeME}</td>
                   <td className="px-2 py-1 text-right font-mono">{r.haberME}</td>
