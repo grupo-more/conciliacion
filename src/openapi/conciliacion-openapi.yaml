@@ -1,0 +1,3835 @@
+openapi: 3.0.3
+info:
+  title: Conciliación — API combinada (conciliacion + movimientos-api)
+  version: "1.0.0"
+  description: |
+    Especificación **machine-readable** generada por ingeniería inversa del código fuente
+    (no existía documentación previa ni anotaciones Scalar/OpenAPI en el repo).
+
+    Cubre dos servicios hermanos:
+
+    1. **conciliacion** — Next.js 14 (App Router). Rutas bajo `src/app/api/**/route.ts`.
+       Autenticación por cookie de sesión JWT (`conciliacion_session`), con un segundo nivel
+       de autorización por "acción" (permisos por perfil, ver `src/lib/perms.ts`).
+    2. **movimientos-api** — Express + mssql (`movimientos-api/src/server.js`). Expone 4
+       feeds de solo lectura que `conciliacion` sincroniza periódicamente (Tesorería/Dynatech,
+       Egresos, Movimientos internos de caja, patas TBK de POS). Auth opcional por API key.
+
+    ### Notas de fidelidad al código
+    - Los `requestBody` se derivan de los `z.object(...)` (Zod) definidos inline en cada
+      `route.ts` (no se encontraron schemas Zod compartidos en una carpeta `lib/validations`;
+      cada ruta define los suyos localmente).
+    - Las respuestas se infieren de los objetos armados antes de `NextResponse.json(...)` y,
+      cuando aplica, de los `select`/`include` de Prisma. Los campos cuya forma exacta depende
+      de un helper no leído en detalle (p.ej. `lib/dashboard/queries.ts`, `lib/consolidados/match.ts`)
+      se marcan explícitamente como **inferidos** en su `description`.
+    - Los montos (`amount`, `monto`, `debe`, `haber`, etc.) viajan como **string** decimal
+      (Prisma `Decimal`/`BigInt` serializados), no como `number`.
+    - No se incluye ningún secreto real; los ejemplos de URLs/API keys de `.env` se muestran
+      como placeholders.
+
+    ### Cómo previsualizar esta especificación en Scalar
+    ```bash
+    npx @scalar/cli document serve docs/conciliacion-openapi.yaml
+    ```
+    o, para embeberla en una página HTML propia:
+    ```html
+    <script id="api-reference" data-url="./conciliacion-openapi.yaml"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    ```
+    Ver también `docs/conciliacion-api.md` para la guía en español y el detalle de los
+    endpoints más críticos.
+
+servers:
+  - url: "https://{host}"
+    description: >-
+      conciliacion (Next.js App Router). Todos los paths /api/** de este documento excepto
+      los marcados explícitamente como movimientos-api.
+    variables:
+      host:
+        default: localhost:3000
+  - url: "http://{host}:{port}"
+    description: >-
+      movimientos-api (Express). Puerto configurable via env PORT (default 5158). Usado
+      internamente por conciliacion para los sync de Tesorería/Egresos/Movimientos/TBK.
+    variables:
+      host:
+        default: 172.16.10.172
+      port:
+        default: "5158"
+
+tags:
+  - name: auth
+    description: Login/logout/sesión (cookie JWT conciliacion_session).
+  - name: admin
+    description: Gestión de usuarios y perfiles de permisos (requiere acción gestionarUsuarios).
+  - name: users
+    description: Autoservicio del usuario autenticado.
+  - name: abono-conciliado-settings
+    description: Configuración del asiento de "abonos Transbank conciliados manualmente".
+  - name: asientos-settings
+    description: Configuración de retención de honorarios usada en asientos manuales.
+  - name: bank-accounts
+    description: Maestro de cuentas bancarias.
+  - name: bank-aliases
+    description: Mapeo de strings de banco (Tesorería) a cuentas bancarias reales.
+  - name: bank-movements
+    description: Movimientos de cartola bancaria (BankMovement) y su descarte.
+  - name: cartolas
+    description: Importación de cartolas bancarias (Excel/PDF), duplicados y reasignación.
+  - name: config
+    description: Maestro de entidades internas (empresas del grupo) para detectar traspasos.
+  - name: consolidados
+    description: Motor de conciliación banco↔Tesorería (matching, overview, resolución manual).
+  - name: consolidados-asientos-manuales
+    description: Asientos manuales (proveedores/clientes) generados a partir de movimientos sin conciliar.
+  - name: consolidados-cruce-transbank
+    description: Cruce entre POS (TBK Tesorería) y liquidaciones Transbank (settlement).
+  - name: consolidados-egresos-terceros
+    description: Conciliación de egresos bancarios contra gastos operativos (EgresoMovement) y Dynatech.
+  - name: dashboard
+    description: KPIs y agregados generales del sistema.
+  - name: descarte-reglas
+    description: Reglas de auto-descarte aplicadas al importar cartolas.
+  - name: dif-menor-settings
+    description: Configuración de umbral de diferencias menores y comisiones bancarias.
+  - name: egresos
+    description: Gastos operativos (EgresoMovement) sincronizados desde movimientos-api.
+  - name: movimientos-caja
+    description: Depósitos/retiros/traspasos de caja sincronizados desde movimientos-api.
+  - name: proveedores-asiento
+    description: Maestro de proveedores usado para derivar la cola "Proveedores" de asientos manuales.
+  - name: reportes
+    description: Reportes de brecha de conciliación (banco y Dynatech sin conciliar).
+  - name: rubros
+    description: Maestro de etiquetas de rubro contable.
+  - name: sucursales
+    description: Maestro de sucursales (usado en prorrateo de asientos).
+  - name: tesoreria
+    description: Movimientos de Tesorería/Dynatech (TesoreriaMovement) y su sincronización.
+  - name: transbank
+    description: Ventas (settlement) Transbank, importación de "Abonos por día" y sync de POS.
+  - name: movimientos-api
+    description: Endpoints del servicio hermano movimientos-api (Express), consumidos por conciliacion.
+
+security:
+  - cookieAuth: []
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: conciliacion_session
+      description: >-
+        JWT (HS256, firmado con JWT_SECRET, expira a los 7 días) seteado por
+        POST /api/auth/login. httpOnly, sameSite=lax. `getSession()` (src/lib/auth.ts) lo
+        decodifica; muchas rutas de mutación además exigen un permiso ("acción") concreto
+        vía `requireAccion`/`denyUnless` (src/lib/perms.ts) — ver el campo `x-accion-requerida`
+        de cada operación.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: >-
+        Opcional en movimientos-api: solo se exige si la variable de entorno API_KEY está
+        seteada en el servidor (config.js). Si no está seteada, el middleware deja pasar
+        cualquier request (excepto que igual se recomienda configurarla en producción).
+
+  parameters:
+    FromDateParam:
+      name: from
+      in: query
+      required: false
+      schema: { type: string, format: date, example: "2026-08-01" }
+      description: Fecha de inicio del rango (YYYY-MM-DD). Default habitual = inicio del mes actual.
+    ToDateParam:
+      name: to
+      in: query
+      required: false
+      schema: { type: string, format: date, example: "2026-08-03" }
+      description: Fecha de fin del rango (YYYY-MM-DD, inclusive). Default habitual = hoy.
+    SinceParam:
+      name: since
+      in: query
+      required: false
+      schema: { type: string, format: date }
+      description: Igual semántica que `from`, usado en endpoints de listado (bank-movements, tesoreria/movements, transbank/*).
+    UntilParam:
+      name: until
+      in: query
+      required: false
+      schema: { type: string, format: date }
+      description: Igual semántica que `to` (internamente se extiende +1 día para hacerlo inclusive).
+    AccountIdParam:
+      name: accountId
+      in: query
+      required: false
+      schema: { type: string, format: uuid }
+    LimitParam:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 200 }
+    OffsetParam:
+      name: offset
+      in: query
+      required: false
+      schema: { type: integer, minimum: 0, default: 0 }
+    QParam:
+      name: q
+      in: query
+      required: false
+      schema: { type: string }
+      description: Búsqueda libre (case-insensitive) sobre los campos de texto relevantes del recurso.
+
+  responses:
+    Unauthorized:
+      description: No autenticado (falta la cookie de sesión o el JWT es inválido/expiró).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: "No autorizado" }
+    Forbidden:
+      description: Autenticado, pero el usuario/perfil no tiene la acción/permiso requerida.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: "No tenés permiso para esta acción (requiere \"Editar configuración\")." }
+    BadRequest:
+      description: Body o query inválido (falla de validación Zod) o violación de una regla de negocio.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: "Datos inválidos", detail: [] }
+    NotFound:
+      description: El recurso referenciado (por id / path param) no existe.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: "No encontrado" }
+    Conflict:
+      description: >-
+        Conflicto: violación de unique constraint (Prisma P2002) o regla de negocio de
+        exclusión mutua (ej. registro ya vinculado/emitido/duplicado).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: "Ya existe un registro con esos datos." }
+    ServerError:
+      description: Error interno no controlado.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { error: "Internal Server Error" }
+    BadGateway:
+      description: >-
+        Falla al llamar a la API externa movimientos-api (Express) durante una sincronización
+        (timeout, HTTP no-ok, respuesta con forma inesperada).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { ok: false, error: "fetch failed" }
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+        detail:
+          description: Detalle opcional (p.ej. issues de Zod) — presente solo en algunos 400.
+          nullable: true
+    OkResponse:
+      type: object
+      properties:
+        ok: { type: boolean, enum: [true] }
+    Money:
+      type: string
+      description: Monto decimal serializado como string (Prisma Decimal/BigInt). Inferencia.
+      example: "125000"
+    IsoDateTime:
+      type: string
+      format: date-time
+    SyncResult:
+      type: object
+      description: Shape común de los endpoints que sincronizan un feed externo (upsert por externalId).
+      properties:
+        ok: { type: boolean }
+        fetchedRows: { type: integer }
+        insertedRows: { type: integer }
+        updatedRows: { type: integer }
+        skippedInvalid: { type: integer }
+        pages: { type: integer }
+        fetchMs: { type: integer }
+        error: { type: string, nullable: true }
+    BankAccount:
+      type: object
+      properties:
+        id: { type: string }
+        bankCode: { type: string }
+        bankName: { type: string }
+        accountNumber: { type: string }
+        displayNumber: { type: string, nullable: true }
+        holderName: { type: string }
+        holderRut: { type: string, nullable: true }
+        currency: { type: string }
+        alias: { type: string, nullable: true }
+        purpose: { type: string, nullable: true, description: "Campo BankAccount, valores no enumerados en el código leído." }
+        isUnassigned: { type: boolean }
+        movementCount: { type: integer, description: "Conteo de BankMovement no descartados en esta cuenta." }
+    EntidadInterna:
+      type: object
+      properties:
+        id: { type: string }
+        rutCanonico: { type: string }
+        rutFormatted: { type: string, description: "Formato con puntos y guion, ej. 77.333.097-2 (solo en GET/POST, no en PATCH)." }
+        nombreCanonico: { type: string }
+        aliases: { type: array, items: { type: string } }
+        rubro: { type: integer, nullable: true }
+        rubroLabel: { type: string, nullable: true, description: "Solo en el listado GET." }
+        notas: { type: string, nullable: true }
+        active: { type: boolean }
+        createdAt: { $ref: "#/components/schemas/IsoDateTime" }
+        updatedAt: { $ref: "#/components/schemas/IsoDateTime" }
+    Rubro:
+      type: object
+      properties:
+        rubro: { type: integer }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        isDifference: { type: boolean }
+        accountId: { type: string, nullable: true }
+        accountLabel: { type: string, nullable: true, description: "Solo en el listado GET." }
+        sucursalId: { type: string, nullable: true }
+        sucursalLabel: { type: string, nullable: true, description: "Solo en el listado GET." }
+        createdAt: { $ref: "#/components/schemas/IsoDateTime" }
+        updatedAt: { $ref: "#/components/schemas/IsoDateTime" }
+    Sucursal:
+      type: object
+      properties:
+        id: { type: string }
+        codigo: { type: integer, nullable: true }
+        nombre: { type: string }
+        headcount: { type: number, description: "Puede ser fraccionado; persiste como Prisma.Decimal." }
+        active: { type: boolean }
+        orden: { type: integer }
+
+paths:
+  # ==========================================================================
+  # AUTH
+  # ==========================================================================
+  /api/auth/login:
+    post:
+      tags: [auth]
+      summary: Iniciar sesión
+      description: >-
+        Autentica con email+password, aplica rate limiting por IP+email, registra auditoría
+        (éxito/fallo/bloqueo) y setea la cookie de sesión JWT `conciliacion_session` (7 días).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Login exitoso. La cookie de sesión viaja en el header Set-Cookie.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      email: { type: string }
+                      name: { type: string, nullable: true }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401":
+          description: Credenciales inválidas (email no existe, usuario inactivo, o password incorrecta — mensaje genérico en los 3 casos).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { error: "Credenciales inválidas" }
+        "429":
+          description: Rate limit de login excedido (por IP+email).
+          headers:
+            Retry-After: { schema: { type: integer } }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/ErrorResponse" }
+                  - type: object
+                    properties: { retryAfterSec: { type: integer } }
+
+  /api/auth/logout:
+    post:
+      tags: [auth]
+      summary: Cerrar sesión
+      description: Borra la cookie de sesión. Funciona con o sin sesión activa; audita el logout si había sesión.
+      security: []
+      responses:
+        "200":
+          description: Siempre 200.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+
+  /api/auth/me:
+    get:
+      tags: [auth]
+      summary: Usuario y permisos efectivos de la sesión actual
+      description: >-
+        Devuelve el usuario de la cookie de sesión junto a sus permisos efectivos, leídos
+        frescos desde BD (el JWT no lleva permisos, para que un cambio de perfil aplique al instante).
+      responses:
+        "200":
+          description: Sesión válida y usuario activo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      email: { type: string }
+                      name: { type: string, nullable: true }
+                  esAdmin: { type: boolean }
+                  perfilNombre: { type: string }
+                  permisos:
+                    type: object
+                    description: "{ modulos: Record<string,boolean>, acciones: Record<string,boolean>, tabs: Record<string,boolean> }"
+        "401":
+          description: Sin sesión, o usuario/perfil ya no activo.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { user: { nullable: true } }
+
+  # ==========================================================================
+  # USERS (self-service)
+  # ==========================================================================
+  /api/users/me/password:
+    patch:
+      tags: [users]
+      summary: Cambiar la contraseña propia
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: { type: string, minLength: 1 }
+                newPassword: { type: string, minLength: 12, maxLength: 200, description: "Mínimo 12 caracteres." }
+      responses:
+        "200":
+          description: Contraseña actualizada (bcrypt cost 10). Registra auditoría auth.password.changed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OkResponse" }
+        "400":
+          description: Body inválido, o newPassword igual a currentPassword.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401":
+          description: Sin sesión, usuario inactivo/inexistente, o currentPassword incorrecta.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  # ==========================================================================
+  # ADMIN (perfiles y usuarios)
+  # ==========================================================================
+  /api/admin/perfiles:
+    get:
+      tags: [admin]
+      summary: Listar perfiles de permisos y catálogos disponibles
+      x-accion-requerida: gestionarUsuarios
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  modulos: { type: array, items: { type: string } }
+                  acciones: { type: array, items: { type: string } }
+                  tabs: { type: array, items: { type: string } }
+                  perfiles:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        nombre: { type: string }
+                        esAdmin: { type: boolean }
+                        permisos: { type: object }
+                        userCount: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [admin]
+      summary: Crear un perfil de permisos
+      x-accion-requerida: gestionarUsuarios
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, permisos]
+              properties:
+                nombre: { type: string, minLength: 1, maxLength: 80 }
+                permisos:
+                  type: object
+                  required: [modulos, acciones]
+                  properties:
+                    modulos: { type: object, additionalProperties: { type: boolean } }
+                    acciones: { type: object, additionalProperties: { type: boolean } }
+                    tabs: { type: object, additionalProperties: { type: boolean } }
+      responses:
+        "201":
+          description: Creado (nunca esAdmin=true vía API).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/OkResponse" }
+                  - type: object
+                    properties: { id: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Ya existe un perfil con ese nombre (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/admin/perfiles/{id}:
+    patch:
+      tags: [admin]
+      summary: Editar nombre y/o permisos de un perfil
+      x-accion-requerida: gestionarUsuarios
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string, minLength: 1, maxLength: 80 }
+                permisos:
+                  type: object
+                  properties:
+                    modulos: { type: object, additionalProperties: { type: boolean } }
+                    acciones: { type: object, additionalProperties: { type: boolean } }
+                    tabs: { type: object, additionalProperties: { type: boolean } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Body inválido, o se intentó cambiar `permisos` de un perfil esAdmin (protegido).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: El nuevo nombre colisiona con otro perfil (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [admin]
+      summary: Eliminar un perfil (no admite perfiles esAdmin ni con usuarios asignados)
+      x-accion-requerida: gestionarUsuarios
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: El perfil es esAdmin, o tiene usuarios asignados (el mensaje incluye la cantidad).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/usuarios:
+    get:
+      tags: [admin]
+      summary: Listar usuarios
+      x-accion-requerida: gestionarUsuarios
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        email: { type: string }
+                        name: { type: string, nullable: true }
+                        active: { type: boolean }
+                        perfilId: { type: string }
+                        perfilNombre: { type: string, nullable: true }
+                        esAdmin: { type: boolean }
+                        createdAt: { $ref: "#/components/schemas/IsoDateTime" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [admin]
+      summary: Crear un usuario
+      x-accion-requerida: gestionarUsuarios
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, perfilId]
+              properties:
+                email: { type: string, format: email }
+                name: { type: string, maxLength: 120, nullable: true }
+                password: { type: string, minLength: 8 }
+                perfilId: { type: string, minLength: 1 }
+      responses:
+        "201":
+          description: Creado (password hasheada con bcrypt, activo por defecto).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: "#/components/schemas/OkResponse" }
+                  - type: object
+                    properties: { id: { type: string } }
+        "400":
+          description: Body inválido o perfilId inexistente.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Email duplicado (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/admin/usuarios/{id}:
+    patch:
+      tags: [admin]
+      summary: Editar nombre/perfil/estado/contraseña de un usuario
+      x-accion-requerida: gestionarUsuarios
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, maxLength: 120, nullable: true }
+                perfilId: { type: string, minLength: 1 }
+                active: { type: boolean }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: >-
+            Body inválido; o auto-desactivación/auto-cambio de perfil; o perfilId inexistente;
+            o la operación dejaría el sistema sin admins activos.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ==========================================================================
+  # ABONO-CONCILIADO-SETTINGS
+  # ==========================================================================
+  /api/abono-conciliado-settings:
+    get:
+      tags: [abono-conciliado-settings]
+      summary: Obtener configuración de rubros del asiento de abonos conciliados (crea el singleton si no existe)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rubroDebe: { type: integer }
+                  rubroHaber: { type: integer }
+                  updatedAt: { $ref: "#/components/schemas/IsoDateTime" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [abono-conciliado-settings]
+      summary: Actualizar rubros Debe/Haber
+      x-accion-requerida: configurar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rubroDebe: { type: integer, minimum: 1 }
+                rubroHaber: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: OK (upsert)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { rubroDebe: { type: integer }, rubroHaber: { type: integer }, updatedAt: { $ref: "#/components/schemas/IsoDateTime" } }
+        "400":
+          description: Body inválido, o el rubro indicado no existe en RubroLabel.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ==========================================================================
+  # ASIENTOS-SETTINGS
+  # ==========================================================================
+  /api/asientos-settings:
+    get:
+      tags: [asientos-settings]
+      summary: Obtener configuración de retención de honorarios
+      responses:
+        "200":
+          description: "OK. Shape inferido (viene de lib/asientos/settings.ts): al menos retencionTasa y retencionRubro."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  retencionTasa: { type: number }
+                  retencionRubro: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [asientos-settings]
+      summary: Actualizar tasa/rubro de retención
+      x-accion-requerida: configurar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                retencionTasa: { type: number, minimum: 0, maximum: 100 }
+                retencionRubro: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: OK (upsert del singleton, aplica por año)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { retencionTasa: { type: number }, retencionRubro: { type: integer } }
+        "400":
+          description: Body inválido o retencionRubro inexistente en RubroLabel.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ==========================================================================
+  # BANK-ACCOUNTS
+  # ==========================================================================
+  /api/bank-accounts:
+    get:
+      tags: [bank-accounts]
+      summary: Listar cuentas bancarias activas (con conteo de movimientos)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items: { $ref: "#/components/schemas/BankAccount" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [bank-accounts]
+      summary: Crear cuenta bancaria
+      x-accion-requerida: configurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bankCode, bankName, accountNumber, holderName]
+              properties:
+                bankCode: { type: string, minLength: 1 }
+                bankName: { type: string, minLength: 1 }
+                accountNumber: { type: string, minLength: 1 }
+                displayNumber: { type: string, nullable: true }
+                holderName: { type: string, minLength: 1 }
+                holderRut: { type: string, nullable: true, description: "Se normaliza con normalizeRut al guardar." }
+                alias: { type: string, nullable: true }
+                currency: { type: string, default: "CLP" }
+      responses:
+        "201":
+          description: Creada
+          content: { application/json: { schema: { $ref: "#/components/schemas/BankAccount" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Ya existe una cuenta con el mismo bankName+accountNumber (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  # ==========================================================================
+  # BANK-ALIASES
+  # ==========================================================================
+  /api/bank-aliases:
+    get:
+      tags: [bank-aliases]
+      summary: Listar alias banco→cuenta y strings de banco sin mapear
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  aliases:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        bancoString: { type: string }
+                        accountId: { type: string }
+                        account: { type: object }
+                        notes: { type: string, nullable: true }
+                        updatedAt: { $ref: "#/components/schemas/IsoDateTime" }
+                  accounts: { type: array, items: { type: object } }
+                  bancosSeen: { type: array, items: { type: string } }
+                  missing: { type: array, items: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [bank-aliases]
+      summary: Crear un alias (mapear un string de banco de Tesorería a una cuenta)
+      x-accion-requerida: configurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bancoString, accountId]
+              properties:
+                bancoString: { type: string, minLength: 1, maxLength: 100 }
+                accountId: { type: string, format: uuid }
+                notes: { type: string, maxLength: 500, nullable: true }
+      responses:
+        "200":
+          description: Creado
+          content:
+            application/json:
+              schema:
+                allOf: [{ $ref: "#/components/schemas/OkResponse" }, { type: object, properties: { id: { type: string } } }]
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: La cuenta referenciada no existe.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "409":
+          description: Ya existe un alias para ese bancoString (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/bank-aliases/{id}:
+    patch:
+      tags: [bank-aliases]
+      summary: Editar a qué cuenta apunta un alias y/o sus notas
+      x-accion-requerida: configurar
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                accountId: { type: string, format: uuid }
+                notes: { type: string, maxLength: 500, nullable: true }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Alias no existe, o accountId referenciado no existe.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [bank-aliases]
+      summary: Eliminar un alias (idempotente)
+      x-accion-requerida: configurar
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Siempre 200 (si el delete falla porque no existe, se silencia y responde ok igual).
+          content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/bank-aliases/auto-detect:
+    post:
+      tags: [bank-aliases]
+      summary: Sugerir (y opcionalmente aplicar) alias automáticos por coincidencia de monto+fecha
+      x-accion-requerida: configurar
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                apply: { type: boolean, default: false, description: "Si es true, crea los alias sin ambigüedad." }
+      responses:
+        "200":
+          description: >-
+            Sugerencias (y aplicación si apply=true). Exige ≥3 coincidencias y >60% de dominancia
+            sobre el segundo candidato; si no, requiresManualConfirm=true.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        bancoString: { type: string }
+                        suggestion:
+                          type: object
+                          nullable: true
+                          properties:
+                            accountId: { type: string }
+                            accountNumber: { type: string }
+                            bankName: { type: string }
+                            matches: { type: integer }
+                            dominance: { type: number }
+                        runnerUp: { type: object, nullable: true }
+                        reason: { type: string }
+                        requiresManualConfirm: { type: boolean }
+                        accountAlreadyUsedBy: { type: array, items: { type: string } }
+                  applied: { type: integer }
+                  skipped: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ==========================================================================
+  # BANK-MOVEMENTS
+  # ==========================================================================
+  /api/bank-movements:
+    get:
+      tags: [bank-movements]
+      summary: Listar movimientos de cartola bancaria (con filtros y resumen opcional)
+      parameters:
+        - { $ref: "#/components/parameters/AccountIdParam" }
+        - { name: direction, in: query, schema: { type: string, enum: [IN, OUT] } }
+        - { $ref: "#/components/parameters/SinceParam" }
+        - { $ref: "#/components/parameters/UntilParam" }
+        - { $ref: "#/components/parameters/QParam" }
+        - { name: minAmount, in: query, schema: { type: string } }
+        - { name: maxAmount, in: query, schema: { type: string } }
+        - { name: onlyUnmatched, in: query, schema: { type: string, enum: ["true"] } }
+        - { name: descartados, in: query, schema: { type: string, enum: [only] }, description: "Si se omite, excluye descartados." }
+        - { name: includeSummary, in: query, schema: { type: string, enum: ["true"] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 200 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 100000, default: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  movements:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        accountId: { type: string }
+                        account: { type: object }
+                        externalId: { type: string }
+                        postDate: { $ref: "#/components/schemas/IsoDateTime" }
+                        transactionDate: { $ref: "#/components/schemas/IsoDateTime" }
+                        amount: { $ref: "#/components/schemas/Money" }
+                        currency: { type: string }
+                        direction: { type: string, enum: [IN, OUT] }
+                        description: { type: string }
+                        balanceAfter: { $ref: "#/components/schemas/Money" }
+                        counterpartyName: { type: string, nullable: true }
+                        counterpartyRut: { type: string, nullable: true }
+                        counterpartyBank: { type: string, nullable: true }
+                        branchLabel: { type: string, nullable: true }
+                        txType: { type: string, nullable: true }
+                        consolidado: { type: object, nullable: true }
+                        egresoConciliado: { type: object, nullable: true }
+                        asientoManual: { type: boolean }
+                        transbank: { type: boolean }
+                        comision: { type: boolean }
+                        difMenor: { type: boolean }
+                        noRelevante: { type: boolean }
+                        descartadoAt: { $ref: "#/components/schemas/IsoDateTime" }
+                  summary:
+                    type: object
+                    nullable: true
+                    description: Solo si includeSummary=true. Totales IN/OUT/conciliados/pendientes/transbank/dif-menor con conteo y suma.
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/bank-movements/descartar:
+    post:
+      tags: [bank-movements]
+      summary: Descartar movimientos bancarios (marca descartadoAt)
+      x-accion-requerida: depurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [movementIds]
+              properties:
+                movementIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 1000 }
+                razon: { type: string, maxLength: 500, nullable: true }
+      responses:
+        "200":
+          description: >-
+            Bloquea movimientos con vínculo a consolidado/egreso/asiento manual/emisión; rompe
+            matches de MovimientoCaja asociados (vuelven a NO_MATCH).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  descartados: { type: integer }
+                  bloqueados:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        fecha: { type: string }
+                        glosa: { type: string }
+                        motivos: { type: array, items: { type: string } }
+                  yaDescartados: { type: array, items: { type: string } }
+                  mensaje: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [bank-movements]
+      summary: Restaurar movimientos previamente descartados
+      x-accion-requerida: depurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [movementIds]
+              properties:
+                movementIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 1000 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { restaurados: { type: integer } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ==========================================================================
+  # CARTOLAS
+  # ==========================================================================
+  /api/cartolas/duplicates:
+    get:
+      tags: [cartolas]
+      summary: Listar grupos de movimientos duplicados en cartola
+      parameters:
+        - { $ref: "#/components/parameters/AccountIdParam" }
+      responses:
+        "200":
+          description: >-
+            Agrupa por (cuenta+día+monto+referencia embebida en la glosa), filtrando por
+            compatibilidad de nombre/RUT. Nunca agrupa filas del mismo statementImportId.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalDuplicateGroups: { type: integer }
+                  highConfidenceGroups: { type: integer }
+                  mediumConfidenceGroups: { type: integer }
+                  totalDuplicateMovements: { type: integer }
+                  excessMovements: { type: integer }
+                  groups:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: { type: string }
+                        accountId: { type: string }
+                        accountLabel: { type: string }
+                        amount: { $ref: "#/components/schemas/Money" }
+                        postDate: { type: string, format: date }
+                        reference: { type: string, nullable: true }
+                        confidence: { type: string, enum: [HIGH, MEDIUM] }
+                        confidenceReason: { type: string }
+                        movements: { type: array, items: { type: object } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/cartolas/duplicates/merge:
+    post:
+      tags: [cartolas]
+      summary: Fusionar un grupo de movimientos duplicados en uno solo
+      x-accion-requerida: depurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [keepId, removeIds]
+              properties:
+                keepId: { type: string, format: uuid }
+                removeIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 10 }
+      responses:
+        "200":
+          description: Transfiere el ConsolidadoLink de los removidos al conservado si corresponde.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean, enum: [true] }
+                  kept: { type: string }
+                  removed: { type: integer }
+                  transferredConsolidadoLink: { type: boolean }
+        "400":
+          description: Datos inválidos, keepId incluido en removeIds, o distinta cuenta/monto entre los movimientos.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Alguno de los ids no existe.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "409":
+          description: keepId y removeIds vinculados a Consolidados distintos.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/cartolas/import:
+    post:
+      tags: [cartolas]
+      summary: Importar una cartola bancaria (Excel o PDF)
+      description: |
+        Endpoint crítico de ingestión. Detecta automáticamente el banco/parser (BCI, Santander,
+        Banco Internacional, Banco de Chile, Mercado Pago) por el layout del archivo (`XLSX.read`
+        + `detectParser` para Excel, o `extractPdfText` + `detectPdfParser` para PDF). Calcula un
+        `dedupKey` por movimiento y lo cruza contra `BankMovement` existentes, `MovimientoDescartado`
+        (histórico durable) y `DescarteRegla` activas (auto-descarte por patrón). Si no es
+        `dryRun`, inserta en transacción (`createMany` con `skipDuplicates`), crea/reutiliza
+        `StatementImport` (dedupe por accountId+fileHash) y dispara `runConsolidados` (motor de
+        matching) tras el insert.
+      x-accion-requerida: importar
+      parameters:
+        - name: dryRun
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: Si es "1", no inserta — solo devuelve el preview.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Archivo .xlsx/.xls o .pdf de la cartola bancaria.
+                forceAccountId:
+                  type: string
+                  format: uuid
+                  description: Override manual de la cuenta destino (opcional).
+      responses:
+        "200":
+          description: Preview (dryRun) o preview+inserción (import real).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preview:
+                    type: object
+                    properties:
+                      parserCode: { type: string }
+                      bankCode: { type: string }
+                      bankName: { type: string }
+                      fileName: { type: string }
+                      fileHash: { type: string }
+                      resolvedAccount:
+                        type: object
+                        properties:
+                          id: { type: string }
+                          bankCode: { type: string }
+                          bankName: { type: string }
+                          accountNumber: { type: string }
+                          displayNumber: { type: string, nullable: true }
+                          holderName: { type: string, nullable: true }
+                          isUnassigned: { type: boolean }
+                          resolutionMethod: { type: string, enum: [DIRECT_MATCH, FILENAME_MATCH, ONLY_BANK_ACCOUNT, FALLBACK_UNASSIGNED] }
+                      periodFrom: { $ref: "#/components/schemas/IsoDateTime" }
+                      periodTo: { $ref: "#/components/schemas/IsoDateTime" }
+                      totals:
+                        type: object
+                        properties:
+                          fileMovements: { type: integer }
+                          toInsert: { type: integer }
+                          duplicatesSameAccount: { type: integer }
+                          duplicatesOtherAccount: { type: integer, description: "Siempre 0 en la implementación actual." }
+                          parseErrors: { type: integer }
+                          autoDescartados: { type: integer }
+                      alreadyImported:
+                        type: object
+                        nullable: true
+                        properties:
+                          importedAt: { $ref: "#/components/schemas/IsoDateTime" }
+                          statementImportId: { type: string }
+                          accountLabel: { type: string }
+                      items:
+                        type: array
+                        description: "Máximo 50 filas (ver itemsTotal para el total real)."
+                        items:
+                          type: object
+                          properties:
+                            status: { type: string, enum: [NEW, DUP_SAME_ACCOUNT, DUP_OTHER_ACCOUNT, ERROR] }
+                            dedupKey: { type: string }
+                            errorReason: { type: string, nullable: true }
+                            duplicateOfAccountLabel: { type: string, nullable: true }
+                            movement:
+                              type: object
+                              properties:
+                                externalId: { type: string }
+                                postDate: { $ref: "#/components/schemas/IsoDateTime" }
+                                transactionDate: { $ref: "#/components/schemas/IsoDateTime" }
+                                amount: { type: number }
+                                currency: { type: string }
+                                direction: { type: string, enum: [IN, OUT] }
+                                description: { type: string }
+                                balanceAfter: { type: number, nullable: true }
+                                counterpartyName: { type: string, nullable: true }
+                                counterpartyRut: { type: string, nullable: true }
+                                counterpartyBank: { type: string, nullable: true }
+                                branchLabel: { type: string, nullable: true }
+                                txType: { type: string, nullable: true }
+                      entidadSuggestion:
+                        type: object
+                        nullable: true
+                        properties:
+                          reason: { type: string, enum: [exact, ambiguous, no-match, no-name] }
+                          match: { type: object, nullable: true }
+                          candidates: { type: array, items: { type: object } }
+                  inserted:
+                    type: object
+                    nullable: true
+                    description: Ausente si dryRun=1.
+                    properties:
+                      statementImportId: { type: string }
+                      rowsInserted: { type: integer }
+        "400":
+          description: Body inválido, falta el archivo, o el archivo no matchea ningún parser conocido.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/cartolas/reassign:
+    post:
+      tags: [cartolas]
+      summary: Reasignar movimientos importados a otra cuenta del mismo banco
+      x-accion-requerida: importar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [movementIds, targetAccountId]
+              properties:
+                movementIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 2000 }
+                targetAccountId: { type: string, format: uuid }
+      responses:
+        "200":
+          description: >-
+            Si el dedupKey ya existe en destino, el movimiento origen se borra como huérfano
+            en vez de duplicarse.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  moved: { type: integer }
+                  deletedAsDuplicate: { type: integer }
+                  targetAccountId: { type: string }
+        "400":
+          description: Datos inválidos, cuenta destino "Sin asignar", o distinto bankCode.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Cuenta destino no existe, o no se encontraron movimientos.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  # ==========================================================================
+  # CONFIG / ENTIDADES INTERNAS
+  # ==========================================================================
+  /api/config/entidades-internas:
+    get:
+      tags: [config]
+      summary: Listar entidades internas (empresas del grupo)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entidades:
+                    type: array
+                    items: { $ref: "#/components/schemas/EntidadInterna" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [config]
+      summary: Crear una entidad interna
+      x-accion-requerida: configurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rut, nombreCanonico]
+              properties:
+                rut: { type: string, minLength: 1, description: "Se normaliza a rutCanonico; rechaza si el canónico queda con menos de 7 caracteres." }
+                nombreCanonico: { type: string, minLength: 1, maxLength: 120 }
+                aliases: { type: array, items: { type: string, minLength: 1, maxLength: 120 }, description: "Se dedupean case-insensitive." }
+                rubro: { type: integer, minimum: 1, nullable: true }
+                notas: { type: string, maxLength: 500, nullable: true }
+                active: { type: boolean, default: true }
+      responses:
+        "201": { description: Creada, content: { application/json: { schema: { $ref: "#/components/schemas/EntidadInterna" } } } }
+        "400":
+          description: Datos inválidos o RUT inválido.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Ya existe una entidad con ese RUT (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/config/entidades-internas/{id}:
+    patch:
+      tags: [config]
+      summary: Editar una entidad interna
+      x-accion-requerida: configurar
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rut: { type: string, minLength: 1 }
+                nombreCanonico: { type: string, minLength: 1, maxLength: 120 }
+                aliases: { type: array, items: { type: string } }
+                rubro: { type: integer, nullable: true }
+                notas: { type: string, maxLength: 500, nullable: true }
+                active: { type: boolean }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/EntidadInterna" } } } }
+        "400":
+          description: Datos inválidos, RUT inválido, o "sin cambios" (objeto vacío).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Ya existe otra entidad con ese RUT (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [config]
+      summary: Eliminar una entidad interna (borrado físico)
+      x-accion-requerida: configurar
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ==========================================================================
+  # CONSOLIDADOS (core)
+  # ==========================================================================
+  /api/consolidados/{id}:
+    get:
+      tags: [consolidados]
+      summary: Detalle de un movimiento de Tesorería (candidatos de matching, propuesta y consolidado actual)
+      description: "OJO: {id} es el id de TesoreriaMovement, no del Consolidado."
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string }, description: "Id del TesoreriaMovement." }
+      responses:
+        "200":
+          description: >-
+            Si el consolidado sigue abierto (NO_MATCH/SUGGESTED/REVIEW o no existe), recalcula
+            candidatos en vivo (ventana ±7 días, mismo monto/dirección, filtrado por identidad
+            cross-cuenta).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  proposal: { type: object, nullable: true }
+                  bankRubros: { type: array, items: { type: object } }
+                  tesoreria: { type: object }
+                  consolidado: { type: object, nullable: true }
+                  candidates: { type: array, items: { type: object }, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: TesoreriaMovement no encontrado.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    patch:
+      tags: [consolidados]
+      summary: Confirmar, rechazar, o anotar la conciliación de un movimiento de Tesorería
+      x-accion-requerida: conciliar
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [confirm, reject, notes] }
+                bankMovementId: { type: string, description: "Requerido si action=confirm." }
+                notes: { type: string, nullable: true, description: "Usado si action=notes." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Body inválido, o falta bankMovementId en confirm, o action desconocida.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: TesoreriaMovement no encontrado, o BankMovement no existe (confirm).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "409":
+          description: El movimiento ya fue emitido a gestión, o el BankMovement ya está vinculado a otro Consolidado.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/consolidados/overview:
+    get:
+      tags: [consolidados]
+      summary: Vista resumen (dashboard) de Consolidados con conteos por estado y filtros
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [day, week, month], default: month } }
+        - { name: status, in: query, schema: { type: string }, description: CSV de estados. }
+        - { $ref: "#/components/parameters/AccountIdParam" }
+        - { name: banco, in: query, schema: { type: string } }
+        - { $ref: "#/components/parameters/QParam" }
+        - { name: tipoOperacion, in: query, schema: { type: string, enum: [INGRESO, EGRESO] } }
+        - { name: sucursalId, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: Excluye TBK y movimientos fuera de alcance.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period: { type: string }
+                  counts:
+                    type: object
+                    properties:
+                      AUTO_MATCHED: { type: integer }
+                      MANUAL: { type: integer }
+                      SUGGESTED: { type: integer }
+                      REVIEW: { type: integer }
+                      NO_MATCH: { type: integer }
+                      OUT_OF_SCOPE: { type: integer }
+                      ANULADO: { type: integer }
+                      UNPROCESSED: { type: integer }
+                  rows: { type: array, items: { type: object } }
+                  filteredTotal: { type: integer }
+                  filteredSum: { $ref: "#/components/schemas/Money" }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/consolidados/run:
+    post:
+      tags: [consolidados]
+      summary: Ejecutar el motor de conciliación (matching bipartito banco↔Tesorería)
+      description: >-
+        Dispara `runConsolidados` (WIPE+REBUILD bipartito de scores), luego el matching de
+        egresos a terceros vs `EgresoMovement`, y luego el auto-match de egresos vs Dynatech
+        (Tesorería). Los consolidados MANUAL se preservan salvo `preserveManual=false`.
+      x-accion-requerida: reevaluar
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dryRun: { type: boolean, default: false }
+                preserveManual: { type: boolean, default: true }
+      responses:
+        "200":
+          description: >-
+            Combina el resultado del motor principal con los resultados de egresos-terceros y
+            egresos-dynatech (shape exacto definido en lib/consolidados/match.ts,
+            lib/egresos/match-terceros.ts y lib/egresos/match-dynatech-terceros.ts — no
+            expandido en detalle en esta especificación).
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/consolidados/compare:
+    get:
+      tags: [consolidados]
+      summary: Vista comparativa lado a lado banco↔Tesorería (movimientos sin conciliar)
+      parameters:
+        - { $ref: "#/components/parameters/SinceParam" }
+        - { $ref: "#/components/parameters/UntilParam" }
+        - { $ref: "#/components/parameters/AccountIdParam" }
+        - { name: banco, in: query, schema: { type: string } }
+        - { name: onlyUnmatched, in: query, schema: { type: string, default: "true" } }
+        - { name: hideInternal, in: query, schema: { type: string, default: "true" } }
+        - { name: cola, in: query, schema: { type: string, enum: [acreedores, normal], default: normal } }
+        - { name: direction, in: query, schema: { type: string, enum: [IN, OUT] }, description: "Ignorado si cola=acreedores (fuerza OUT)." }
+      responses:
+        "200":
+          description: Excluye Transbank/dif menor/movimientos internos; incluye heurística de "split" (depósito agrupado).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bankMovements: { type: array, items: { type: object } }
+                  tesoreriaMovements: { type: array, items: { type: object } }
+                  accounts: { type: array, items: { type: object } }
+                  bancos: { type: array, items: { type: string } }
+                  range: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/consolidados/manual-bank:
+    post:
+      tags: [consolidados]
+      summary: Crear un movimiento bancario manual/ficticio para conciliar Tesorerías sin match real de cartola
+      x-accion-requerida: conciliar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tesoreriaIds, accountId, postDate, glosa]
+              properties:
+                tesoreriaIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 200 }
+                accountId: { type: string, format: uuid }
+                postDate: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+                glosa: { type: string, minLength: 1, maxLength: 300 }
+                nota: { type: string, maxLength: 500, nullable: true }
+      responses:
+        "200":
+          description: "Monto del BankMovement creado = suma de las tesorerías."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, bankMovementId: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Alguna Tesorería o la cuenta no existen.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "409":
+          description: Alguna de las Tesorerías ya está vinculada.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/consolidados/manual-link:
+    post:
+      tags: [consolidados]
+      summary: Vincular manualmente N movimientos de Tesorería con M movimientos bancarios (1:1, split, split inverso o híbrido)
+      x-accion-requerida: conciliar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bankMovementIds]
+              description: "Debe venir tesoreriaIds o tesoreriaId (compatibilidad con la forma vieja)."
+              properties:
+                tesoreriaIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 200 }
+                tesoreriaId: { type: string, format: uuid, deprecated: true }
+                bankMovementIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 200 }
+                adjustment:
+                  type: object
+                  nullable: true
+                  properties:
+                    rubro: { type: integer }
+                    note: { type: string, maxLength: 500, nullable: true }
+                overrideRubroBanco: { type: integer, nullable: true }
+                acknowledgeSiblingWarning: { type: boolean, default: false }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: >-
+            Datos inválidos; falta al menos un movimiento de Tesorería; direcciones IN/OUT
+            mezcladas entre los bancos seleccionados; ajuste especificado pero los montos ya
+            coinciden; rubro de ajuste inexistente o no habilitado para diferencias; o la suma
+            de bancos no coincide con la suma de Tesorería.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Una o más Tesorerías o BankMovements no existen.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "409":
+          description: >-
+            Un BankMovement ya está vinculado a otro consolidado, o warning POSSIBLE_SIBLING
+            (ajuste N=1 sin acknowledgeSiblingWarning, con `siblings` candidatos en el body).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "500":
+          description: Error interno repartiendo allocations, o sobró cartola sin asignar.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/consolidados/ok:
+    get:
+      tags: [consolidados]
+      summary: Asiento de partida doble de ingresos ya conciliados (vista derivada)
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { $ref: "#/components/parameters/AccountIdParam" }
+        - { name: rubroSucursal, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: "Excluye movimientos ya emitidos a gestión (origen OK)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  rows: { type: array, items: { type: object } }
+                  totals: { type: object, properties: { debe: { $ref: "#/components/schemas/Money" }, haber: { $ref: "#/components/schemas/Money" } } }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/consolidados/dif-menor:
+    get:
+      tags: [consolidados]
+      summary: Vista de diferencias menores / comisiones bancarias bajo umbral configurable
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { $ref: "#/components/parameters/AccountIdParam" }
+        - { name: direction, in: query, schema: { type: string, enum: [IN, OUT], default: IN } }
+        - { name: modo, in: query, schema: { type: string, enum: [dif, comision], default: dif } }
+      responses:
+        "200":
+          description: "modo=dif: ingresos/egresos bajo umbral. modo=comision: cargos detectados por regex en glosa. Excluye Transbank y cuentas de uso parcial. Solo lectura (resolución vía emisión)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  settings: { type: object }
+                  rows: { type: array, items: { type: object } }
+                  totals: { type: object }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/consolidados/abono-transbank:
+    get:
+      tags: [consolidados]
+      summary: Vista derivada del asiento de abonos Transbank (sin persistencia)
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { $ref: "#/components/parameters/AccountIdParam" }
+      responses:
+        "200":
+          description: "2 filas por movimiento (Debe rubro banco / Haber rubro contra-Transbank). Excluye ya emitidos y descartados."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  rows: { type: array, items: { type: object } }
+                  totals: { type: object, properties: { debe: { $ref: "#/components/schemas/Money" }, haber: { $ref: "#/components/schemas/Money" } } }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/consolidados/acreedores-tesoreria:
+    post:
+      tags: [consolidados]
+      summary: Derivar movimientos de Tesorería a la cola manual de "Acreedores"
+      x-accion-requerida: conciliar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tesoreriaIds]
+              properties:
+                tesoreriaIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 500 }
+      responses:
+        "200":
+          description: Bloquea si no es EGRESO o ya está conciliado (AUTO_MATCHED/MANUAL).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  derivados: { type: integer }
+                  bloqueados: { type: array, items: { type: object } }
+                  yaDerivados: { type: array, items: { type: string } }
+                  mensaje: { type: string }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [consolidados]
+      summary: Revertir la derivación a "Acreedores" (devuelve a Comparar Egresos)
+      x-accion-requerida: conciliar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tesoreriaIds]
+              properties:
+                tesoreriaIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 500 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { devueltos: { type: integer }, mensaje: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/consolidados/traspasos-internos:
+    get:
+      tags: [consolidados]
+      summary: Detectar pares OUT↔IN espejo entre entidades internas (traspasos entre empresas del grupo)
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { $ref: "#/components/parameters/AccountIdParam" }
+        - { name: intra, in: query, schema: { type: string, enum: [include, exclude, only], default: include } }
+      responses:
+        "200":
+          description: Excluye movimientos ya emitidos (origen TRASPASOS_INTERNOS).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  rows: { type: array, items: { type: object } }
+                  totals: { type: object }
+                  outOrphans: { type: array, items: { type: object } }
+                  inOrphans: { type: array, items: { type: object } }
+                  counts: { type: object }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/consolidados/emisiones:
+    get:
+      tags: [consolidados]
+      summary: Listar o ver detalle de emisiones (asientos derivados congelados/inmutables)
+      parameters:
+        - { name: id, in: query, schema: { type: string, format: uuid }, description: "Si viene, devuelve el detalle con snapshot." }
+        - name: origen
+          in: query
+          schema: { type: string, enum: [OK, ABONO_TRANSBANK, DIF_MENOR, DIF_MENOR_EGRESO, COMISION, TRASPASOS_INTERNOS, EGRESOS_TERCEROS, ABONO_CONCILIADO] }
+          description: "Requerido si no viene id."
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  emision: { type: object, description: "Solo si viene id (incluye snapshot)." }
+                  emisiones: { type: array, items: { type: object }, description: "Solo si viene origen." }
+        "400":
+          description: Falta un origen válido (cuando no viene id).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: Emisión no encontrada (con id).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    post:
+      tags: [consolidados]
+      summary: Emitir un asiento derivado (congela un snapshot inmutable y marca los movimientos como consumidos)
+      x-accion-requerida: generarAsientos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [origen, from, to, fechaDoc, descripcion, filename, lineas, refIds]
+              properties:
+                origen: { type: string, enum: [OK, ABONO_TRANSBANK, DIF_MENOR, DIF_MENOR_EGRESO, COMISION, TRASPASOS_INTERNOS, EGRESOS_TERCEROS, ABONO_CONCILIADO] }
+                from: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+                to: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+                fechaDoc: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+                descripcion: { type: string, minLength: 1, maxLength: 200 }
+                filename: { type: string, minLength: 1, maxLength: 120 }
+                lineas:
+                  type: array
+                  minItems: 1
+                  maxItems: 20000
+                  items:
+                    type: object
+                    properties:
+                      rubro: { oneOf: [{ type: number }, { type: string }] }
+                      detalle: { type: string, maxLength: 500 }
+                      cliente: { oneOf: [{ type: number }, { type: string }], nullable: true }
+                      debe: { oneOf: [{ type: number }, { type: string }], nullable: true }
+                      haber: { oneOf: [{ type: number }, { type: string }], nullable: true }
+                refIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 10000 }
+      responses:
+        "201":
+          description: "Emitir nunca desconcilia los movimientos subyacentes."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, id: { type: string }, folio: { type: integer } }
+        "400":
+          description: Datos inválidos, o el asiento no cuadra (suma Debe ≠ suma Haber).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Uno o más refIds ya pertenecen a otra emisión (o carrera concurrente, P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [consolidados]
+      summary: Deshacer una emisión (libera los movimientos consumidos)
+      x-accion-requerida: generarAsientos
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, folio: { type: integer } }
+        "400":
+          description: Falta id, o la emisión pertenece a Asientos manuales/Proveedores (se deshace desde su propia tab).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ==========================================================================
+  # CONSOLIDADOS / ASIENTOS-MANUALES
+  # ==========================================================================
+  /api/consolidados/asientos-manuales:
+    get:
+      tags: [consolidados-asientos-manuales]
+      summary: Listar movimientos pendientes de asiento manual, o asientos ya generados
+      parameters:
+        - { name: mode, in: query, schema: { type: string, enum: [pendientes, generados], default: pendientes } }
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { $ref: "#/components/parameters/AccountIdParam" }
+        - { name: queue, in: query, schema: { type: string, enum: [manual, proveedores], default: manual } }
+      responses:
+        "200":
+          description: "pendientes particiona server-side entre cola manual/proveedores según el maestro de proveedores (no persistido)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  rows: { type: array, items: { type: object }, description: "Solo si mode=pendientes." }
+                  totals: { type: object, description: "Solo si mode=pendientes." }
+                  derivadosOtraCola: { type: integer, description: "Solo si mode=pendientes." }
+                  asientos: { type: array, items: { type: object }, description: "Solo si mode=generados." }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [consolidados-asientos-manuales]
+      summary: Generar un asiento manual (PROVEEDOR con prorrateo, o CLIENTE 1:1)
+      x-accion-requerida: generarAsientos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bankMovementId, tipo, sucursales]
+              properties:
+                bankMovementId: { type: string, format: uuid }
+                tipo: { type: string, enum: [PROVEEDOR, CLIENTE] }
+                glosa: { type: string, maxLength: 500, nullable: true }
+                notas: { type: string, maxLength: 500, nullable: true }
+                retencion:
+                  type: object
+                  nullable: true
+                  properties:
+                    tasa: { type: number, minimum: 0, maximum: 100 }
+                    monto: { type: integer, minimum: 0 }
+                sucursales:
+                  type: array
+                  minItems: 1
+                  maxItems: 100
+                  items:
+                    type: object
+                    required: [sucursalId, personas]
+                    properties:
+                      sucursalId: { type: string, format: uuid }
+                      personas: { type: number, minimum: 0, maximum: 10000 }
+      responses:
+        "201":
+          description: "PROVEEDOR prorratea entre sucursales + retención opcional. CLIENTE exige exactamente 1 sucursal."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, asientoId: { type: string } }
+        "400":
+          description: Datos inválidos, CLIENTE con != 1 sucursal, o sucursales inexistentes.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: BankMovement no encontrado.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "409":
+          description: El movimiento ya tiene un asiento.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/consolidados/asientos-manuales/{bankMovementId}:
+    get:
+      tags: [consolidados-asientos-manuales]
+      summary: Detalle de un movimiento y su asiento manual (si existe)
+      parameters:
+        - { name: bankMovementId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bankMovement: { type: object }
+                  asiento: { type: object, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: BankMovement no encontrado.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [consolidados-asientos-manuales]
+      summary: Deshacer un asiento manual
+      x-accion-requerida: generarAsientos
+      parameters:
+        - { name: bankMovementId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: No hay asiento para deshacer.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "409":
+          description: El asiento ya fue emitido (folio incluido en el mensaje) — hay que deshacer la emisión completa primero.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/consolidados/asientos-manuales/emisiones:
+    get:
+      tags: [consolidados-asientos-manuales]
+      summary: Listar o ver detalle de emisiones de asientos manuales/proveedores
+      parameters:
+        - { name: id, in: query, schema: { type: string, format: uuid } }
+        - { name: origen, in: query, schema: { type: string, enum: [MANUAL, PROVEEDORES] } }
+      responses:
+        "200":
+          description: "Máx 500 filas, orden folio desc."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  emisiones: { type: array, items: { type: object } }
+                  emision: { type: object, description: "Solo si viene id." }
+                  asientos: { type: array, items: { type: object }, description: "Solo si viene id." }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: Emisión no encontrada (con id).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    post:
+      tags: [consolidados-asientos-manuales]
+      summary: Agrupar asientos manuales GENERADOS del filtro en un lote emitido (con folio)
+      x-accion-requerida: generarAsientos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+                to: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+                accountId: { type: string, format: uuid, nullable: true }
+                origen: { type: string, enum: [MANUAL, PROVEEDORES], default: MANUAL }
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, id: { type: string }, folio: { type: integer }, count: { type: integer } }
+        "400":
+          description: Body inválido, o no hay asientos generados en el filtro para emitir.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [consolidados-asientos-manuales]
+      summary: Deshacer una emisión de asientos manuales (vuelven a GENERADO)
+      x-accion-requerida: generarAsientos
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, folio: { type: integer } }
+        "400":
+          description: Falta id.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ==========================================================================
+  # CONSOLIDADOS / CRUCE-TRANSBANK
+  # ==========================================================================
+  /api/consolidados/cruce-transbank:
+    get:
+      tags: [consolidados-cruce-transbank]
+      summary: Cruce entre POS (TbkTesoreria) y liquidaciones Transbank (settlement)
+      description: >-
+        Cruza por opNumber (extraído de la glosa POS) == numeroBoleta del settlement + monto,
+        con fallback por monto+fecha (±1 día). Soporta 1:N. Los vínculos manuales se fuerzan
+        como cuadrados.
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { name: sucursalId, in: query, schema: { type: integer } }
+        - { name: estado, in: query, schema: { type: string, enum: [cuadrado, pos_sin_settlement, settlement_sin_pos] } }
+      responses:
+        "200":
+          description: "rows limitado a 5000."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  kpis: { type: object }
+                  rows: { type: array, items: { type: object } }
+                  rowsTotal: { type: integer }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/consolidados/cruce-transbank/settings:
+    get:
+      tags: [consolidados-cruce-transbank]
+      summary: Configuración de rubros del asiento de cuadratura Transbank
+      responses:
+        "200":
+          description: "Defaults observados en el código: ventas 17, tesorería 200, comisión 708, diferencia 1403."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rubroVentas: { type: integer }
+                  rubroTesoreria: { type: integer }
+                  rubroComision: { type: integer }
+                  rubroDiferencia: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    put:
+      tags: [consolidados-cruce-transbank]
+      summary: Actualizar los 4 rubros del asiento de cuadratura Transbank
+      x-accion-requerida: configurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rubroVentas, rubroTesoreria, rubroComision, rubroDiferencia]
+              properties:
+                rubroVentas: { type: integer, minimum: 0, maximum: 999999 }
+                rubroTesoreria: { type: integer, minimum: 0, maximum: 999999 }
+                rubroComision: { type: integer, minimum: 0, maximum: 999999 }
+                rubroDiferencia: { type: integer, minimum: 0, maximum: 999999 }
+      responses:
+        "200":
+          description: OK (upsert)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rubroVentas: { type: integer }
+                  rubroTesoreria: { type: integer }
+                  rubroComision: { type: integer }
+                  rubroDiferencia: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/consolidados/cruce-transbank/asiento:
+    get:
+      tags: [consolidados-cruce-transbank]
+      summary: Preview del asiento de cuadratura Transbank, historial, o detalle de una cuadratura
+      parameters:
+        - { name: cuadraturaId, in: query, schema: { type: string }, description: "Si viene, devuelve el detalle de esa cuadratura." }
+        - { name: mode, in: query, schema: { type: string, enum: [preview, generadas], default: preview } }
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { name: sucursalId, in: query, schema: { type: integer } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: Cuadratura no encontrada (con cuadraturaId).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    post:
+      tags: [consolidados-cruce-transbank]
+      summary: Generar una cuadratura Transbank del rango (marca pares como consumidos)
+      x-accion-requerida: generarAsientos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from, to]
+              properties:
+                from: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+                to: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+                sucursalId: { type: integer, nullable: true }
+                glosa: { type: string, maxLength: 500, nullable: true }
+      responses:
+        "201":
+          description: "Calcula totales: 708 comisión, 1403 diferencia (rubros por defecto)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, cuadraturaId: { type: string }, itemCount: { type: integer } }
+        "400":
+          description: Datos inválidos, o no hay movimientos pendientes por cuadrar en el rango.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Algunos movimientos ya fueron cuadrados en paralelo (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [consolidados-cruce-transbank]
+      summary: Eliminar una cuadratura (libera los pares para volver a cuadrar)
+      x-accion-requerida: generarAsientos
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Falta id.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/consolidados/cruce-transbank/link:
+    post:
+      tags: [consolidados-cruce-transbank]
+      summary: Vincular manualmente un POS con uno o varios abonos de settlement (1:N)
+      x-accion-requerida: conciliar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tbkTesoreriaId]
+              description: "Requiere transbankSaleId o transbankSaleIds."
+              properties:
+                tbkTesoreriaId: { type: string, minLength: 1 }
+                transbankSaleId: { type: string, minLength: 1, deprecated: true, description: "Compatibilidad; preferir transbankSaleIds." }
+                transbankSaleIds: { type: array, items: { type: string }, minItems: 1, maxItems: 20 }
+                nota: { type: string, maxLength: 500, nullable: true }
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, ids: { type: array, items: { type: string } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: POS o abono no encontrado.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "409":
+          description: Algún abono ya vinculado a otro POS (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [consolidados-cruce-transbank]
+      summary: Borrar un vínculo POS↔settlement puntual, o todos los vínculos de un POS
+      x-accion-requerida: conciliar
+      parameters:
+        - { name: id, in: query, schema: { type: string }, description: "Vínculo puntual." }
+        - { name: tbkTesoreriaId, in: query, schema: { type: string }, description: "Deshace todo el grupo (requiere al menos uno de los dos)." }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, deleted: { type: integer } }
+        "400":
+          description: Falta id o tbkTesoreriaId.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/consolidados/cruce-transbank/papelera:
+    get:
+      tags: [consolidados-cruce-transbank]
+      summary: Listar pares apartados en la papelera del cruce Transbank
+      responses:
+        "200":
+          description: "Los apartados no expiran (decisión jul-2026); siempre restaurables. Máx 2000 filas."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { apartados: { type: array, items: { type: object } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [consolidados-cruce-transbank]
+      summary: Apartar un par cuadrado a la papelera (excluirlo del asiento)
+      x-accion-requerida: depurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tbkTesoreriaId, transbankSaleId, sucursalId, montoDynatech, montoTransbank, montoComision]
+              properties:
+                tbkTesoreriaId: { type: string, minLength: 1 }
+                transbankSaleId: { type: string, minLength: 1 }
+                sucursalId: { type: integer }
+                sucursalName: { type: string, nullable: true }
+                sucursalCodigo: { type: integer, nullable: true }
+                fecha: { type: string, nullable: true }
+                opBoleta: { type: string, nullable: true }
+                medioPago: { type: string, nullable: true }
+                montoDynatech: { type: string, pattern: '^-?\d+$' }
+                montoTransbank: { type: string, pattern: '^-?\d+$' }
+                montoComision: { type: string, pattern: '^-?\d+$' }
+                motivo: { type: string, maxLength: 500, nullable: true }
+      responses:
+        "201":
+          description: "expiresAt se persiste solo como dato histórico (+30 días), sin efecto real."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, id: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Ese movimiento ya está en la papelera (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [consolidados-cruce-transbank]
+      summary: Restaurar un par apartado (vuelve a "por cuadrar")
+      x-accion-requerida: depurar
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Falta id.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/consolidados/cruce-transbank/pos-ficticio:
+    post:
+      tags: [consolidados-cruce-transbank]
+      summary: Crear un POS "ficticio" para cuadrar ventas mixtas tarjeta/efectivo sin registro real
+      x-accion-requerida: conciliar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transbankSaleId, sucursalId, fecha, monto]
+              properties:
+                transbankSaleId: { type: string, minLength: 1 }
+                sucursalId: { type: integer }
+                fecha: { type: string, pattern: '^\d{4}-\d{2}-\d{2}$' }
+                monto: { type: integer, description: "Monto bruto CLP, positivo." }
+                opNumber: { type: string, maxLength: 60, nullable: true }
+                glosa: { type: string, maxLength: 500, nullable: true }
+                medioPago: { type: string, maxLength: 40, nullable: true }
+                nota: { type: string, maxLength: 500, nullable: true }
+      responses:
+        "201":
+          description: >-
+            Crea un TbkTesoreria "ficticio" (externalId negativo sintético, manual=true) +
+            su vínculo, en una transacción.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, posId: { type: string }, linkId: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Abono Transbank (settlement) no encontrado.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "409":
+          description: Abono ya vinculado (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [consolidados-cruce-transbank]
+      summary: Borrar un POS ficticio (y su vínculo)
+      x-accion-requerida: conciliar
+      parameters:
+        - { name: tbkTesoreriaId, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Falta tbkTesoreriaId, o el POS no es ficticio (solo se puede desvincular, no borrar).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: POS no encontrado.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/consolidados/cruce-transbank/abonos-conciliados:
+    get:
+      tags: [consolidados-cruce-transbank]
+      summary: Asiento de abonos/cargos Transbank sin operación de la empresa (marcados manualmente)
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { name: sucursalId, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: "Asiento fijo por el neto (rubroDebe/rubroHaber configurables), sin invertir signo."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  settings: { type: object }
+                  rows: { type: array, items: { type: object } }
+                  totals: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [consolidados-cruce-transbank]
+      summary: Marcar ventas Transbank como "abono conciliado"
+      x-accion-requerida: conciliar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transbankSaleIds]
+              properties:
+                transbankSaleIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 1000 }
+      responses:
+        "200":
+          description: Bloquea las que tienen un vínculo manual POS↔settlement existente (hay que desvincular primero).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { movidos: { type: integer }, bloqueados: { type: array, items: { type: string } }, mensaje: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    delete:
+      tags: [consolidados-cruce-transbank]
+      summary: Devolver ventas de "abono conciliado" a Movimientos
+      x-accion-requerida: conciliar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [transbankSaleIds]
+              properties:
+                transbankSaleIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 1000 }
+      responses:
+        "200":
+          description: Bloquea las ya emitidas en documento (hay que deshacer la emisión primero).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { devueltos: { type: integer }, bloqueados: { type: array, items: { type: string } }, mensaje: { type: string } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ==========================================================================
+  # CONSOLIDADOS / EGRESOS-TERCEROS
+  # ==========================================================================
+  /api/consolidados/egresos-terceros:
+    get:
+      tags: [consolidados-egresos-terceros]
+      summary: Listar egresos bancarios (OUT) que no matchean ninguna entidad interna
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { $ref: "#/components/parameters/AccountIdParam" }
+        - { $ref: "#/components/parameters/QParam" }
+        - { name: quality, in: query, schema: { type: string, enum: [con_rut, solo_nombre, sin_info] } }
+      responses:
+        "200":
+          description: Excluye cuentas de uso parcial y descartados.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  rows: { type: array, items: { type: object } }
+                  totals: { type: object }
+                  qualityCount: { type: object }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/consolidados/egresos-terceros/{bankMovementId}:
+    get:
+      tags: [consolidados-egresos-terceros]
+      summary: Detalle de un egreso bancario y sus candidatos de EGRESO Tesorería
+      parameters:
+        - { name: bankMovementId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: q, in: query, schema: { type: string }, description: "Búsqueda manual (solo activa si el movimiento no está ya resuelto)." }
+      responses:
+        "200":
+          description: "Candidatos = EGRESO Tesorería mismo monto ±7 días no resueltos."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bankMovement: { type: object }
+                  linked: { type: object, nullable: true }
+                  linkedTesoreria: { type: object, nullable: true }
+                  tesoreriaCandidates: { type: array, items: { type: object } }
+                  tesoreriaSearch: { type: array, items: { type: object } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404":
+          description: BankMovement no encontrado.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/consolidados/egresos-terceros/asiento:
+    get:
+      tags: [consolidados-egresos-terceros]
+      summary: Asiento de partida doble de egresos conciliados (vs Dynatech)
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { $ref: "#/components/parameters/AccountIdParam" }
+        - { name: sucursalId, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: Excluye ya emitidos (origen EGRESOS_TERCEROS).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  rows: { type: array, items: { type: object } }
+                  totals: { type: object }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    delete:
+      tags: [consolidados-egresos-terceros]
+      summary: Deshacer una conciliación de egreso (borra links, vuelve a NO_MATCH)
+      x-accion-requerida: conciliar
+      parameters:
+        - { name: consolidadoId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Falta consolidadoId.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Conciliación no encontrada.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/consolidados/egresos-terceros/link:
+    post:
+      tags: [consolidados-egresos-terceros]
+      summary: Vincular (o desvincular) un movimiento bancario OUT con un gasto operativo
+      x-accion-requerida: conciliar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bankMovementId]
+              properties:
+                bankMovementId: { type: string, format: uuid }
+                egresoMovementId: { type: string, format: uuid, description: "Requerido salvo que unlink=true." }
+                unlink: { type: boolean, default: false }
+      responses:
+        "200": { description: "Resultado queda MANUAL.", content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Datos inválidos, falta egresoMovementId, o el BankMovement no es OUT.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: BankMovement o EgresoMovement no existen.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "409":
+          description: El BankMovement ya está vinculado a otro egreso.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  # ==========================================================================
+  # DASHBOARD
+  # ==========================================================================
+  /api/dashboard:
+    get:
+      tags: [dashboard]
+      summary: KPIs y agregados generales del sistema
+      parameters:
+        - { name: period, in: query, schema: { type: string, enum: [day, week, month], default: month } }
+      responses:
+        "200":
+          description: >-
+            Agrega en paralelo 7 cómputos (kpis/balances/pipeline/flows/topBranches/topCashiers/alerts).
+            Los shapes internos vienen de lib/dashboard/queries.ts (funciones compute*, no
+            expandidas aquí — inferencia parcial).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  period: { type: string }
+                  range: { type: object }
+                  kpis: { type: object, additionalProperties: true }
+                  balances: { type: object, additionalProperties: true }
+                  pipeline: { type: object, additionalProperties: true }
+                  flows: { type: object, additionalProperties: true }
+                  topBranches: { type: array, items: { type: object } }
+                  topCashiers: { type: array, items: { type: object } }
+                  alerts: { type: array, items: { type: object } }
+                  generatedAt: { $ref: "#/components/schemas/IsoDateTime" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/dashboard/sin-cliente:
+    get:
+      tags: [dashboard]
+      summary: Movimientos de Tesorería sin cliente asociado (auditoría)
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { name: sucursalId, in: query, schema: { type: integer } }
+        - { name: cajero, in: query, schema: { type: string } }
+      responses:
+        "200":
+          description: "Excluye anulados y ventas TBK. Máximo 500 filas."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  montoTotal: { $ref: "#/components/schemas/Money" }
+                  truncated: { type: boolean }
+                  movements: { type: array, items: { type: object } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ==========================================================================
+  # DESCARTE-REGLAS
+  # ==========================================================================
+  /api/descarte-reglas:
+    get:
+      tags: [descarte-reglas]
+      summary: Listar reglas de auto-descarte de cartolas
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reglas:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        patron: { type: string }
+                        accountId: { type: string, nullable: true }
+                        accountLabel: { type: string, nullable: true }
+                        active: { type: boolean }
+                        nota: { type: string, nullable: true }
+                        createdAt: { $ref: "#/components/schemas/IsoDateTime" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [descarte-reglas]
+      summary: Crear una regla de auto-descarte
+      x-accion-requerida: depurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patron]
+              properties:
+                patron: { type: string, minLength: 3, maxLength: 120 }
+                accountId: { type: string, format: uuid, nullable: true }
+                nota: { type: string, maxLength: 500, nullable: true }
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf: [{ $ref: "#/components/schemas/OkResponse" }, { type: object, properties: { id: { type: string } } }]
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: accountId referenciado no existe.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    patch:
+      tags: [descarte-reglas]
+      summary: Activar/desactivar una regla
+      x-accion-requerida: depurar
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [active]
+              properties: { active: { type: boolean } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Falta id o body inválido.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [descarte-reglas]
+      summary: Eliminar una regla (no restaura los movimientos ya descartados)
+      x-accion-requerida: depurar
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Falta id.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ==========================================================================
+  # DIF-MENOR-SETTINGS
+  # ==========================================================================
+  /api/dif-menor-settings:
+    get:
+      tags: [dif-menor-settings]
+      summary: Obtener configuración de umbral de diferencias menores y rubros
+      responses:
+        "200":
+          description: "Crea el registro default (id fijo) si no existe."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  threshold: { type: integer }
+                  rubroDiferencia: { type: integer }
+                  rubroComision: { type: integer }
+                  updatedAt: { $ref: "#/components/schemas/IsoDateTime" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    patch:
+      tags: [dif-menor-settings]
+      summary: Actualizar umbral/rubros
+      x-accion-requerida: configurar
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                threshold: { type: integer, minimum: 1, maximum: 100000000 }
+                rubroDiferencia: { type: integer, minimum: 1 }
+                rubroComision: { type: integer, minimum: 1 }
+      responses:
+        "200":
+          description: OK (upsert)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  threshold: { type: integer }
+                  rubroDiferencia: { type: integer }
+                  rubroComision: { type: integer }
+                  updatedAt: { $ref: "#/components/schemas/IsoDateTime" }
+        "400":
+          description: Body inválido, o los rubros no existen en RubroLabel.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ==========================================================================
+  # EGRESOS
+  # ==========================================================================
+  /api/egresos/movements:
+    get:
+      tags: [egresos]
+      summary: Listar gastos operativos (EgresoMovement) sincronizados
+      parameters:
+        - { name: sucursalId, in: query, schema: { type: integer } }
+        - { name: rubroId, in: query, schema: { type: integer } }
+        - { $ref: "#/components/parameters/SinceParam" }
+        - { $ref: "#/components/parameters/UntilParam" }
+        - { $ref: "#/components/parameters/QParam" }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 5000, default: 500 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  sumMonto: { $ref: "#/components/schemas/Money" }
+                  movements: { type: array, items: { type: object } }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/egresos/sync:
+    post:
+      tags: [egresos]
+      summary: Sincronizar EgresoMovement desde el feed externo /api/egresos de movimientos-api
+      description: >-
+        Llama a `GET {EGRESOS_API_URL:-http://172.16.10.172:5158/api/egresos}` con header
+        `X-API-Key` (env EGRESOS_API_KEY/TESORERIA_API_KEY), paginando por cursor (after_id,
+        límite EGRESOS_API_LIMIT default 1000, máx 200 páginas). Valida cada fila con Zod y
+        hace upsert por externalId en EgresoMovement.
+      x-accion-requerida: importar
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
+  # ==========================================================================
+  # MOVIMIENTOS-CAJA
+  # ==========================================================================
+  /api/movimientos-caja:
+    get:
+      tags: [movimientos-caja]
+      summary: Listar depósitos/retiros/traspasos de caja con su estado de conciliación vs cartola
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: categoria, in: query, schema: { type: string } }
+        - { name: banco, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 200, maximum: 1000 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  resumen: { type: array, items: { type: object } }
+                  data: { type: array, items: { type: object } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/movimientos-caja/run:
+    post:
+      tags: [movimientos-caja]
+      summary: Recalcular el cruce MovimientoCaja↔cartola (sin llamar a movimientos-api)
+      x-accion-requerida: reevaluar
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  match:
+                    type: object
+                    properties:
+                      ok: { type: boolean }
+                      total: { type: integer }
+                      autoMatched: { type: integer }
+                      noMatch: { type: integer }
+                      outOfScope: { type: integer }
+                      anulados: { type: integer }
+                      error: { type: string, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500":
+          description: match.ok=false.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/movimientos-caja/sync:
+    post:
+      tags: [movimientos-caja]
+      summary: Sincronizar MovimientoCaja desde el feed externo /api/movimientos de movimientos-api
+      description: >-
+        Llama a `GET {MOVIMIENTOS_API_URL}/api/movimientos?categoria=CAJA_BANCO,BANCO_BANCO`
+        (sin default de URL — si `MOVIMIENTOS_API_URL` no está seteada, falla explícitamente),
+        header `X-API-Key` (MOVIMIENTOS_API_KEY/TESORERIA_API_KEY), paginando por cursor
+        (límite MOVIMIENTOS_API_LIMIT default 5000, máx 200 páginas). Valida con Zod y hace
+        upsert por externalId. Si no viene `onlySync=1`, luego dispara el matcher local.
+      x-accion-requerida: importar
+      parameters:
+        - name: onlySync
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: Si viene, solo ingiere sin correr el matcher.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sync: { $ref: "#/components/schemas/SyncResult" }
+                  match: { type: object, nullable: true }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
+  # ==========================================================================
+  # PROVEEDORES-ASIENTO
+  # ==========================================================================
+  /api/proveedores-asiento:
+    get:
+      tags: [proveedores-asiento]
+      summary: Listar maestro de proveedores (usado para derivar la cola de asientos manuales)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  proveedores:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        nombre: { type: string }
+                        rut: { type: string, nullable: true }
+                        patrones: { type: array, items: { type: string } }
+                        active: { type: boolean }
+                        nota: { type: string, nullable: true }
+                        createdAt: { $ref: "#/components/schemas/IsoDateTime" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [proveedores-asiento]
+      summary: Crear un proveedor
+      x-accion-requerida: configurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre]
+              description: "Debe venir al menos rut o patrones tras normalizar."
+              properties:
+                nombre: { type: string, minLength: 2, maxLength: 120 }
+                rut: { type: string, maxLength: 20, nullable: true, description: "Normalizado con normalizeRut." }
+                patrones: { type: array, items: { type: string, minLength: 3, maxLength: 120 }, maxItems: 20 }
+                nota: { type: string, maxLength: 500, nullable: true }
+      responses:
+        "201":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf: [{ $ref: "#/components/schemas/OkResponse" }, { type: object, properties: { id: { type: string } } }]
+        "400":
+          description: Body inválido, o ni rut ni patrones quedaron definidos.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Ya existe un proveedor con ese RUT (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    patch:
+      tags: [proveedores-asiento]
+      summary: Editar un proveedor
+      x-accion-requerida: configurar
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                nombre: { type: string, minLength: 2, maxLength: 120 }
+                rut: { type: string, maxLength: 20, nullable: true }
+                patrones: { type: array, items: { type: string } }
+                nota: { type: string, maxLength: 500, nullable: true }
+                active: { type: boolean }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Falta id o body inválido.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: RUT duplicado.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [proveedores-asiento]
+      summary: Eliminar un proveedor
+      x-accion-requerida: configurar
+      parameters:
+        - { name: id, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Falta id.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ==========================================================================
+  # REPORTES
+  # ==========================================================================
+  /api/reportes/banco-sin-conciliar:
+    get:
+      tags: [reportes]
+      summary: Brecha real de conciliación bancaria (movimientos sin resolver)
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { $ref: "#/components/parameters/AccountIdParam" }
+        - { name: direction, in: query, schema: { type: string, enum: [IN, OUT] } }
+        - { name: tag, in: query, schema: { type: string, enum: [interno, transbank, comision, sin_clasificar] } }
+      responses:
+        "200":
+          description: "Excluye lo resuelto por el motor (consolidados), Transbank, traspasos internos, egresos, dif menor, comisión y asientos manuales."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  truncated: { type: boolean }
+                  rows: { type: array, items: { type: object } }
+                  resumen: { type: object }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/reportes/dynatech-sin-conciliar:
+    get:
+      tags: [reportes]
+      summary: TesoreriaMovement sin conciliar (brecha del lado Dynatech)
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+        - { name: banco, in: query, schema: { type: string } }
+        - { name: tipo, in: query, schema: { type: string, enum: [INGRESO, EGRESO] } }
+        - { name: motivo, in: query, schema: { type: string, enum: [sin_procesar, sugerido, revisar, excepcion, sin_match, fuera_scope, acreedor] } }
+      responses:
+        "200":
+          description: "Excluye AUTO_MATCHED/MANUAL y anulados. Máximo 5000 filas."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  truncated: { type: boolean }
+                  rows: { type: array, items: { type: object } }
+                  resumen: { type: object }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/reportes/overview:
+    get:
+      tags: [reportes]
+      summary: Resumen cruzado banco vs Dynatech
+      parameters:
+        - { $ref: "#/components/parameters/FromDateParam" }
+        - { $ref: "#/components/parameters/ToDateParam" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  from: { $ref: "#/components/schemas/IsoDateTime" }
+                  to: { $ref: "#/components/schemas/IsoDateTime" }
+                  banco: { type: object }
+                  dynatech: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ==========================================================================
+  # RUBROS
+  # ==========================================================================
+  /api/rubros:
+    get:
+      tags: [rubros]
+      summary: Listar maestro de rubros contables
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  rubros:
+                    type: array
+                    items: { $ref: "#/components/schemas/Rubro" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [rubros]
+      summary: Crear una etiqueta de rubro
+      x-accion-requerida: configurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [rubro, name]
+              properties:
+                rubro: { type: integer, minimum: 1 }
+                name: { type: string, minLength: 1, maxLength: 100 }
+                description: { type: string, maxLength: 500, nullable: true }
+                isDifference: { type: boolean, default: false }
+                accountId: { type: string, format: uuid, nullable: true }
+                sucursalId: { type: string, format: uuid, nullable: true }
+      responses:
+        "201": { description: Creado, content: { application/json: { schema: { $ref: "#/components/schemas/Rubro" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Rubro ya existe, o la cuenta/sucursal ya está asignada a otro rubro (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/rubros/{rubro}:
+    patch:
+      tags: [rubros]
+      summary: Editar una etiqueta de rubro
+      x-accion-requerida: configurar
+      parameters:
+        - { name: rubro, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string, minLength: 1, maxLength: 100 }
+                description: { type: string, maxLength: 500, nullable: true }
+                isDifference: { type: boolean }
+                accountId: { type: string, format: uuid, nullable: true, description: "null desasigna la cuenta." }
+                sucursalId: { type: string, format: uuid, nullable: true, description: "null desasigna la sucursal." }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Rubro" } } } }
+        "400":
+          description: Rubro (path) inválido, body inválido, o body vacío (sin cambios).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Cuenta o sucursal ya asignada a otro rubro (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [rubros]
+      summary: Eliminar una etiqueta de rubro (no afecta movimientos)
+      x-accion-requerida: configurar
+      parameters:
+        - { name: rubro, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/OkResponse" } } } }
+        "400":
+          description: Rubro (path) inválido.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ==========================================================================
+  # SUCURSALES
+  # ==========================================================================
+  /api/sucursales:
+    get:
+      tags: [sucursales]
+      summary: Listar sucursales (maestro para prorrateo)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sucursales:
+                    type: array
+                    items: { $ref: "#/components/schemas/Sucursal" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [sucursales]
+      summary: Crear una sucursal
+      x-accion-requerida: configurar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [nombre, headcount]
+              properties:
+                codigo: { type: integer, minimum: 1, nullable: true }
+                nombre: { type: string, minLength: 1, maxLength: 120 }
+                headcount: { type: number, minimum: 0, maximum: 10000, description: "Puede ser fraccionado; se persiste como Decimal." }
+                active: { type: boolean, default: true }
+                orden: { type: integer, default: 0 }
+      responses:
+        "201": { description: Creada, content: { application/json: { schema: { $ref: "#/components/schemas/Sucursal" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: Código de sucursal duplicado (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+
+  /api/sucursales/{id}:
+    patch:
+      tags: [sucursales]
+      summary: Editar una sucursal
+      x-accion-requerida: configurar
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                codigo: { type: integer, minimum: 1, nullable: true }
+                nombre: { type: string, minLength: 1, maxLength: 120 }
+                headcount: { type: number, minimum: 0, maximum: 10000 }
+                active: { type: boolean }
+                orden: { type: integer }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/Sucursal" } } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Código duplicado (P2002).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+    delete:
+      tags: [sucursales]
+      summary: Eliminar (o desactivar) una sucursal
+      description: >-
+        Borrado "suave": si la sucursal tiene líneas de asiento manual asociadas, no se
+        borra (se desactiva); si no tiene, se borra físicamente.
+      x-accion-requerida: configurar
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, deactivated: { type: boolean } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  # ==========================================================================
+  # TESORERIA
+  # ==========================================================================
+  /api/tesoreria/movements:
+    get:
+      tags: [tesoreria]
+      summary: Listar movimientos de Tesorería/Dynatech con filtros y facetas
+      parameters:
+        - { name: sucursalId, in: query, schema: { type: integer } }
+        - { name: cajero, in: query, schema: { type: string } }
+        - { name: banco, in: query, schema: { type: string } }
+        - { name: bancoDetectado, in: query, schema: { type: string } }
+        - { name: rubroBanco, in: query, schema: { type: string } }
+        - { name: rubroSucursal, in: query, schema: { type: string } }
+        - { name: excepcion, in: query, schema: { type: string, enum: ["1", "0"] } }
+        - { name: tipoOperacion, in: query, schema: { type: string, enum: [INGRESO, EGRESO] } }
+        - { name: clase, in: query, schema: { type: string } }
+        - { name: anulado, in: query, schema: { type: string, enum: ["1", "0"] }, description: "Ausente = incluye todos." }
+        - { $ref: "#/components/parameters/SinceParam" }
+        - { $ref: "#/components/parameters/UntilParam" }
+        - { $ref: "#/components/parameters/QParam" }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 5000, default: 500 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        "200":
+          description: "El campo rawJson (payload crudo) se excluye del select por performance."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  sum: { $ref: "#/components/schemas/Money" }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  movements: { type: array, items: { type: object } }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/tesoreria/report:
+    get:
+      tags: [tesoreria]
+      summary: Matriz cruzada de conciliación (rubroSucursal×rubroBanco, banco×bancoDetectado, o sucursal×banco)
+      parameters:
+        - { name: groupBy, in: query, schema: { type: string, enum: [rubro, banco, sucursal], default: rubro } }
+        - { name: sucursalId, in: query, schema: { type: integer } }
+        - { name: cajero, in: query, schema: { type: string } }
+        - { name: banco, in: query, schema: { type: string } }
+        - { name: excepcion, in: query, schema: { type: string, enum: ["1", "0"] } }
+        - { $ref: "#/components/parameters/SinceParam" }
+        - { $ref: "#/components/parameters/UntilParam" }
+        - { $ref: "#/components/parameters/QParam" }
+      responses:
+        "200":
+          description: "Siempre excluye estadoActual=ANU. Agregación en memoria (útil para heatmap)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groupBy: { type: string }
+                  rows: { type: array, items: { type: object } }
+                  cols: { type: array, items: { type: object } }
+                  matrix: { type: array, items: { type: object } }
+                  grand: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/tesoreria/sync-status:
+    get:
+      tags: [tesoreria]
+      summary: Estado del último sync de Tesorería (health check para la UI)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lastOk: { type: object, nullable: true }
+                  lastAny: { type: object, nullable: true }
+                  totalMovements: { type: integer }
+                  totalExcepciones: { type: integer }
+                  dateRange: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/tesoreria/sync:
+    post:
+      tags: [tesoreria]
+      summary: Sincronizar TesoreriaMovement desde el feed externo /api/dynatech de movimientos-api
+      description: >-
+        Llama a `GET {TESORERIA_API_URL}/api/dynatech` con header `X-API-Key`
+        (TESORERIA_API_KEY, opcional), upsert por externalId (BigInt del contexto.id).
+        Descarta filas sin cajero (columna NOT NULL). No pagina (una sola respuesta grande).
+      x-accion-requerida: importar
+      parameters:
+        - name: force
+          in: query
+          schema: { type: string, enum: ["1"] }
+          description: "Si no viene, corre solo si el último sync OK tiene más de 30 segundos (evita syncs redundantes)."
+      responses:
+        "200":
+          description: "Puede devolver skipped=true si corrió hace <30s y no se forzó."
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties: { skipped: { type: boolean, enum: [true] }, reason: { type: string } }
+                  - allOf:
+                      - { $ref: "#/components/schemas/SyncResult" }
+                      - type: object
+                        properties: { syncRunId: { type: string } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
+  # ==========================================================================
+  # TRANSBANK
+  # ==========================================================================
+  /api/transbank/movements:
+    get:
+      tags: [transbank]
+      summary: Listar patas TBK del POS (TbkTesoreria)
+      parameters:
+        - { name: sucursalId, in: query, schema: { type: integer } }
+        - { $ref: "#/components/parameters/SinceParam" }
+        - { $ref: "#/components/parameters/UntilParam" }
+        - { $ref: "#/components/parameters/QParam" }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 5000, default: 500 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        "200":
+          description: "sumMonto excluye registros ficticios (manual=true)."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  sumMonto: { $ref: "#/components/schemas/Money" }
+                  movements: { type: array, items: { type: object } }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/transbank/sales:
+    get:
+      tags: [transbank]
+      summary: Listar ventas (settlement "Abonos por día") Transbank con su estado de conciliación
+      parameters:
+        - { $ref: "#/components/parameters/SinceParam" }
+        - { $ref: "#/components/parameters/UntilParam" }
+        - { name: sucursalId, in: query, schema: { type: integer } }
+        - { $ref: "#/components/parameters/QParam" }
+        - { name: soloSinConciliar, in: query, schema: { type: string, enum: ["true"] } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 5000, default: 500 } }
+        - { name: offset, in: query, schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 } }
+      responses:
+        "200":
+          description: "Reutiliza el mismo motor matchCruce que /api/consolidados/cruce-transbank."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+                  conciliados: { type: integer }
+                  sinConciliar: { type: integer }
+                  sums: { type: object, properties: { bruto: { $ref: "#/components/schemas/Money" }, comision: { $ref: "#/components/schemas/Money" }, neto: { $ref: "#/components/schemas/Money" } } }
+                  sales: { type: array, items: { type: object } }
+                  facets: { type: object }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/transbank/import:
+    post:
+      tags: [transbank]
+      summary: Importar el archivo "Abonos por día" de Transbank (settlement)
+      description: |
+        Parsea (tolerante a variaciones de columnas) el Excel de settlement de Transbank:
+        cabecera Empresa/RUT/Cuenta corriente + grilla de detalle localizada por columnas
+        "Fecha de venta"/"Total abono". Dedupe por `numeroUnico` global contra `TransbankSale`
+        existente; resuelve `sucursalId` por matching de texto contra el catálogo de nombres
+        de sucursal (con alias manuales para Valparaíso/Patronato/Iquique/Viña del Mar). Es una
+        fuente aislada: inserta en `TransbankSale`, NO toca `BankMovement` ni el motor de
+        consolidados (se cruza después en /api/consolidados/cruce-transbank).
+      x-accion-requerida: importar
+      parameters:
+        - name: dryRun
+          in: query
+          schema: { type: string, enum: ["1"] }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: "Excel .xls/.xlsx de Abonos por día." }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: { type: boolean }
+                  dryRun: { type: boolean }
+                  fileName: { type: string }
+                  empresaRut: { type: string, nullable: true }
+                  cuentaAbono: { type: string, nullable: true }
+                  periodFrom: { $ref: "#/components/schemas/IsoDateTime" }
+                  periodTo: { $ref: "#/components/schemas/IsoDateTime" }
+                  totals:
+                    type: object
+                    properties:
+                      fileRows: { type: integer }
+                      toInsert: { type: integer }
+                      duplicates: { type: integer }
+                      parseErrors: { type: integer }
+                  alreadyImported:
+                    type: object
+                    nullable: true
+                    properties: { importedAt: { $ref: "#/components/schemas/IsoDateTime" }, importId: { type: string } }
+                  sampleSales:
+                    type: array
+                    description: "Máximo 50 filas de muestra."
+                    items:
+                      type: object
+                      properties:
+                        fechaVenta: { $ref: "#/components/schemas/IsoDateTime" }
+                        nombreLocal: { type: string }
+                        sucursalId: { type: integer, nullable: true }
+                        medioPago: { type: string }
+                        montoVenta: { $ref: "#/components/schemas/Money" }
+                        comision: { $ref: "#/components/schemas/Money" }
+                        totalAbono: { $ref: "#/components/schemas/Money" }
+                        numeroBoleta: { type: string, nullable: true }
+                        status: { type: string, enum: [NEW, DUP] }
+                  inserted:
+                    type: object
+                    nullable: true
+                    properties: { importId: { type: string }, rowsInserted: { type: integer } }
+                  error: { type: string, nullable: true }
+        "400":
+          description: Body inválido, falta el archivo, o error al procesar el Excel.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/transbank/sync:
+    post:
+      tags: [transbank]
+      summary: Sincronizar TbkTesoreria (POS) desde el feed externo /api/tbk-tesoreria de movimientos-api
+      description: >-
+        Pagina por cursor contra `{TBK_TESORERIA_API_URL:-http://172.16.10.172:5158/api/tbk-tesoreria}`,
+        header `X-API-Key` opcional. Valida con Zod, extrae `opNumber` de la glosa por regex
+        (para cruzar con el N° de boleta del settlement), upsert por externalId en chunks de
+        25 concurrentes. Cae en la tabla aislada TbkTesoreria (no en TesoreriaMovement, no
+        entra al motor de consolidados principal).
+      x-accion-requerida: importar
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SyncResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "502": { $ref: "#/components/responses/BadGateway" }
+
+  # ==========================================================================
+  # MOVIMIENTOS-API (Express, servicio hermano)
+  # ==========================================================================
+  /health:
+    get:
+      tags: [movimientos-api]
+      summary: Health check (sin auth, incluso si API_KEY está configurada)
+      servers:
+        - url: "http://{host}:{port}"
+          variables: { host: { default: 172.16.10.172 }, port: { default: "5158" } }
+      security: []
+      responses:
+        "200":
+          description: DB accesible.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [true] }, db: { type: string } }
+        "503":
+          description: No se pudo conectar a la base de datos SQL Server.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { ok: { type: boolean, enum: [false] }, error: { type: string } }
+
+  /api/dynatech:
+    get:
+      tags: [movimientos-api]
+      summary: Feed de operaciones FX/depósitos (MovCajaDepositos) para el sync de Tesorería
+      servers:
+        - url: "http://{host}:{port}"
+          variables: { host: { default: 172.16.10.172 }, port: { default: "5158" } }
+      security:
+        - apiKeyAuth: []
+        - {}
+      parameters:
+        - name: desde
+          in: query
+          schema: { type: string, format: date, default: "2026-04-01" }
+          description: "Default configurable via env DESDE."
+        - name: after_id
+          in: query
+          schema: { type: integer, default: 0 }
+          description: Cursor de paginación (Id de tabla interno a esta API).
+        - name: limit
+          in: query
+          schema: { type: integer }
+          description: >-
+            Ignorado en la práctica: este endpoint siempre devuelve el universo completo desde
+            `desde` (limit interno forzado a 1000000) porque el consumidor no pagina este feed.
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        mcjId: { type: integer }
+                        contexto:
+                          type: object
+                          properties:
+                            id: { type: integer, description: "Id central único y estable (usar como externalId)." }
+                            sucursal: { type: object, properties: { id: { type: integer }, nombre: { type: string, nullable: true } } }
+                            cajero: { type: object, properties: { id: { type: string, nullable: true }, nombre: { type: string, nullable: true } } }
+                            cliente: { type: object, properties: { nombre: { type: string, nullable: true }, documento: { type: string, nullable: true } } }
+                            estado: { type: object, properties: { original: { type: string, nullable: true }, actual: { type: string, nullable: true }, anulado: { type: boolean } } }
+                        documento: { type: object, nullable: true, properties: { codigo: { type: integer }, tipo: { type: string, nullable: true }, folio: { type: integer } } }
+                        glosa: { type: string }
+                        fecha: { type: string, description: "YYYY-MM-DDTHH:mm:ss sin offset de timezone." }
+                        monto: { type: number, description: "Negativo si EGRESO, positivo si INGRESO." }
+                        tipoOperacion: { type: string, nullable: true }
+                        naturalezaOperacion: { type: string, enum: [INGRESO, EGRESO] }
+                        currency: { type: string, enum: [CLP] }
+                        banco: { type: string, nullable: true }
+                        rubroBanco: { type: integer, nullable: true }
+                        rubroSucursal: { type: integer, nullable: true }
+                        bancoSucursal: { type: string, nullable: true }
+                        bancoDetectado: { type: string, nullable: true }
+                        esExcepcion: { type: boolean }
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            properties: { nombre: { type: string }, cantidad: { type: number }, precioUnitario: { type: number }, monto: { type: number } }
+                        fechaCarga: { type: string, nullable: true }
+                  pagination:
+                    type: object
+                    properties: { count: { type: integer }, next_after_id: { type: integer }, has_more: { type: boolean } }
+        "401":
+          description: X-API-Key inválida (solo si API_KEY está configurada en el servidor).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /api/egresos:
+    get:
+      tags: [movimientos-api]
+      summary: Feed de gastos operativos (MovCajaEgresos, rubros 1000-2099)
+      servers:
+        - url: "http://{host}:{port}"
+          variables: { host: { default: 172.16.10.172 }, port: { default: "5158" } }
+      security:
+        - apiKeyAuth: []
+        - {}
+      parameters:
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: after_id, in: query, schema: { type: integer, default: 0 }, description: Cursor de paginación. }
+        - { name: limit, in: query, schema: { type: integer, default: 1000 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        fecha: { type: string }
+                        monto: { type: number, description: "Negativo (convención de egreso)." }
+                        glosa: { type: string }
+                        sucursal: { type: object, properties: { id: { type: integer }, nombre: { type: string, nullable: true } } }
+                        cajero: { type: object, properties: { id: { type: string, nullable: true }, nombre: { type: string, nullable: true } } }
+                        rubro: { type: object, properties: { id: { type: integer }, nombre: { type: string, nullable: true } } }
+                        fechaCarga: { type: string, nullable: true }
+                  pagination:
+                    type: object
+                    properties: { count: { type: integer }, next_after_id: { type: integer }, has_more: { type: boolean } }
+        "401":
+          description: X-API-Key inválida.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /api/movimientos:
+    get:
+      tags: [movimientos-api]
+      summary: Feed unificado de movimientos internos de tesorería, clasificados por categoría de flujo
+      servers:
+        - url: "http://{host}:{port}"
+          variables: { host: { default: 172.16.10.172 }, port: { default: "5158" } }
+      security:
+        - apiKeyAuth: []
+        - {}
+      parameters:
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: after_id, in: query, schema: { type: integer, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, default: 5000 } }
+        - name: categoria
+          in: query
+          schema: { type: string }
+          description: >-
+            CSV de categorías a filtrar: CAJA_BANCO, BANCO_BANCO, GASTO, SUCURSAL, REMESA_ME,
+            CAJA_CAJA, OTRO (ver descripción de cada una en movimientos.js).
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        mcjId: { type: integer }
+                        categoria: { type: string, enum: [CAJA_BANCO, BANCO_BANCO, GASTO, SUCURSAL, REMESA_ME, CAJA_CAJA, OTRO] }
+                        rubro: { type: integer }
+                        banco: { type: string, nullable: true }
+                        rubroBanco: { type: integer, nullable: true }
+                        direccion: { type: string, enum: [IN, OUT], nullable: true, description: "Solo para categorías bancarias." }
+                        mcjES: { type: string, nullable: true, description: "S=salida / E=entrada de efectivo de caja." }
+                        monto: { type: number, description: "Siempre en valor absoluto." }
+                        fecha: { type: string }
+                        glosa: { type: string }
+                        sucursal: { type: object }
+                        rubroSucursal: { type: integer, nullable: true }
+                        cajero: { type: object }
+                        estado: { type: object, properties: { actual: { type: string, nullable: true }, anulado: { type: boolean } } }
+                        fechaCarga: { type: string, nullable: true }
+                  pagination:
+                    type: object
+                    properties: { count: { type: integer }, next_after_id: { type: integer }, has_more: { type: boolean } }
+        "401":
+          description: X-API-Key inválida.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "500": { $ref: "#/components/responses/ServerError" }
+
+  /api/tbk-tesoreria:
+    get:
+      tags: [movimientos-api]
+      summary: Feed de patas TBK del POS (pago con tarjeta), consumido por el cruce Transbank
+      servers:
+        - url: "http://{host}:{port}"
+          variables: { host: { default: 172.16.10.172 }, port: { default: "5158" } }
+      security:
+        - apiKeyAuth: []
+        - {}
+      parameters:
+        - { name: desde, in: query, schema: { type: string, format: date } }
+        - { name: after_id, in: query, schema: { type: integer, default: 0 } }
+        - { name: limit, in: query, schema: { type: integer, default: 1000 } }
+      responses:
+        "200":
+          description: >-
+            Dedupe por MCjId conservando la última fila si hay duplicados dentro de la misma página.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        tipo: { type: string, enum: [TBK] }
+                        fecha: { type: string }
+                        folio: { type: integer }
+                        glosa: { type: string }
+                        monto: { type: number, description: "Valor absoluto." }
+                        rubro: { type: integer, enum: [17] }
+                        cliente: { type: object, properties: { nombre: { type: string, nullable: true }, documento: { type: string, nullable: true } } }
+                        comision: { type: number, nullable: true, description: "Siempre null en la implementación actual." }
+                        contexto:
+                          type: object
+                          properties:
+                            id: { type: integer, description: "MCjId (prefijado por sucursal)." }
+                            cajero: { type: object }
+                            estado: { type: object }
+                            sucursal: { type: object }
+                        currency: { type: string, enum: [CLP] }
+                        fechaCarga: { type: string, nullable: true }
+                  pagination:
+                    type: object
+                    properties: { count: { type: integer }, limit: { type: integer }, next_after_id: { type: integer }, has_more: { type: boolean } }
+        "401":
+          description: X-API-Key inválida.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" } } }
+        "500": { $ref: "#/components/responses/ServerError" }

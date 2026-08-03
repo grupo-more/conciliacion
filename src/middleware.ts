@@ -23,7 +23,7 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get(COOKIE_NAME)?.value;
   const authed = await isAuthenticated(token);
 
-  if (pathname.startsWith("/dashboard") && !authed) {
+  if ((pathname.startsWith("/dashboard") || pathname.startsWith("/reference")) && !authed) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.searchParams.set("next", pathname);
@@ -41,5 +41,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/login"],
+  matcher: ["/dashboard/:path*", "/login", "/reference/:path*"],
 };
