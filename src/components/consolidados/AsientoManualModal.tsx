@@ -46,10 +46,14 @@ type Tipo = "PROVEEDOR" | "CLIENTE" | null;
  *  por ahora se deja pendiente. */
 export function AsientoManualModal({
   bankMovementId,
+  proveedorNombre,
   onClose,
   onChanged,
 }: {
   bankMovementId: string;
+  /** Proveedor ya resuelto por el maestro (Configuración → Proveedores) que
+   *  derivó este movimiento a la cola "Proveedores". Solo para mostrar. */
+  proveedorNombre?: string | null;
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -275,7 +279,14 @@ export function AsientoManualModal({
                     {bm.account.bankName} {bm.account.holderName}
                     <span className="text-xs text-text-muted font-normal"> · {formatDate(bm.postDate)} · {bm.direction}</span>
                   </div>
-                  <div className="text-xs text-text-muted">{bm.description}</div>
+                  {proveedorNombre && (
+                    <div className="text-xs mt-0.5">
+                      <span className="inline-block rounded-full bg-sky-100 text-sky-800 border border-sky-200 px-2 py-0.5 font-semibold">
+                        Proveedor: {proveedorNombre}
+                      </span>
+                    </div>
+                  )}
+                  <div className="text-xs text-text-muted mt-0.5">{bm.description}</div>
                   {bm.counterpartyName && (
                     <div className="text-xs mt-0.5">
                       <span className="font-semibold">Contraparte:</span> {bm.counterpartyName}

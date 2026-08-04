@@ -83,6 +83,7 @@ export function AsientosManualesView({ queue = "manual" }: { queue?: "manual" | 
   const [preview, setPreview] = useState<{ options: Asi1Options; filename: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedProveedorNombre, setSelectedProveedorNombre] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; msg: string } | null>(null);
@@ -450,7 +451,14 @@ export function AsientosManualesView({ queue = "manual" }: { queue?: "manual" | 
                 </thead>
                 <tbody>
                   {filteredRows.map((r) => (
-                    <tr key={r.id} onClick={() => setSelected(r.id)} className="border-t border-border-soft/60 hover:bg-bg-soft/40 cursor-pointer">
+                    <tr
+                      key={r.id}
+                      onClick={() => {
+                        setSelected(r.id);
+                        setSelectedProveedorNombre(r.proveedorNombre ?? null);
+                      }}
+                      className="border-t border-border-soft/60 hover:bg-bg-soft/40 cursor-pointer"
+                    >
                       <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.fecha)}</td>
                       {esProveedores && (
                         <td className="px-3 py-2 whitespace-nowrap">
@@ -578,7 +586,11 @@ export function AsientosManualesView({ queue = "manual" }: { queue?: "manual" | 
       {selected && (
         <AsientoManualModal
           bankMovementId={selected}
-          onClose={() => setSelected(null)}
+          proveedorNombre={selectedProveedorNombre}
+          onClose={() => {
+            setSelected(null);
+            setSelectedProveedorNombre(null);
+          }}
           onChanged={load}
         />
       )}
