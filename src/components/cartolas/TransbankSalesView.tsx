@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { formatMoney, formatDate } from "@/lib/format";
+import { Pager } from "./Pager";
+
+const PAGE_SIZE = 200;
 
 interface Sale {
   id: string;
@@ -38,6 +41,7 @@ export function TransbankSalesView() {
   const [soloSinConciliar, setSoloSinConciliar] = useState(false);
   const [data, setData] = useState<Resp | null>(null);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(0); // 0-based
 
   async function load() {
     setLoading(true);
@@ -48,6 +52,8 @@ export function TransbankSalesView() {
       if (sucursalId) p.set("sucursalId", sucursalId);
       if (q) p.set("q", q);
       if (soloSinConciliar) p.set("soloSinConciliar", "true");
+      p.set("limit", String(PAGE_SIZE));
+      p.set("offset", String(page * PAGE_SIZE));
       const res = await fetch(`/api/transbank/sales?${p}`);
       setData(res.ok ? await res.json() : null);
     } finally {
@@ -55,11 +61,17 @@ export function TransbankSalesView() {
     }
   }
 
+  // Cualquier cambio de filtro vuelve a la primera página.
+  useEffect(() => {
+    setPage(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [since, until, sucursalId, q, soloSinConciliar]);
+
   useEffect(() => {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [since, until, sucursalId, q, soloSinConciliar]);
+  }, [since, until, sucursalId, q, soloSinConciliar, page]);
 
   return (
     <div className="space-y-3 min-w-0">
@@ -147,8 +159,8 @@ export function TransbankSalesView() {
           </tbody>
         </table>
       </div>
-      {data && data.total > data.sales.length && (
-        <p className="text-xs text-text-muted">Mostrando {data.sales.length} de {data.total}.</p>
+      {data && data.total > 0 && (
+        <Pager page={page} total={data.total} pageSize={PAGE_SIZE} onPage={setPage} />
       )}
     </div>
   );

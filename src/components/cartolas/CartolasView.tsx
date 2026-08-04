@@ -7,6 +7,7 @@ import { TransbankImportModal } from "./TransbankImportModal";
 import { TransbankSalesView } from "./TransbankSalesView";
 import { ReassignModal } from "./ReassignModal";
 import { DuplicatesModal } from "./DuplicatesModal";
+import { Pager } from "./Pager";
 import type {
   AccountsResponse,
   BankAccountDTO,
@@ -21,6 +22,8 @@ import { usePermisos } from "@/lib/use-permisos";
 const ALL_ACCOUNTS = "__all__";
 /** Sentinel para la vista de Abonos Transbank (settlement importado). */
 const TRANSBANK_VIEW = "__transbank__";
+/** Paginación en server: tamaño de página del listado. */
+const PAGE_SIZE = 200;
 
 export function CartolasView() {
   const router = useRouter();
@@ -34,6 +37,7 @@ export function CartolasView() {
   const [total, setTotal] = useState(0);
   const [summary, setSummary] = useState<CartolaSummary | null>(null);
   const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(0); // 0-based
 
   // Filtros
   const [direction, setDirection] = useState<"" | "IN" | "OUT">("");
@@ -77,7 +81,8 @@ export function CartolasView() {
     if (selectedAccountId === null || selectedAccountId === TRANSBANK_VIEW) return;
     setLoading(true);
     const params = new URLSearchParams({
-      limit: "200",
+      limit: String(PAGE_SIZE),
+      offset: String(page * PAGE_SIZE),
       includeSummary: "true",
     });
     if (!isGlobalView) params.set("accountId", selectedAccountId);
@@ -110,10 +115,16 @@ export function CartolasView() {
     loadAccounts();
   }, []);
 
+  // Cualquier cambio de filtro/búsqueda vuelve a la primera página.
+  useEffect(() => {
+    setPage(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAccountId, direction, since, until, onlyUnmatched, descartadosView, search]);
+
   useEffect(() => {
     loadMovements();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAccountId, direction, since, until, onlyUnmatched, descartadosView]);
+  }, [selectedAccountId, direction, since, until, onlyUnmatched, descartadosView, page]);
 
   // Buscar con debounce ligero
   useEffect(() => {
@@ -659,11 +670,8 @@ export function CartolasView() {
             </table>
           </div>
 
-          {!loading && total > movements.length && (
-            <div className="text-xs text-text-muted">
-              Mostrando {movements.length} de {total} movimientos. Refina los filtros
-              para ver el resto.
-            </div>
+          {!loading && total > 0 && (
+            <Pager page={page} total={total} pageSize={PAGE_SIZE} onPage={setPage} />
           )}
 
           {/* Resumen al pie (de cuenta o global) */}
