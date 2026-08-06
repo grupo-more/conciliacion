@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { consumedRefIds } from "@/lib/consolidados/emision-consumo";
+import { loadEntidadesInternas } from "@/lib/internos/detect";
+import { buildRubroMap, type AccountForRubro } from "@/lib/internos/rubro-resolver";
 
 /**
  * GET /api/consolidados/ok?from=YYYY-MM-DD&to=YYYY-MM-DD&accountId=&rubroSucursal=
@@ -102,6 +104,40 @@ export async function GET(req: Request) {
       : [];
   const labelByRubro = new Map(rubroLabels.map((r) => [r.rubro, r.name]));
 
+  // Rubro REAL del banco, resuelto desde la cuenta bancaria efectivamente
+  // conciliada (fuente de verdad: enlace explícito Configuración → Rubros,
+  // o la EntidadInterna de la cuenta). tm.rubroBanco es solo el default por
+  // sucursal que trae Tesorería (catalogos.js del origen) y puede estar mal
+  // cuando la sucursal deposita en una cuenta distinta a su default habitual
+  // (ej. Iquique default Santander ME, pero el abono real cayó en Santander MG).
+  const [rubroLabelsConCuenta, entidades] = await Promise.all([
+    prisma.rubroLabel.findMany({
+      where: { isDifference: false },
+      select: { rubro: true, name: true, accountId: true },
+    }),
+    loadEntidadesInternas(prisma),
+  ]);
+  const accountsForRubro: AccountForRubro[] = [];
+  const seenAcc = new Set<string>();
+  for (const c of consolidados) {
+    for (const link of c.links) {
+      const acc = link.bankMovement.account;
+      if (!seenAcc.has(acc.id)) {
+        seenAcc.add(acc.id);
+        accountsForRubro.push({
+          id: acc.id,
+          bankName: acc.bankName,
+          holderName: acc.holderName,
+        });
+      }
+    }
+  }
+  const rubroPorCuenta = buildRubroMap(
+    accountsForRubro,
+    rubroLabelsConCuenta,
+    entidades.map((e) => ({ rutCanonico: e.rutCanonico, rubro: e.rubro })),
+  );
+
   const rows: OKRow[] = [];
   let totalDebe = 0n;
   let totalHaber = 0n;
@@ -129,10 +165,12 @@ export async function GET(req: Request) {
       (tm.sucursalId ? `Sucursal ${tm.sucursalId}` : "—");
 
     // Cascada para el rubro banco efectivo:
-    //   override (Consolidado.overrideRubroBanco, se setea en el match manual
-    //   cuando el operador detecta que el rubroBanco que vino de Tesorería
-    //   está mal porque ellos tipearon mal el banco al cargar)
-    //   → tm.rubroBanco (la API, default)
+    //   1) override (Consolidado.overrideRubroBanco, set manual del operador)
+    //   2) rubro resuelto desde la CUENTA REAL conciliada (bm.account) — es
+    //      la fuente de verdad porque ya sabemos con certeza a qué cuenta
+    //      entró la plata (match confirmado banco↔tesorería).
+    //   3) tm.rubroBanco — fallback: el default por sucursal que trae
+    //      Tesorería, solo si la cuenta real no tiene rubro asignado.
 
     // 1 fila por cada BankMovement (lado banco).
     //
@@ -148,7 +186,8 @@ export async function GET(req: Request) {
       const abs = linkAmount < 0n ? -linkAmount : linkAmount;
       bankSum += abs;
 
-      const effectiveRubroBanco = c.overrideRubroBanco ?? tm.rubroBanco;
+      const effectiveRubroBanco =
+        c.overrideRubroBanco ?? rubroPorCuenta.get(bm.account.id) ?? tm.rubroBanco;
       const detalleBanco =
         labelByRubro.get(effectiveRubroBanco ?? -1) ?? bm.account.bankName ?? "—";
 
