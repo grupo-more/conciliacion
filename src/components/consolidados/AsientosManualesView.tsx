@@ -120,9 +120,10 @@ export function AsientosManualesView({ queue = "manual" }: { queue?: "manual" | 
   const totalMonto = useMemo(() => (pend ? BigInt(pend.totals.monto) : 0n), [pend]);
 
   // Exporta una lista de asientos como un solo asiento ASI1 (mismo criterio que
-  // el resto de las tabs). Por cada asiento manual:
-  //   DEBE: prorrateo por rubro-sucursal (código de sucursal).
-  //   HABER: banco por el neto (rubro resuelto) + retención (rubro 26).
+  // el resto de las tabs: el banco va al DEBE cuando entra plata, al HABER
+  // cuando sale). Por cada asiento manual:
+  //   PROVEEDOR (egreso): DEBE prorrateo por rubro-sucursal / HABER banco (+ retención).
+  //   CLIENTE (ingreso): DEBE banco / HABER sucursal.
   function buildAsientoFrom(
     lista: GeneradoAsiento[],
     descripcion: string,
@@ -134,11 +135,13 @@ export function AsientosManualesView({ queue = "manual" }: { queue?: "manual" | 
     for (const a of lista) {
       const detalle = a.glosa || a.counterpartyName || `${a.bankName} ${a.holderName}`;
       if (a.tipo === "CLIENTE") {
-        // Ingreso de cliente: DEBE sucursal / HABER banco (1:1, sin impuestos).
+        // Ingreso de cliente: DEBE banco (entra la plata) / HABER sucursal.
+        // Mismo criterio que OK/Abono Transbank/Traspasos internos: el banco
+        // va al DEBE cuando es un abono, no al HABER (eso es para egresos).
+        lineas.push({ rubro: a.bancoRubro ?? "", detalle, debe: a.montoNeto });
         for (const l of a.lineas) {
-          lineas.push({ rubro: l.rubro ?? "", detalle, debe: l.monto });
+          lineas.push({ rubro: l.rubro ?? "", detalle, haber: l.monto });
         }
-        lineas.push({ rubro: a.bancoRubro ?? "", detalle, haber: a.montoNeto });
       } else {
         // Proveedor: DEBE gasto (prorrateo por sucursal) / HABER banco (+ retención).
         for (const l of a.lineas) {
