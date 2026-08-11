@@ -145,14 +145,18 @@ export async function GET(req: Request) {
     const outRubro = rubroMap.get(outAcc.id) ?? null;
     const inRubro = rubroMap.get(inAcc.id) ?? null;
 
-    // DEBE: cuenta destino (donde la plata entra → carga su cuenta de mayor)
+    // DEBE: cuenta destino (donde la plata entra → carga su cuenta de mayor).
+    // El "detalle" muestra la CONTRAPARTE (cuenta origen, outAcc) en vez de la
+    // propia cuenta destino — convención contable: el glosa de cada lado
+    // nombra de dónde vino / hacia dónde fue, no a sí mismo. El rubro/monto/
+    // Debe siguen atados a la cuenta destino real (inAcc) sin cambios.
     rows.push({
       groupId,
       side: "DEBE",
       fecha: p.in.postDate.toISOString(),
       rubro: inRubro,
       rubroLabel: inRubro != null ? rubroNameByCode.get(inRubro) ?? null : null,
-      detalle: accountDetalle(inAcc),
+      detalle: accountDetalle(outAcc),
       contraparte: shortContraparte(p.in.counterpartyName, p.in.counterpartyRut),
       glosa: p.in.description ?? "",
       monto: amount.toString(),
@@ -163,14 +167,15 @@ export async function GET(req: Request) {
       intraEntidad: p.intraEntidad,
     });
 
-    // HABER: cuenta origen (de donde sale → abona su cuenta de mayor)
+    // HABER: cuenta origen (de donde sale → abona su cuenta de mayor). Mismo
+    // criterio: el "detalle" muestra la contraparte (cuenta destino, inAcc).
     rows.push({
       groupId,
       side: "HABER",
       fecha: p.out.postDate.toISOString(),
       rubro: outRubro,
       rubroLabel: outRubro != null ? rubroNameByCode.get(outRubro) ?? null : null,
-      detalle: accountDetalle(outAcc),
+      detalle: accountDetalle(inAcc),
       contraparte: shortContraparte(p.out.counterpartyName, p.out.counterpartyRut),
       glosa: p.out.description ?? "",
       monto: amount.toString(),
