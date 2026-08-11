@@ -19,6 +19,8 @@ model User {
   // Perfil de permisos. null → tratado como "Solo lectura" (mínimo privilegio).
   perfilId String? @map("perfil_id")
   perfil   Perfil? @relation(fields: [perfilId], references: [id], onDelete: SetNull)
+
+  saldosManualesCapturados SaldoManual[]
 }
 
 // Perfil de uso del sistema. `permisos` (Json) son las "variables" del perfil:
@@ -59,6 +61,7 @@ model BankAccount {
   descartados    MovimientoDescartado[]
   descarteReglas DescarteRegla[]
   rubroLabel     RubroLabel?
+  saldosManuales SaldoManual[]
 
   @@unique([bankCode, accountNumber])
   @@index([active])
@@ -103,6 +106,26 @@ model BankAccountAlias {
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
   @@index([accountId])
+}
+
+// Saldo de una cuenta bancaria "según el otro sistema", tipeado a mano por un
+// operador para la Auditoría de cuadre (Reportes). Historial (no se
+// sobreescribe): cada registro es un snapshot para una fecha puntual, así
+// queda trazable quién lo cargó y cuándo. La comparación se hace contra el
+// saldo del propio sistema A ESA MISMA FECHA (balanceAfter del último
+// BankMovement con post_date <= fecha), no contra el saldo de hoy.
+model SaldoManual {
+  id            String      @id @default(uuid())
+  accountId     String      @map("account_id")
+  account       BankAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  fecha         DateTime    @map("fecha")
+  monto         BigInt
+  nota          String?     @db.Text
+  capturadoById String      @map("capturado_by_id")
+  capturadoBy   User        @relation(fields: [capturadoById], references: [id])
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@index([accountId, fecha])
 }
 
 model StatementImport {

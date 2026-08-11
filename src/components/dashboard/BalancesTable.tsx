@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import type { AccountBalance } from "./types";
 import { formatDate, formatMoney } from "@/lib/format";
 
@@ -18,8 +19,15 @@ export function BalancesTable({ balances, periodLabel }: Props) {
 
   return (
     <div className="card p-0 overflow-hidden">
-      <div className="px-4 py-3 border-b border-border-soft">
+      <div className="px-4 py-3 border-b border-border-soft flex items-center justify-between">
         <h3 className="text-sm font-medium">Cuentas y saldos</h3>
+        <Link
+          href="/dashboard/reportes"
+          className="text-xs text-brand hover:underline font-semibold"
+          title="Comparar estos saldos contra el saldo del otro sistema y ver los pendientes"
+        >
+          Auditoría de cuadre →
+        </Link>
       </div>
 
       <div className="overflow-x-auto">

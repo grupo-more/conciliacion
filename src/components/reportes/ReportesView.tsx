@@ -5,8 +5,9 @@ import { formatMoney } from "@/lib/format";
 import type { ReportesOverview } from "./types";
 import { BancoSinConciliarView } from "./BancoSinConciliarView";
 import { DynatechSinContraparteView } from "./DynatechSinContraparteView";
+import { AuditoriaCuadreView } from "./AuditoriaCuadreView";
 
-type Tab = "banco" | "dynatech";
+type Tab = "banco" | "dynatech" | "auditoria";
 
 /**
  * Módulo Reportes: vista de la brecha de conciliación con sub-tabs (Banco /
@@ -88,6 +89,9 @@ export function ReportesView() {
           <TabButton active={tab === "dynatech"} onClick={() => setTab("dynatech")}>
             Dynatech sin contraparte
           </TabButton>
+          <TabButton active={tab === "auditoria"} onClick={() => setTab("auditoria")}>
+            Auditoría de cuadre
+          </TabButton>
         </nav>
       </div>
 
@@ -102,6 +106,7 @@ export function ReportesView() {
           onRangeChange={onRangeChange}
         />
       )}
+      {tab === "auditoria" && <AuditoriaCuadreView />}
     </div>
   );
 }
