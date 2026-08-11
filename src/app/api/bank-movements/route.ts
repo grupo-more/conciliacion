@@ -9,6 +9,7 @@ import {
   usoParcialAccountWhere,
   USO_PARCIAL_SQL,
 } from "@/lib/cuentas/uso-parcial";
+import { consumedRefIds } from "@/lib/consolidados/emision-consumo";
 
 /**
  * GET /api/bank-movements
@@ -56,6 +57,12 @@ export async function GET(req: Request) {
   const difSettings = await getDifMenorSettings();
   const difThreshold = difSettings.threshold;
 
+  // Movimientos ya emitidos como Traspasos internos: ese matching se calcula
+  // al vuelo (no crea Consolidado/AsientoManual), así que sin esto Cartolas
+  // los sigue mostrando "Sin conciliar" para siempre aunque ya se hayan
+  // emitido (bankMovementId queda registrado en EmisionConsumo al emitir).
+  const emitidosTraspasos = await consumedRefIds("TRASPASOS_INTERNOS");
+
   const where: Prisma.BankMovementWhereInput = {};
   if (accountId) where.accountId = accountId;
   if (direction === "IN" || direction === "OUT") where.direction = direction;
@@ -93,9 +100,10 @@ export async function GET(req: Request) {
 
   if (onlyUnmatched) {
     // "Sin conciliar" = sin NINGUNA resolución: sin link del motor, sin
-    // conciliación de egreso a tercero y sin asiento manual. Aplica a ingresos
-    // Y egresos (respeta el filtro de dirección que elija el usuario). Se
-    // excluyen abonos Transbank (tienen su asiento propio) y cuentas de uso parcial.
+    // conciliación de egreso a tercero, sin asiento manual y sin emisión de
+    // Traspasos internos. Aplica a ingresos Y egresos (respeta el filtro de
+    // dirección que elija el usuario). Se excluyen abonos Transbank (tienen
+    // su asiento propio) y cuentas de uso parcial.
     where.consolidadoLinks = { none: {} };
     where.egresoConciliacionLinks = { none: {} };
     where.asientoManual = { is: null };
@@ -108,6 +116,9 @@ export async function GET(req: Request) {
       },
     ];
     where.account = { isNot: usoParcialAccountWhere };
+    if (emitidosTraspasos.size > 0) {
+      where.id = { notIn: Array.from(emitidosTraspasos) };
+    }
   }
 
   const [rows, total] = await Promise.all([
@@ -189,22 +200,36 @@ export async function GET(req: Request) {
             COALESCE(SUM(CASE WHEN direction='IN' THEN amount ELSE 0 END), 0)::bigint AS in_sum,
             COUNT(
               CASE
-                WHEN direction='IN' AND EXISTS (
-                  SELECT 1 FROM "ConsolidadoLink" cl
-                  JOIN "Consolidado" c ON c.id = cl.consolidado_id
-                  WHERE cl.bank_movement_id = bm.id
-                    AND c.status IN ('AUTO_MATCHED','MANUAL')
+                WHEN direction='IN' AND (
+                  EXISTS (
+                    SELECT 1 FROM "ConsolidadoLink" cl
+                    JOIN "Consolidado" c ON c.id = cl.consolidado_id
+                    WHERE cl.bank_movement_id = bm.id
+                      AND c.status IN ('AUTO_MATCHED','MANUAL')
+                  )
+                  OR EXISTS (
+                    SELECT 1 FROM "EmisionConsumo" ec
+                    JOIN "EmisionAsientos" ea ON ea.id = ec.emision_id
+                    WHERE ec.ref_id = bm.id AND ea.origen = 'TRASPASOS_INTERNOS'
+                  )
                 )
                 THEN 1
               END
             )::bigint AS in_rec_n,
             COALESCE(SUM(
               CASE
-                WHEN direction='IN' AND EXISTS (
-                  SELECT 1 FROM "ConsolidadoLink" cl
-                  JOIN "Consolidado" c ON c.id = cl.consolidado_id
-                  WHERE cl.bank_movement_id = bm.id
-                    AND c.status IN ('AUTO_MATCHED','MANUAL')
+                WHEN direction='IN' AND (
+                  EXISTS (
+                    SELECT 1 FROM "ConsolidadoLink" cl
+                    JOIN "Consolidado" c ON c.id = cl.consolidado_id
+                    WHERE cl.bank_movement_id = bm.id
+                      AND c.status IN ('AUTO_MATCHED','MANUAL')
+                  )
+                  OR EXISTS (
+                    SELECT 1 FROM "EmisionConsumo" ec
+                    JOIN "EmisionAsientos" ea ON ea.id = ec.emision_id
+                    WHERE ec.ref_id = bm.id AND ea.origen = 'TRASPASOS_INTERNOS'
+                  )
                 )
                 THEN amount
                 ELSE 0
@@ -275,22 +300,36 @@ export async function GET(req: Request) {
             COALESCE(SUM(CASE WHEN direction='IN' THEN amount ELSE 0 END), 0)::bigint AS in_sum,
             COUNT(
               CASE
-                WHEN direction='IN' AND EXISTS (
-                  SELECT 1 FROM "ConsolidadoLink" cl
-                  JOIN "Consolidado" c ON c.id = cl.consolidado_id
-                  WHERE cl.bank_movement_id = bm.id
-                    AND c.status IN ('AUTO_MATCHED','MANUAL')
+                WHEN direction='IN' AND (
+                  EXISTS (
+                    SELECT 1 FROM "ConsolidadoLink" cl
+                    JOIN "Consolidado" c ON c.id = cl.consolidado_id
+                    WHERE cl.bank_movement_id = bm.id
+                      AND c.status IN ('AUTO_MATCHED','MANUAL')
+                  )
+                  OR EXISTS (
+                    SELECT 1 FROM "EmisionConsumo" ec
+                    JOIN "EmisionAsientos" ea ON ea.id = ec.emision_id
+                    WHERE ec.ref_id = bm.id AND ea.origen = 'TRASPASOS_INTERNOS'
+                  )
                 )
                 THEN 1
               END
             )::bigint AS in_rec_n,
             COALESCE(SUM(
               CASE
-                WHEN direction='IN' AND EXISTS (
-                  SELECT 1 FROM "ConsolidadoLink" cl
-                  JOIN "Consolidado" c ON c.id = cl.consolidado_id
-                  WHERE cl.bank_movement_id = bm.id
-                    AND c.status IN ('AUTO_MATCHED','MANUAL')
+                WHEN direction='IN' AND (
+                  EXISTS (
+                    SELECT 1 FROM "ConsolidadoLink" cl
+                    JOIN "Consolidado" c ON c.id = cl.consolidado_id
+                    WHERE cl.bank_movement_id = bm.id
+                      AND c.status IN ('AUTO_MATCHED','MANUAL')
+                  )
+                  OR EXISTS (
+                    SELECT 1 FROM "EmisionConsumo" ec
+                    JOIN "EmisionAsientos" ea ON ea.id = ec.emision_id
+                    WHERE ec.ref_id = bm.id AND ea.origen = 'TRASPASOS_INTERNOS'
+                  )
                 )
                 THEN amount
                 ELSE 0
@@ -424,6 +463,7 @@ export async function GET(req: Request) {
         consolidado,
         egresoConciliado,
         asientoManual: m.asientoManual != null,
+        traspasoInternoEmitido: emitidosTraspasos.has(m.id),
         transbank: isTransbank(m),
         comision: !isTransbank(m) && isComisionBancaria(m),
         // Prioridad: un cargo chico con glosa de comisión es comisión, no dif menor.

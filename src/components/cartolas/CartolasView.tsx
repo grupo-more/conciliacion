@@ -845,6 +845,17 @@ function computeRowStatus(m: MovementDTO): RowStatus {
     };
   }
 
+  // ── Emitido como Traspaso interno (Consolidados → Traspasos internos) ──
+  if (m.traspasoInternoEmitido) {
+    return {
+      label: "Traspaso interno",
+      title: "Emitido como traspaso interno (Consolidados → Traspasos internos).",
+      borderCls: "w-[3px] bg-success",
+      badgeCls: "border-success/40 bg-success/10 text-success",
+      rowBg: "",
+    };
+  }
+
   // ── Comisión/cargo del propio banco → asiento automático en "Diferencias y
   // comisiones". Va ANTES de la rama genérica de OUT.
   if (m.comision) {

@@ -44,6 +44,11 @@ export interface MovementDTO {
   egresoConciliado: { status: string } | null;
   /** True si el movimiento tiene un asiento manual generado (también = resuelto). */
   asientoManual: boolean;
+  /** True si el movimiento ya fue emitido como Traspaso interno (Consolidados
+   *  → Traspasos internos). Ese matching se calcula al vuelo y no crea
+   *  Consolidado/AsientoManual, así que sin este flag Cartolas lo muestra
+   *  "Sin conciliar" para siempre aunque ya esté resuelto y emitido. */
+  traspasoInternoEmitido: boolean;
   /** True si la glosa matchea el patrón de abono Transbank ("ABN CRD ... TRANSBA").
    *  Estos movimientos no se concilian con Tesorería — tienen su propio asiento
    *  en el tab "Abono Transbank" de Consolidados. */
