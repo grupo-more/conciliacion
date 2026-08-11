@@ -62,11 +62,18 @@ export function pickDescripcion(
   return clean(primary) || clean(glosa) || fallback;
 }
 
+/** Máximo de caracteres que acepta el campo Descripción del sistema de
+ *  gestión al importar el Excel. Pasado esto, el otro sistema trunca o
+ *  falla, así que lo recortamos acá antes de escribir la celda. */
+const DETALLE_MAX_LEN = 50;
+
 /**
  * Descripción unificada de línea: "fecha - cliente/contraparte - sucursal".
  * Cada segmento se omite si viene vacío, para que nunca queden separadores
  * huérfanos (tabs sin sucursal, o sin cliente real como Traspasos internos).
  * `principal` ya debe venir resuelta (típicamente con pickDescripcion).
+ * El resultado se recorta a DETALLE_MAX_LEN caracteres (límite del sistema
+ * de gestión que importa este Excel).
  */
 export function buildLineaDetalle(
   fechaFormateada: string,
@@ -77,9 +84,10 @@ export function buildLineaDetalle(
     const t = (s ?? "").trim();
     return t && t !== "—" ? t : "";
   };
-  return [clean(fechaFormateada), clean(principal), clean(sucursal)]
+  const full = [clean(fechaFormateada), clean(principal), clean(sucursal)]
     .filter(Boolean)
     .join(" - ");
+  return full.slice(0, DETALLE_MAX_LEN);
 }
 
 /** Días entre 1899-12-30 (epoch de Excel) y 1970-01-01. */

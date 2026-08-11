@@ -137,8 +137,10 @@ export function TraspasosInternosView() {
           // A diferencia de las otras tabs (donde contraparte = cliente, útil
           // para gestión), acá la contraparte cruda es un RUT o "Internet a
           // XX.XXX.XXX-X" — sin valor en el documento. La descripción correcta
-          // de cada línea es la CUENTA (banco · titular · n°), igual que la
-          // columna Detalle de la vista. No hay sucursal para este tab (son
+          // de cada línea es la CUENTA DEL OTRO LADO del traspaso (banco ·
+          // titular · n° de la contraparte, no la propia — pedido explícito
+          // de gestión), igual que la columna Detalle de la vista (route.ts
+          // ya arma `detalle` invertido). No hay sucursal para este tab (son
           // transferencias entre cuentas propias, no atadas a una sucursal).
           // La fecha del movimiento va CONCATENADA a la descripción (pedido
           // explícito: no agrandar la tabla con otra columna), PRIMERO y con
