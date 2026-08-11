@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
-import { exportAsi1Xls, pickDescripcion, type Asi1Options } from "@/lib/asientos/exportAsi1";
+import { exportAsi1Xls, pickDescripcion, buildLineaDetalle, type Asi1Options } from "@/lib/asientos/exportAsi1";
 import { Asi1PreviewModal } from "./Asi1Preview";
 import { EmisionesPanel, EmisionesToggle, emitirDocumento } from "./EmisionesDerivadas";
 import type { OKResponse, OKRow } from "./types";
@@ -88,7 +88,11 @@ export function OKView() {
         descripcion: `Conciliados ${formatDate(from)} al ${formatDate(to)}`,
         lineas: data.rows.map((r) => ({
           rubro: r.rubro ?? "",
-          detalle: pickDescripcion(r.cliente, r.glosa, r.detalle),
+          detalle: buildLineaDetalle(
+            formatDate(r.fecha),
+            pickDescripcion(r.cliente, r.glosa, r.detalle),
+            r.sucursalName,
+          ),
           debe: r.debe,
           haber: r.haber,
         })),

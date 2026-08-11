@@ -166,6 +166,8 @@ export interface OKRow {
   /** Nombre legible: rubroLabel si existe, sino fallback al banco/sucursal. */
   detalle: string;
   cliente: string;
+  /** Nombre de la sucursal (TesoreriaMovement.sucursalName), para la descripción unificada. */
+  sucursalName: string | null;
   glosa: string;
   /** BigInt como string (positivo). null si no aplica a este lado. */
   debe: string | null;

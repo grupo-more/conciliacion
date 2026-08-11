@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
-import { exportAsi1Xls, pickDescripcion, type Asi1Options } from "@/lib/asientos/exportAsi1";
+import { exportAsi1Xls, pickDescripcion, buildLineaDetalle, type Asi1Options } from "@/lib/asientos/exportAsi1";
 import { Asi1PreviewModal } from "./Asi1Preview";
 import { EmisionesPanel, EmisionesToggle, emitirDocumento } from "./EmisionesDerivadas";
 
@@ -17,6 +17,7 @@ interface AsientoRowDTO {
   cuenta: string | null;
   glosa: string;
   counterparty: string | null;
+  sucursalName: string | null;
   debe: string | null;
   haber: string | null;
   status: string;
@@ -114,7 +115,11 @@ export function EgresosTercerosAsiento({
         descripcion: `Egresos a terceros ${formatDate(from)} al ${formatDate(to)}`,
         lineas: data.rows.map((r) => ({
           rubro: r.rubro ?? "",
-          detalle: pickDescripcion(r.counterparty, r.glosa, r.detalle),
+          detalle: buildLineaDetalle(
+            formatDate(r.fecha),
+            pickDescripcion(r.counterparty, r.glosa, r.detalle),
+            r.sucursalName,
+          ),
           debe: r.debe,
           haber: r.haber,
         })),

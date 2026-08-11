@@ -62,6 +62,26 @@ export function pickDescripcion(
   return clean(primary) || clean(glosa) || fallback;
 }
 
+/**
+ * Descripción unificada de línea: "fecha - cliente/contraparte - sucursal".
+ * Cada segmento se omite si viene vacío, para que nunca queden separadores
+ * huérfanos (tabs sin sucursal, o sin cliente real como Traspasos internos).
+ * `principal` ya debe venir resuelta (típicamente con pickDescripcion).
+ */
+export function buildLineaDetalle(
+  fechaFormateada: string,
+  principal: string,
+  sucursal?: string | null,
+): string {
+  const clean = (s: string | null | undefined) => {
+    const t = (s ?? "").trim();
+    return t && t !== "—" ? t : "";
+  };
+  return [clean(fechaFormateada), clean(principal), clean(sucursal)]
+    .filter(Boolean)
+    .join(" - ");
+}
+
 /** Días entre 1899-12-30 (epoch de Excel) y 1970-01-01. */
 const EXCEL_EPOCH_OFFSET = 25569;
 

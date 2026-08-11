@@ -199,6 +199,7 @@ export async function GET(req: Request) {
         rubroLabel: labelByRubro.get(effectiveRubroBanco ?? -1) ?? null,
         detalle: detalleBanco,
         cliente,
+        sucursalName: tm.sucursalName,
         glosa: bm.description?.trim() || glosa,
         debe: isAbono ? abs.toString() : null,
         haber: isAbono ? null : abs.toString(),
@@ -223,6 +224,7 @@ export async function GET(req: Request) {
       rubroLabel: labelByRubro.get(rubroSuc ?? -1) ?? null,
       detalle: detalleSucursal,
       cliente,
+      sucursalName: tm.sucursalName,
       glosa,
       debe: isAbono ? null : tesoreriaAmount.toString(),
       haber: isAbono ? tesoreriaAmount.toString() : null,
@@ -257,6 +259,7 @@ export async function GET(req: Request) {
         rubroLabel: rubroAj !== null ? labelByRubro.get(rubroAj) ?? null : null,
         detalle: detalleAj,
         cliente,
+        sucursalName: tm.sucursalName,
         glosa: c.adjustmentNote?.trim() || "Ajuste por diferencia",
         debe: ajusteAlHaber ? null : absDiff.toString(),
         haber: ajusteAlHaber ? absDiff.toString() : null,
@@ -343,6 +346,7 @@ interface OKRow {
   rubroLabel: string | null;
   detalle: string;
   cliente: string;
+  sucursalName: string | null;
   glosa: string;
   debe: string | null;
   haber: string | null;

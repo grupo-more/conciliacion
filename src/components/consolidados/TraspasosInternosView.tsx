@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatMoney } from "@/lib/format";
-import { exportAsi1Xls, pickDescripcion, type Asi1Options } from "@/lib/asientos/exportAsi1";
+import { exportAsi1Xls, pickDescripcion, buildLineaDetalle, type Asi1Options } from "@/lib/asientos/exportAsi1";
 import { Asi1PreviewModal } from "./Asi1Preview";
 import { EmisionesPanel, EmisionesToggle, emitirDocumento } from "./EmisionesDerivadas";
 
@@ -138,13 +138,18 @@ export function TraspasosInternosView() {
           // para gestión), acá la contraparte cruda es un RUT o "Internet a
           // XX.XXX.XXX-X" — sin valor en el documento. La descripción correcta
           // de cada línea es la CUENTA (banco · titular · n°), igual que la
-          // columna Detalle de la vista.
+          // columna Detalle de la vista. No hay sucursal para este tab (son
+          // transferencias entre cuentas propias, no atadas a una sucursal).
           // La fecha del movimiento va CONCATENADA a la descripción (pedido
           // explícito: no agrandar la tabla con otra columna), PRIMERO y con
-          // separador " - " para legibilidad. Así también queda en el Excel de
-          // gestión y en el snapshot de la emisión. La vista previa/impresión
-          // la detectan al inicio y la muestran en negrita.
-          detalle: `${formatDate(r.fecha)} - ${r.detalle || pickDescripcion(r.contraparte, r.glosa, r.detalle)}`,
+          // separador " - " para legibilidad — mismo formato compartido
+          // (buildLineaDetalle) que usan las demás tabs. Así también queda en
+          // el Excel de gestión y en el snapshot de la emisión. La vista
+          // previa/impresión la detectan al inicio y la muestran en negrita.
+          detalle: buildLineaDetalle(
+            formatDate(r.fecha),
+            r.detalle || pickDescripcion(r.contraparte, r.glosa, r.detalle),
+          ),
           debe: r.debe,
           haber: r.haber,
         })),

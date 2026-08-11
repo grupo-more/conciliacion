@@ -100,6 +100,8 @@ export async function GET(req: Request) {
     glosa: string;
     /** Contraparte (proveedor): para la descripción del asiento (contraparte → glosa). */
     counterparty: string | null;
+    /** Nombre de la sucursal (TesoreriaMovement.sucursalName), para la descripción unificada. */
+    sucursalName: string | null;
     debe: string | null;
     haber: string | null;
     status: string;
@@ -139,6 +141,7 @@ export async function GET(req: Request) {
       cuenta: tm.sucursalName,
       glosa: tm.glosa,
       counterparty,
+      sucursalName: tm.sucursalName,
       debe: absTm.toString(),
       haber: null,
       status: c.status,
@@ -168,6 +171,7 @@ export async function GET(req: Request) {
         cuenta: bm.account.displayNumber || bm.account.accountNumber,
         glosa: bm.counterpartyName || bm.description || "",
         counterparty: bm.counterpartyName || counterparty,
+        sucursalName: tm.sucursalName,
         debe: null,
         haber: bmAbs.toString(),
         status: c.status,

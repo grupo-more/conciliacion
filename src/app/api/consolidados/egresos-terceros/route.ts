@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { detectInterno, loadEntidadesInternas } from "@/lib/internos/detect";
 import { usoParcialAccountWhere } from "@/lib/cuentas/uso-parcial";
+import { getDifMenorSettings, isComisionBancaria, isDifMenor } from "@/lib/dif-menor/detect";
 
 /**
  * GET /api/consolidados/egresos-terceros?from=YYYY-MM-DD&to=YYYY-MM-DD
@@ -34,6 +35,7 @@ export async function GET(req: Request) {
   const quality = url.searchParams.get("quality") as Quality | null;
 
   const entidades = await loadEntidadesInternas(prisma);
+  const { threshold: difThreshold } = await getDifMenorSettings();
 
   // Propuestas SUGGESTED del motor de egresos: no crean link, pero apuntan a
   // movimiento(s) de banco vía proposalJson. Las indexamos por bankMovementId
@@ -118,6 +120,11 @@ export async function GET(req: Request) {
     // Si matchea una entidad interna, pertenece al OTRO tab.
     const internoMatch = detectInterno(bm, entidades);
     if (internoMatch) continue;
+
+    // Comisiones bancarias y diferencias menores (transferencias de prueba)
+    // se resuelven con asiento automático en "Diferencias y comisiones" — no
+    // son egresos a terceros reales, nunca van a tener contraparte real.
+    if (isComisionBancaria(bm) || isDifMenor(bm, difThreshold)) continue;
 
     const hasRut = !!bm.counterpartyRut && bm.counterpartyRut.trim().length > 0;
     const hasName =

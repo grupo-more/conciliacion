@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatDate, formatDateRangeEnd, formatMoney } from "@/lib/format";
-import { exportAsi1Xls, type Asi1Linea, type Asi1Options } from "@/lib/asientos/exportAsi1";
+import { exportAsi1Xls, buildLineaDetalle, type Asi1Linea, type Asi1Options } from "@/lib/asientos/exportAsi1";
 import { Asi1PreviewModal } from "./Asi1Preview";
 import { AsientoManualModal } from "./AsientoManualModal";
 
@@ -133,25 +133,47 @@ export function AsientosManualesView({ queue = "manual" }: { queue?: "manual" | 
     if (lista.length === 0) return null;
     const lineas: Asi1Linea[] = [];
     for (const a of lista) {
-      const detalle = a.glosa || a.counterpartyName || `${a.bankName} ${a.holderName}`;
+      const fechaFmt = formatDate(a.fecha);
+      const detalleBase = a.glosa || a.counterpartyName || `${a.bankName} ${a.holderName}`;
       if (a.tipo === "CLIENTE") {
         // Ingreso de cliente: DEBE banco (entra la plata) / HABER sucursal.
         // Mismo criterio que OK/Abono Transbank/Traspasos internos: el banco
         // va al DEBE cuando es un abono, no al HABER (eso es para egresos).
-        lineas.push({ rubro: a.bancoRubro ?? "", detalle, debe: a.montoNeto });
+        // Cliente siempre apunta a una sola sucursal, se la mostramos también
+        // en la línea del banco (no hay ambigüedad, es la misma transacción).
+        const suc = a.lineas[0]?.sucursalNombre ?? null;
+        lineas.push({
+          rubro: a.bancoRubro ?? "",
+          detalle: buildLineaDetalle(fechaFmt, detalleBase, suc),
+          debe: a.montoNeto,
+        });
         for (const l of a.lineas) {
-          lineas.push({ rubro: l.rubro ?? "", detalle, haber: l.monto });
+          lineas.push({
+            rubro: l.rubro ?? "",
+            detalle: buildLineaDetalle(fechaFmt, detalleBase, l.sucursalNombre),
+            haber: l.monto,
+          });
         }
       } else {
         // Proveedor: DEBE gasto (prorrateo por sucursal) / HABER banco (+ retención).
+        // La línea de banco es agregada (puede repartirse entre varias
+        // sucursales), así que ahí no mostramos una sucursal específica.
         for (const l of a.lineas) {
-          lineas.push({ rubro: l.rubro ?? "", detalle, debe: l.monto });
+          lineas.push({
+            rubro: l.rubro ?? "",
+            detalle: buildLineaDetalle(fechaFmt, detalleBase, l.sucursalNombre),
+            debe: l.monto,
+          });
         }
-        lineas.push({ rubro: a.bancoRubro ?? "", detalle, haber: a.montoNeto });
+        lineas.push({
+          rubro: a.bancoRubro ?? "",
+          detalle: buildLineaDetalle(fechaFmt, detalleBase),
+          haber: a.montoNeto,
+        });
         if (BigInt(a.montoRetencion) > 0n) {
           lineas.push({
             rubro: a.retencionRubro ?? "",
-            detalle: `Retención honorarios · ${detalle}`,
+            detalle: buildLineaDetalle(fechaFmt, `Retención honorarios · ${detalleBase}`),
             haber: a.montoRetencion,
           });
         }
