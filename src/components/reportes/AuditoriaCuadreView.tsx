@@ -398,6 +398,8 @@ function VistaCuenta({
         )}
       </div>
 
+      <HistorialSaldos accountId={detalle.account.id} onChanged={onSaved} />
+
       {!detalle.saldoManual ? (
         <div className="card text-sm text-text-muted">
           Carga un saldo manual arriba para ver la comparación y los pendientes de esta cuenta.
@@ -541,6 +543,101 @@ function PendientesDynatech({
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistorialSaldos({
+  accountId,
+  onChanged,
+}: {
+  accountId: string;
+  onChanged: () => void;
+}) {
+  const [saldos, setSaldos] = useState<SaldoManualDTO[] | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  async function load() {
+    const res = await fetch(`/api/reportes/saldo-manual?accountId=${accountId}`);
+    if (res.ok) setSaldos((await res.json()).saldos);
+  }
+
+  useEffect(() => {
+    setSaldos(null);
+    setOpen(false);
+  }, [accountId]);
+
+  useEffect(() => {
+    if (open) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, accountId]);
+
+  async function eliminar(id: string) {
+    if (!confirm("¿Eliminar este saldo manual? No se puede deshacer.")) return;
+    setDeletingId(id);
+    try {
+      const res = await fetch(`/api/reportes/saldo-manual?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        await load();
+        await onChanged();
+      }
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div className="card p-0 overflow-hidden">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-3 py-2 text-left text-sm font-semibold flex items-center justify-between hover:bg-bg-elevated/40"
+      >
+        <span>Historial de saldos manuales</span>
+        <span className="text-text-muted text-xs">{open ? "ocultar ▲" : "ver ▼"}</span>
+      </button>
+      {open && (
+        <div className="border-t border-border-soft overflow-x-auto">
+          {saldos === null ? (
+            <div className="px-3 py-3 text-sm text-text-muted">Cargando…</div>
+          ) : saldos.length === 0 ? (
+            <div className="px-3 py-3 text-sm text-text-muted">Sin registros todavía.</div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-bg-soft text-xs uppercase text-text-muted">
+                <tr>
+                  <th className="px-3 py-1.5 text-left">Fecha</th>
+                  <th className="px-3 py-1.5 text-right">Monto</th>
+                  <th className="px-3 py-1.5 text-left">Nota</th>
+                  <th className="px-3 py-1.5 text-left">Cargado por</th>
+                  <th className="px-3 py-1.5 text-center">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {saldos.map((s) => (
+                  <tr key={s.id} className="border-t border-border-soft/40">
+                    <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(s.fecha)}</td>
+                    <td className="px-3 py-1.5 text-right font-mono">{formatMoney(BigInt(s.monto))}</td>
+                    <td className="px-3 py-1.5 text-text-muted">{s.nota ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-xs text-text-muted whitespace-nowrap">
+                      {s.capturadoPor} · {formatDate(s.createdAt)}
+                    </td>
+                    <td className="px-3 py-1.5 text-center">
+                      <button
+                        onClick={() => eliminar(s.id)}
+                        disabled={deletingId === s.id}
+                        className="text-rose-700 hover:underline text-xs font-semibold disabled:opacity-50"
+                      >
+                        {deletingId === s.id ? "Eliminando…" : "Eliminar"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

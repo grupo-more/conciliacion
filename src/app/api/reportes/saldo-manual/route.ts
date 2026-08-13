@@ -12,6 +12,9 @@ import { denyUnless } from "@/lib/perms";
  *   { accountId, fecha: "YYYY-MM-DD", monto, nota? }
  *   Crea un nuevo snapshot (no sobreescribe el anterior — queda el historial
  *   completo para trazabilidad de la Auditoría de cuadre).
+ *
+ * DELETE /api/reportes/saldo-manual?id=<uuid>
+ *   Elimina un snapshot cargado por error.
  */
 export async function GET(req: Request) {
   const session = await getSession();
@@ -78,4 +81,21 @@ export async function POST(req: Request) {
   });
 
   return NextResponse.json({ ok: true, id: created.id }, { status: 201 });
+}
+
+export async function DELETE(req: Request) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  const denied = await denyUnless(session, "conciliar");
+  if (denied) return denied;
+
+  const url = new URL(req.url);
+  const id = url.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Falta id" }, { status: 400 });
+
+  const existing = await prisma.saldoManual.findUnique({ where: { id } });
+  if (!existing) return NextResponse.json({ error: "No existe" }, { status: 404 });
+
+  await prisma.saldoManual.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
 }
