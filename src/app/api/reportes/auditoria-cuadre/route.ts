@@ -175,6 +175,7 @@ async function auditoriaCuenta(
     // false = se está viendo un snapshot histórico, no el vigente.
     esUltimoSnapshot: saldoManualSel.id === ultimoSaldoManual?.id,
     saldoSistema: saldoSistema !== null ? saldoSistema.toString() : null,
+    diferencia: diferencia !== null ? diferencia.toString() : null,
     // Fecha del movimiento de cartola que aportó ese saldo. Si quedó muy atrás
     // de la fecha de corte, la cartola no está cargada hasta esa fecha y la
     // diferencia incluye días que simplemente no existen en el sistema.

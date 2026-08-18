@@ -87,6 +87,17 @@ interface CuentaAuditoria {
   cuadra: boolean | null;
 }
 
+/**
+ * Formatea un monto que viene del API. Tolera `undefined` (campo ausente en el
+ * response) y no solo `null`: un guard `!== null` deja pasar el undefined y
+ * BigInt(undefined) tumba toda la vista con un error de cliente. Degradar a
+ * "—" es siempre preferible a una pagina en blanco.
+ */
+function moneyOrDash(v: string | null | undefined): string {
+  if (v === null || v === undefined) return "—";
+  return formatMoney(BigInt(v));
+}
+
 function cuentaLabel(a: AccountLite): string {
   return `${a.holderName} · ${a.displayNumber || a.accountNumber}`;
 }
@@ -308,16 +319,16 @@ function VistaGeneral({
                     {c.saldoManual ? formatDate(c.saldoManual.fecha) : "—"}
                   </td>
                   <td className="px-3 py-2 text-right font-mono">
-                    {c.saldoSistema !== null ? formatMoney(BigInt(c.saldoSistema)) : "—"}
+                    {moneyOrDash(c.saldoSistema)}
                   </td>
                   <td className="px-3 py-2 text-right font-mono">
-                    {c.saldoManual ? formatMoney(BigInt(c.saldoManual.monto)) : "—"}
+                    {c.saldoManual ? moneyOrDash(c.saldoManual.monto) : "—"}
                   </td>
                   <td className="px-3 py-2 text-right font-mono">
-                    {c.diferencia !== null ? formatMoney(BigInt(c.diferencia)) : "—"}
+                    {moneyOrDash(c.diferencia)}
                   </td>
                   <td className="px-3 py-2 text-right font-mono text-text-muted">
-                    {c.sumaPendientesNeta !== null ? formatMoney(BigInt(c.sumaPendientesNeta)) : "—"}
+                    {moneyOrDash(c.sumaPendientesNeta)}
                   </td>
                   <td className="px-3 py-2 text-center">
                     <EstadoBadge cuenta={c} />
@@ -499,7 +510,7 @@ function VistaCuenta({
               <EstadoBadge cuenta={detalle} />
               {detalle.cuadra === false && (
                 <span className="text-xs text-rose-700">
-                  Diferencia sin explicar: {detalle.diferenciaSinExplicar ? formatMoney(BigInt(detalle.diferenciaSinExplicar)) : "—"}
+                  Diferencia sin explicar: {moneyOrDash(detalle.diferenciaSinExplicar)}
                 </span>
               )}
             </div>
@@ -524,12 +535,12 @@ function VistaCuenta({
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string | null; sub?: string }) {
+function Stat({ label, value, sub }: { label: string; value: string | null | undefined; sub?: string }) {
   return (
     <div>
       <div className="text-[10px] uppercase tracking-wider text-text-muted font-semibold">{label}</div>
       <div className="text-base font-bold tabular-nums font-mono">
-        {value !== null ? formatMoney(BigInt(value)) : "—"}
+        {moneyOrDash(value)}
       </div>
       {sub && <div className="text-[10px] text-text-muted">{sub}</div>}
     </div>
@@ -574,11 +585,11 @@ function AgingChips({
             key={b.bucket}
             onClick={() => onSel(sel === b.bucket ? null : b.bucket)}
             className={chipClass(sel === b.bucket)}
-            title={`Neto de este tramo: ${formatMoney(BigInt(b.neto))}`}
+            title={`Neto de este tramo: ${moneyOrDash(b.neto)}`}
           >
             {b.bucket === "60+" && <span className="text-rose-600 mr-0.5">⚠</span>}
             {AGING_LABEL[b.bucket]} <span className="text-text-muted">({b.count})</span>
-            <span className="font-mono ml-1">{formatMoney(BigInt(b.neto))}</span>
+            <span className="font-mono ml-1">{moneyOrDash(b.neto)}</span>
           </button>
         ))}
       </div>
@@ -612,7 +623,7 @@ function PendientesBanco({ pendiente }: { pendiente?: PendienteBanco }) {
           Bancos sin Dynatech <span className="text-text-muted font-normal">({pendiente?.count ?? 0})</span>
         </div>
         <div className="text-xs text-text-muted font-mono">
-          neto {pendiente ? formatMoney(BigInt(pendiente.neto)) : "$0"}
+          neto {pendiente ? moneyOrDash(pendiente.neto) : "$0"}
         </div>
       </div>
       <AgingChips
@@ -657,7 +668,7 @@ function PendientesBanco({ pendiente }: { pendiente?: PendienteBanco }) {
                       {r.direction}
                     </span>
                   </td>
-                  <td className="px-3 py-1.5 text-right font-mono">{formatMoney(BigInt(r.monto))}</td>
+                  <td className="px-3 py-1.5 text-right font-mono">{moneyOrDash(r.monto)}</td>
                   <td className="px-3 py-1.5 truncate max-w-[200px]">{r.counterpartyName ?? "—"}</td>
                   <td className="px-3 py-1.5 truncate max-w-[240px]">{r.description ?? ""}</td>
                 </tr>
@@ -682,7 +693,7 @@ function PendientesDynatech({ pendiente }: { pendiente?: PendienteDynatech }) {
           Dynatech sin banco <span className="text-text-muted font-normal">({pendiente?.count ?? 0})</span>
         </div>
         <div className="text-xs text-text-muted font-mono">
-          neto {pendiente ? formatMoney(BigInt(pendiente.neto)) : "$0"}
+          neto {pendiente ? moneyOrDash(pendiente.neto) : "$0"}
         </div>
       </div>
       <AgingChips
@@ -727,7 +738,7 @@ function PendientesDynatech({ pendiente }: { pendiente?: PendienteDynatech }) {
                       {r.tipoOperacion}
                     </span>
                   </td>
-                  <td className="px-3 py-1.5 text-right font-mono">{formatMoney(BigInt(r.monto))}</td>
+                  <td className="px-3 py-1.5 text-right font-mono">{moneyOrDash(r.monto)}</td>
                   <td className="px-3 py-1.5 truncate max-w-[200px]">{r.clienteName ?? "—"}</td>
                   <td className="px-3 py-1.5 truncate max-w-[240px]">{r.glosa}</td>
                 </tr>
@@ -844,7 +855,7 @@ function HistorialSaldos({
                       }`}
                     >
                       <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(s.fecha)}</td>
-                      <td className="px-3 py-1.5 text-right font-mono">{formatMoney(BigInt(s.monto))}</td>
+                      <td className="px-3 py-1.5 text-right font-mono">{moneyOrDash(s.monto)}</td>
                       <td className="px-3 py-1.5 text-text-muted">{s.nota ?? "—"}</td>
                       <td className="px-3 py-1.5 text-xs text-text-muted whitespace-nowrap">
                         {s.capturadoPor} · {formatDate(s.createdAt)}

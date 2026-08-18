@@ -62,8 +62,10 @@ function cuentaLabel(a: AccountLite): string {
   return `${esc(a.bankName)} · ${esc(a.holderName)} · ${esc(a.displayNumber || a.accountNumber)}`;
 }
 
-function money(v: string | null): string {
-  return v !== null ? formatMoney(BigInt(v)) : "—";
+function money(v: string | null | undefined): string {
+  // Tolera undefined (campo ausente), no solo null: BigInt(undefined) lanza.
+  if (v === null || v === undefined) return "—";
+  return formatMoney(BigInt(v));
 }
 
 export function printAuditoriaCuenta(cuentas: CuentaAuditoria[]) {
