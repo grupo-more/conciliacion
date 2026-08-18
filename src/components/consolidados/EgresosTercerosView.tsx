@@ -34,6 +34,12 @@ interface EgresoTerceroRow {
     egresoMonto: string;
     rubroNombre: string | null;
   } | null;
+  /**
+   * Asiento manual del movimiento (módulo "Asientos manuales"). Los
+   * GENERADO/EMITIDO ya salieron del listado en el API — esto badgea los
+   * estados restantes en vez de mostrarlos como "Sin conciliar".
+   */
+  asientoManual: { estado: string } | null;
 }
 
 interface EgresosTercerosResponse {
@@ -351,6 +357,10 @@ export function EgresosTercerosView() {
                         <EgresoBadge eg={r.egresoConciliacion} />
                       ) : r.conciliacion ? (
                         <ConciliacionBadge conciliacion={r.conciliacion} />
+                      ) : r.asientoManual ? (
+                        <AsientoManualBadge
+                          estado={r.asientoManual.estado}
+                        />
                       ) : (
                         <span className="inline-block rounded-full border border-border-soft bg-bg-soft px-2 py-0.5 text-[11px] font-semibold text-text-muted">
                           Sin conciliar
@@ -385,6 +395,21 @@ export function EgresosTercerosView() {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Movimiento con asiento manual (Consolidados → Asientos manuales): no está
+ * conciliado contra Tesorería, pero tampoco es un pendiente virgen.
+ */
+function AsientoManualBadge({ estado }: { estado: string }) {
+  return (
+    <span
+      className="inline-block rounded-full border border-emerald-200 bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-800"
+      title={`Tiene asiento manual (${estado}) en Consolidados → Asientos manuales.`}
+    >
+      Asiento manual
+    </span>
   );
 }
 

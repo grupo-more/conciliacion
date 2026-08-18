@@ -18,6 +18,12 @@ import { getDifMenorSettings, isComisionBancaria, isDifMenor } from "@/lib/dif-m
  *   - con_rut       → counterpartyRut presente.
  *   - solo_nombre   → counterpartyRut vacio pero counterpartyName presente.
  *   - sin_info      → ninguno de los dos vino (queda solo la glosa para investigar).
+ *
+ * Los OUT que ya se resolvieron por otra vía NO aparecen acá: comisiones y dif
+ * menor (asiento automático en "Diferencias y comisiones") y los que tienen un
+ * asiento manual GENERADO/EMITIDO ("Asientos manuales"). Misma definición de
+ * "resuelto" que banco-compute.ts y Comparar, para no arrastrar a esta cola algo
+ * que en otro módulo ya se dio por OK (y evitar el doble asiento).
  */
 export async function GET(req: Request) {
   const session = await getSession();
@@ -75,6 +81,10 @@ export async function GET(req: Request) {
           alias: true,
         },
       },
+      // Asiento manual del módulo "Asientos manuales": es otra vía de resolución
+      // del mismo movimiento, y hay que mirarla acá para no ofrecer de nuevo un
+      // OUT que ya tiene su asiento (riesgo de doble contabilización).
+      asientoManual: { select: { estado: true } },
       // Estado de conciliacion contra el egreso de Dynatech (Tesorería), si existe.
       consolidadoLinks: {
         select: {
@@ -125,6 +135,12 @@ export async function GET(req: Request) {
     // se resuelven con asiento automático en "Diferencias y comisiones" — no
     // son egresos a terceros reales, nunca van a tener contraparte real.
     if (isComisionBancaria(bm) || isDifMenor(bm, difThreshold)) continue;
+
+    // Resuelto por asiento manual GENERADO/EMITIDO → sale de esta cola. Misma
+    // definición de "resuelto" que banco-compute.ts (Reportes) y Comparar:
+    // EMITIDO es generado + documento ya en gestión, sigue igual de resuelto.
+    const asientoEstado = bm.asientoManual?.estado ?? null;
+    if (asientoEstado === "GENERADO" || asientoEstado === "EMITIDO") continue;
 
     const hasRut = !!bm.counterpartyRut && bm.counterpartyRut.trim().length > 0;
     const hasName =
@@ -204,6 +220,7 @@ export async function GET(req: Request) {
       quality: rowQuality,
       conciliacion,
       egresoConciliacion,
+      asientoManual: asientoEstado ? { estado: asientoEstado } : null,
     });
   }
 
@@ -273,6 +290,12 @@ interface EgresoTerceroRow {
     egresoMonto: string;
     rubroNombre: string | null;
   } | null;
+  /**
+   * Asiento manual del movimiento, si tiene uno en un estado que NO lo saca de
+   * esta cola (los GENERADO/EMITIDO ya se filtraron arriba). Sirve para badgear
+   * en vez de mostrar "Sin conciliar".
+   */
+  asientoManual: { estado: string } | null;
 }
 
 function parseRange(

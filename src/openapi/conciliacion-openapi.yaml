@@ -2499,7 +2499,9 @@ paths:
         - { name: quality, in: query, schema: { type: string, enum: [con_rut, solo_nombre, sin_info] } }
       responses:
         "200":
-          description: Excluye cuentas de uso parcial y descartados.
+          description: >-
+            Excluye cuentas de uso parcial, descartados, comisiones/dif menor y los
+            movimientos ya resueltos por asiento manual (estado GENERADO o EMITIDO).
           content:
             application/json:
               schema:
