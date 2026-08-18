@@ -55,9 +55,13 @@ export async function computeBancoSinConciliar(
   from: Date,
   to: Date,
   filters: BancoFilters = {},
+  /** Fecha de referencia para el aging. Default hoy. La Auditoria de cuadre
+   *  pasa su fecha de corte para que la antiguedad sea la que tenian los
+   *  pendientes A ESA FECHA, no la de hoy. */
+  agingRef?: Date,
 ) {
   const entidades = await loadEntidadesInternas(prisma);
-  const now = new Date();
+  const now = agingRef ?? new Date();
   const conciliado = new Set<string>(CONCILIADO_STATUSES);
   const { threshold: difThreshold } = await getDifMenorSettings();
 

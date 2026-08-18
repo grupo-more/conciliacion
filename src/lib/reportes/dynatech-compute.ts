@@ -51,6 +51,8 @@ export async function computeDynatechSinConciliar(
   from: Date,
   to: Date,
   filters: DynatechFilters = {},
+  /** Fecha de referencia para el aging. Default hoy. Ver computeBancoSinConciliar. */
+  agingRef?: Date,
 ) {
   // Resolver accountId -> rubro (enlace explícito Configuración → Rubros).
   // Sin enlace, no hay forma de saber qué TesoreriaMovement pertenecen a esa
@@ -117,7 +119,7 @@ export async function computeDynatechSinConciliar(
   ]);
   const porAging = mkAmountMap<AgingBucket>(["0-7", "8-30", "31-60", "60+"]);
   const porBanco = new Map<string, { count: number; monto: bigint }>();
-  const now = new Date();
+  const now = agingRef ?? new Date();
 
   for (const tm of movements) {
     const motivo = dynatechMotivo(

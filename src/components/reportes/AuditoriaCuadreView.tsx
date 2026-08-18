@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatMoney, formatDate } from "@/lib/format";
 import { printAuditoriaCuenta } from "./AuditoriaPrint";
+import { AGING_LABEL, type AgingBucket } from "@/lib/reportes/classify";
 
 interface AccountLite {
   id: string;
@@ -22,10 +23,19 @@ interface SaldoManualDTO {
   createdAt: string;
 }
 
+/** Corte por antiguedad de una lista de pendientes (siempre los 4 buckets). */
+interface AgingPorBucket {
+  bucket: AgingBucket;
+  count: number;
+  monto: string;
+  neto: string;
+}
+
 interface PendienteBancoRow {
   id: string;
   fecha: string;
   aging: number;
+  agingBucket: AgingBucket;
   direction: "IN" | "OUT";
   monto: string;
   counterpartyName: string | null;
@@ -36,20 +46,41 @@ interface PendienteDynatechRow {
   id: string;
   fecha: string;
   aging: number;
+  agingBucket: AgingBucket;
   tipoOperacion: "INGRESO" | "EGRESO";
   monto: string;
   clienteName: string | null;
   glosa: string;
 }
 
+interface PendienteBanco {
+  count: number;
+  monto: string;
+  neto: string;
+  porAging: AgingPorBucket[];
+  rows?: PendienteBancoRow[];
+}
+
+interface PendienteDynatech {
+  count: number;
+  monto: string;
+  neto: string;
+  porAging: AgingPorBucket[];
+  rows?: PendienteDynatechRow[];
+}
+
 interface CuentaAuditoria {
   account: AccountLite;
   saldoManual: SaldoManualDTO | null;
+  /** false = se esta viendo un snapshot historico, no el vigente. */
+  esUltimoSnapshot: boolean;
   saldoSistema: string | null;
+  /** Fecha del movimiento de cartola que aporto el saldo banco. */
+  saldoBancoFecha: string | null;
   diferencia: string | null;
   pendientes: {
-    bancoSinDynatech: { count: number; monto: string; neto: string; rows?: PendienteBancoRow[] };
-    dynatechSinBanco: { count: number; monto: string; neto: string; rows?: PendienteDynatechRow[] };
+    bancoSinDynatech: PendienteBanco;
+    dynatechSinBanco: PendienteDynatech;
   } | null;
   sumaPendientesNeta: string | null;
   diferenciaSinExplicar: string | null;
@@ -70,6 +101,10 @@ function cuentaLabel(a: AccountLite): string {
 export function AuditoriaCuadreView() {
   const [resumen, setResumen] = useState<CuentaAuditoria[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Snapshot de saldo manual que se esta viendo. null = el vigente (el mas
+  // reciente). Se setea al clickear una fila del historial, y es lo que hace
+  // reproducible una auditoria pasada.
+  const [snapshotId, setSnapshotId] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<CuentaAuditoria | null>(null);
   const [loadingResumen, setLoadingResumen] = useState(false);
   const [loadingDetalle, setLoadingDetalle] = useState(false);
@@ -84,14 +119,22 @@ export function AuditoriaCuadreView() {
     }
   }
 
-  async function loadDetalle(accountId: string) {
+  async function loadDetalle(accountId: string, saldoManualId: string | null) {
     setLoadingDetalle(true);
     try {
-      const res = await fetch(`/api/reportes/auditoria-cuadre?accountId=${accountId}`);
+      const qs = new URLSearchParams({ accountId });
+      if (saldoManualId) qs.set("saldoManualId", saldoManualId);
+      const res = await fetch(`/api/reportes/auditoria-cuadre?${qs.toString()}`);
       if (res.ok) setDetalle(await res.json());
     } finally {
       setLoadingDetalle(false);
     }
+  }
+
+  /** Cambiar de cuenta siempre vuelve al snapshot vigente de esa cuenta. */
+  function seleccionarCuenta(id: string | null) {
+    setSelectedId(id);
+    setSnapshotId(null);
   }
 
   useEffect(() => {
@@ -99,13 +142,18 @@ export function AuditoriaCuadreView() {
   }, []);
 
   useEffect(() => {
-    if (selectedId) loadDetalle(selectedId);
+    if (selectedId) loadDetalle(selectedId, snapshotId);
     else setDetalle(null);
-  }, [selectedId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, snapshotId]);
 
+  /** Tras guardar o borrar un saldo, se vuelve al vigente: el que se acaba de
+   *  cargar pasa a ser el mas reciente, y el borrado puede ser el que se estaba
+   *  viendo (quedaria apuntando a un id inexistente). */
   async function refrescarTodo() {
+    setSnapshotId(null);
     await loadResumen();
-    if (selectedId) await loadDetalle(selectedId);
+    if (selectedId) await loadDetalle(selectedId, null);
   }
 
   return (
@@ -113,7 +161,7 @@ export function AuditoriaCuadreView() {
       {/* Sidebar de cuentas */}
       <aside className="card p-3 h-fit">
         <button
-          onClick={() => setSelectedId(null)}
+          onClick={() => seleccionarCuenta(null)}
           className={`w-full text-left rounded-md px-2 py-2 text-sm mb-2 transition-all ${
             selectedId === null
               ? "bg-brand/10 border border-brand/40 text-brand shadow-sm"
@@ -134,7 +182,7 @@ export function AuditoriaCuadreView() {
             return (
               <button
                 key={c.account.id}
-                onClick={() => setSelectedId(c.account.id)}
+                onClick={() => seleccionarCuenta(c.account.id)}
                 className={`w-full text-left rounded-md px-2 py-1.5 text-sm transition-all ${
                   active
                     ? "bg-accent/10 border border-accent/40 text-text shadow-sm"
@@ -157,12 +205,14 @@ export function AuditoriaCuadreView() {
       {/* Panel principal */}
       <div className="min-w-0">
         {selectedId === null ? (
-          <VistaGeneral resumen={resumen} loading={loadingResumen} onSelect={setSelectedId} />
+          <VistaGeneral resumen={resumen} loading={loadingResumen} onSelect={seleccionarCuenta} />
         ) : (
           <VistaCuenta
             detalle={detalle}
             loading={loadingDetalle}
             onSaved={refrescarTodo}
+            snapshotId={snapshotId}
+            onSelectSnapshot={setSnapshotId}
           />
         )}
       </div>
@@ -286,10 +336,14 @@ function VistaCuenta({
   detalle,
   loading,
   onSaved,
+  snapshotId,
+  onSelectSnapshot,
 }: {
   detalle: CuentaAuditoria | null;
   loading: boolean;
   onSaved: () => void;
+  snapshotId: string | null;
+  onSelectSnapshot: (id: string | null) => void;
 }) {
   const [fecha, setFecha] = useState(todayIso());
   const [monto, setMonto] = useState("");
@@ -398,7 +452,13 @@ function VistaCuenta({
         )}
       </div>
 
-      <HistorialSaldos accountId={detalle.account.id} onChanged={onSaved} />
+      <HistorialSaldos
+        accountId={detalle.account.id}
+        onChanged={onSaved}
+        viendoId={detalle.saldoManual?.id ?? null}
+        snapshotId={snapshotId}
+        onSelectSnapshot={onSelectSnapshot}
+      />
 
       {!detalle.saldoManual ? (
         <div className="card text-sm text-text-muted">
@@ -406,15 +466,36 @@ function VistaCuenta({
         </div>
       ) : (
         <>
+          {/* Aviso: se esta viendo un snapshot historico, no el vigente. */}
+          {!detalle.esUltimoSnapshot && (
+            <div className="card bg-amber-50/60 border-amber-300/60 flex flex-wrap items-center justify-between gap-2 py-2">
+              <div className="text-xs text-amber-900">
+                Estás viendo la auditoría reproducida al{" "}
+                <b>{formatDate(detalle.saldoManual.fecha)}</b>, no el saldo vigente.
+              </div>
+              <button onClick={() => onSelectSnapshot(null)} className="btn-ghost text-xs">
+                Volver al vigente
+              </button>
+            </div>
+          )}
+
           {/* Comparación */}
           <div className="card">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Stat label={`Saldo Banco (${formatDate(detalle.saldoManual.fecha)})`} value={detalle.saldoSistema} sub="según cartola" />
+              <Stat
+                label={`Saldo Banco (${formatDate(detalle.saldoManual.fecha)})`}
+                value={detalle.saldoSistema}
+                sub={
+                  detalle.saldoBancoFecha
+                    ? `según cartola al ${formatDate(detalle.saldoBancoFecha)}`
+                    : "sin cartola cargada"
+                }
+              />
               <Stat label="Saldo manual" value={detalle.saldoManual.monto} />
               <Stat label="Diferencia" value={detalle.diferencia} />
               <Stat label="Pendientes explican" value={detalle.sumaPendientesNeta} sub="suma neta" />
             </div>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <EstadoBadge cuenta={detalle} />
               {detalle.cuadra === false && (
                 <span className="text-xs text-rose-700">
@@ -422,6 +503,16 @@ function VistaCuenta({
                 </span>
               )}
             </div>
+            {/* La cartola no llega hasta la fecha de corte: la diferencia
+                incluye dias que no estan cargados en el sistema. */}
+            {detalle.saldoBancoFecha && detalle.saldoBancoFecha < detalle.saldoManual.fecha && (
+              <div className="mt-2 text-xs text-amber-800">
+                ⚠ La cartola de esta cuenta llega hasta el{" "}
+                <b>{formatDate(detalle.saldoBancoFecha)}</b> y el corte es al{" "}
+                <b>{formatDate(detalle.saldoManual.fecha)}</b>. La diferencia incluye días
+                todavía no cargados.
+              </div>
+            )}
           </div>
 
           {/* Pendientes */}
@@ -445,12 +536,75 @@ function Stat({ label, value, sub }: { label: string; value: string | null; sub?
   );
 }
 
-function PendientesBanco({
-  pendiente,
+/**
+ * Corte por antiguedad de los pendientes. Es un control de VISTA, no de
+ * calculo: filtra las filas mostradas pero el count y el neto del encabezado
+ * siguen siendo los totales completos. Acotar el universo de pendientes
+ * romperia la aritmetica de "los pendientes explican la diferencia" (el saldo
+ * del banco arrastra toda la historia de la cuenta), y ademas esconderia los
+ * pendientes viejos, que son justo los que mas importan en una auditoria.
+ */
+function AgingChips({
+  porAging,
+  sel,
+  onSel,
+  total,
+  mostradas,
 }: {
-  pendiente?: { count: number; monto: string; neto: string; rows?: PendienteBancoRow[] };
+  porAging?: AgingPorBucket[];
+  sel: AgingBucket | null;
+  onSel: (b: AgingBucket | null) => void;
+  total: number;
+  mostradas: number;
 }) {
-  const rows = pendiente?.rows ?? [];
+  const buckets = (porAging ?? []).filter((b) => b.count > 0);
+  if (buckets.length === 0) return null;
+
+  return (
+    <div className="px-3 py-2 border-b border-border-soft bg-bg-soft/40">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-text-muted font-semibold mr-1">
+          Antigüedad
+        </span>
+        <button onClick={() => onSel(null)} className={chipClass(sel === null)}>
+          Todos <span className="text-text-muted">({total})</span>
+        </button>
+        {buckets.map((b) => (
+          <button
+            key={b.bucket}
+            onClick={() => onSel(sel === b.bucket ? null : b.bucket)}
+            className={chipClass(sel === b.bucket)}
+            title={`Neto de este tramo: ${formatMoney(BigInt(b.neto))}`}
+          >
+            {b.bucket === "60+" && <span className="text-rose-600 mr-0.5">⚠</span>}
+            {AGING_LABEL[b.bucket]} <span className="text-text-muted">({b.count})</span>
+            <span className="font-mono ml-1">{formatMoney(BigInt(b.neto))}</span>
+          </button>
+        ))}
+      </div>
+      {sel !== null && (
+        <div className="mt-1.5 text-[10px] text-text-muted">
+          Mostrando {mostradas} de {total} — el conteo y el neto del encabezado siguen siendo
+          el total completo.
+        </div>
+      )}
+    </div>
+  );
+}
+
+function chipClass(active: boolean): string {
+  return `text-[11px] rounded-full px-2 py-0.5 border transition-colors ${
+    active
+      ? "bg-brand/10 border-brand/40 text-brand font-semibold"
+      : "border-border-soft text-text-muted hover:bg-bg-elevated hover:text-text"
+  }`;
+}
+
+function PendientesBanco({ pendiente }: { pendiente?: PendienteBanco }) {
+  const [bucket, setBucket] = useState<AgingBucket | null>(null);
+  const todas = pendiente?.rows ?? [];
+  const rows = bucket ? todas.filter((r) => r.agingBucket === bucket) : todas;
+
   return (
     <div className="card p-0 overflow-hidden">
       <div className="px-3 py-2 border-b border-border-soft flex items-center justify-between">
@@ -461,14 +615,26 @@ function PendientesBanco({
           neto {pendiente ? formatMoney(BigInt(pendiente.neto)) : "$0"}
         </div>
       </div>
-      {rows.length === 0 ? (
+      <AgingChips
+        porAging={pendiente?.porAging}
+        sel={bucket}
+        onSel={setBucket}
+        total={todas.length}
+        mostradas={rows.length}
+      />
+      {todas.length === 0 ? (
         <div className="px-3 py-4 text-sm text-text-muted">Sin pendientes de este lado.</div>
+      ) : rows.length === 0 ? (
+        <div className="px-3 py-4 text-sm text-text-muted">
+          Ningún pendiente en ese tramo de antigüedad.
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-bg-soft text-xs uppercase text-text-muted">
               <tr>
                 <th className="px-3 py-1.5 text-left">Fecha</th>
+                <th className="px-3 py-1.5 text-right">Días</th>
                 <th className="px-3 py-1.5 text-center">Dir.</th>
                 <th className="px-3 py-1.5 text-right">Monto</th>
                 <th className="px-3 py-1.5 text-left">Contraparte</th>
@@ -479,6 +645,13 @@ function PendientesBanco({
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-border-soft/40">
                   <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(r.fecha)}</td>
+                  <td
+                    className={`px-3 py-1.5 text-right tabular-nums ${
+                      r.agingBucket === "60+" ? "text-rose-600 font-semibold" : "text-text-muted"
+                    }`}
+                  >
+                    {r.aging}
+                  </td>
                   <td className="px-3 py-1.5 text-center">
                     <span className={r.direction === "IN" ? "text-success" : "text-rose-600"}>
                       {r.direction}
@@ -497,12 +670,11 @@ function PendientesBanco({
   );
 }
 
-function PendientesDynatech({
-  pendiente,
-}: {
-  pendiente?: { count: number; monto: string; neto: string; rows?: PendienteDynatechRow[] };
-}) {
-  const rows = pendiente?.rows ?? [];
+function PendientesDynatech({ pendiente }: { pendiente?: PendienteDynatech }) {
+  const [bucket, setBucket] = useState<AgingBucket | null>(null);
+  const todas = pendiente?.rows ?? [];
+  const rows = bucket ? todas.filter((r) => r.agingBucket === bucket) : todas;
+
   return (
     <div className="card p-0 overflow-hidden">
       <div className="px-3 py-2 border-b border-border-soft flex items-center justify-between">
@@ -513,14 +685,26 @@ function PendientesDynatech({
           neto {pendiente ? formatMoney(BigInt(pendiente.neto)) : "$0"}
         </div>
       </div>
-      {rows.length === 0 ? (
+      <AgingChips
+        porAging={pendiente?.porAging}
+        sel={bucket}
+        onSel={setBucket}
+        total={todas.length}
+        mostradas={rows.length}
+      />
+      {todas.length === 0 ? (
         <div className="px-3 py-4 text-sm text-text-muted">Sin pendientes de este lado.</div>
+      ) : rows.length === 0 ? (
+        <div className="px-3 py-4 text-sm text-text-muted">
+          Ningún pendiente en ese tramo de antigüedad.
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-bg-soft text-xs uppercase text-text-muted">
               <tr>
                 <th className="px-3 py-1.5 text-left">Fecha</th>
+                <th className="px-3 py-1.5 text-right">Días</th>
                 <th className="px-3 py-1.5 text-center">Tipo</th>
                 <th className="px-3 py-1.5 text-right">Monto</th>
                 <th className="px-3 py-1.5 text-left">Cliente</th>
@@ -531,6 +715,13 @@ function PendientesDynatech({
               {rows.map((r) => (
                 <tr key={r.id} className="border-t border-border-soft/40">
                   <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(r.fecha)}</td>
+                  <td
+                    className={`px-3 py-1.5 text-right tabular-nums ${
+                      r.agingBucket === "60+" ? "text-rose-600 font-semibold" : "text-text-muted"
+                    }`}
+                  >
+                    {r.aging}
+                  </td>
                   <td className="px-3 py-1.5 text-center">
                     <span className={r.tipoOperacion === "INGRESO" ? "text-success" : "text-rose-600"}>
                       {r.tipoOperacion}
@@ -549,12 +740,25 @@ function PendientesDynatech({
   );
 }
 
+/**
+ * Historial de saldos manuales. Cada fila es clickeable: reproduce la auditoria
+ * completa a la fecha de ese snapshot. Sin esto el reporte no es auditable —
+ * cargar un saldo nuevo cambiaba lo que mostraba el reporte sin forma de volver
+ * a ver lo que se vio en su momento.
+ */
 function HistorialSaldos({
   accountId,
   onChanged,
+  viendoId,
+  snapshotId,
+  onSelectSnapshot,
 }: {
   accountId: string;
   onChanged: () => void;
+  /** Id del snapshot que el detalle esta mostrando ahora. */
+  viendoId: string | null;
+  snapshotId: string | null;
+  onSelectSnapshot: (id: string | null) => void;
 }) {
   const [saldos, setSaldos] = useState<SaldoManualDTO[] | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -574,6 +778,12 @@ function HistorialSaldos({
     if (open) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, accountId]);
+
+  // Si se esta viendo un snapshot historico, el historial se abre solo para que
+  // quede visible cual de todos es.
+  useEffect(() => {
+    if (snapshotId) setOpen(true);
+  }, [snapshotId]);
 
   async function eliminar(id: string) {
     if (!confirm("¿Eliminar este saldo manual? No se puede deshacer.")) return;
@@ -595,7 +805,12 @@ function HistorialSaldos({
         onClick={() => setOpen((v) => !v)}
         className="w-full px-3 py-2 text-left text-sm font-semibold flex items-center justify-between hover:bg-bg-elevated/40"
       >
-        <span>Historial de saldos manuales</span>
+        <span>
+          Historial de saldos manuales
+          <span className="ml-2 text-xs font-normal text-text-muted">
+            click en una fila para reproducir la auditoría a esa fecha
+          </span>
+        </span>
         <span className="text-text-muted text-xs">{open ? "ocultar ▲" : "ver ▼"}</span>
       </button>
       {open && (
@@ -612,29 +827,52 @@ function HistorialSaldos({
                   <th className="px-3 py-1.5 text-right">Monto</th>
                   <th className="px-3 py-1.5 text-left">Nota</th>
                   <th className="px-3 py-1.5 text-left">Cargado por</th>
+                  <th className="px-3 py-1.5 text-center">Viendo</th>
                   <th className="px-3 py-1.5 text-center">Acción</th>
                 </tr>
               </thead>
               <tbody>
-                {saldos.map((s) => (
-                  <tr key={s.id} className="border-t border-border-soft/40">
-                    <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(s.fecha)}</td>
-                    <td className="px-3 py-1.5 text-right font-mono">{formatMoney(BigInt(s.monto))}</td>
-                    <td className="px-3 py-1.5 text-text-muted">{s.nota ?? "—"}</td>
-                    <td className="px-3 py-1.5 text-xs text-text-muted whitespace-nowrap">
-                      {s.capturadoPor} · {formatDate(s.createdAt)}
-                    </td>
-                    <td className="px-3 py-1.5 text-center">
-                      <button
-                        onClick={() => eliminar(s.id)}
-                        disabled={deletingId === s.id}
-                        className="text-rose-700 hover:underline text-xs font-semibold disabled:opacity-50"
-                      >
-                        {deletingId === s.id ? "Eliminando…" : "Eliminar"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {saldos.map((s) => {
+                  const activo = s.id === viendoId;
+                  return (
+                    <tr
+                      key={s.id}
+                      onClick={() => onSelectSnapshot(s.id)}
+                      title="Reproducir la auditoría a esta fecha"
+                      className={`border-t border-border-soft/40 cursor-pointer transition-colors ${
+                        activo ? "bg-brand/5" : "hover:bg-bg-elevated/40"
+                      }`}
+                    >
+                      <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(s.fecha)}</td>
+                      <td className="px-3 py-1.5 text-right font-mono">{formatMoney(BigInt(s.monto))}</td>
+                      <td className="px-3 py-1.5 text-text-muted">{s.nota ?? "—"}</td>
+                      <td className="px-3 py-1.5 text-xs text-text-muted whitespace-nowrap">
+                        {s.capturadoPor} · {formatDate(s.createdAt)}
+                      </td>
+                      <td className="px-3 py-1.5 text-center">
+                        {activo ? (
+                          <span className="text-[10px] font-semibold text-brand uppercase tracking-wider">
+                            ● Viendo
+                          </span>
+                        ) : (
+                          <span className="text-xs text-text-muted">ver</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 text-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            eliminar(s.id);
+                          }}
+                          disabled={deletingId === s.id}
+                          className="text-rose-700 hover:underline text-xs font-semibold disabled:opacity-50"
+                        >
+                          {deletingId === s.id ? "Eliminando…" : "Eliminar"}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
