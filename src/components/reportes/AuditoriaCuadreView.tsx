@@ -236,7 +236,7 @@ function VistaGeneral({
               <tr>
                 <th className="px-3 py-2 text-left">Cuenta</th>
                 <th className="px-3 py-2 text-left">Saldo manual (fecha)</th>
-                <th className="px-3 py-2 text-right">Saldo sistema</th>
+                <th className="px-3 py-2 text-right">Saldo Banco</th>
                 <th className="px-3 py-2 text-right">Saldo manual</th>
                 <th className="px-3 py-2 text-right">Diferencia</th>
                 <th className="px-3 py-2 text-right">Pendientes (neto)</th>
@@ -409,7 +409,7 @@ function VistaCuenta({
           {/* Comparación */}
           <div className="card">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <Stat label={`Saldo sistema (${formatDate(detalle.saldoManual.fecha)})`} value={detalle.saldoSistema} />
+              <Stat label={`Saldo Banco (${formatDate(detalle.saldoManual.fecha)})`} value={detalle.saldoSistema} sub="según cartola" />
               <Stat label="Saldo manual" value={detalle.saldoManual.monto} />
               <Stat label="Diferencia" value={detalle.diferencia} />
               <Stat label="Pendientes explican" value={detalle.sumaPendientesNeta} sub="suma neta" />

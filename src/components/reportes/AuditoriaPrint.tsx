@@ -111,7 +111,7 @@ function seccionCuenta(c: CuentaAuditoria): string {
 
   const stats = `
     <div class="stats">
-      <div class="stat"><div class="lbl">Saldo sistema${c.saldoManual ? ` (${esc(formatDate(c.saldoManual.fecha))})` : ""}</div><div class="val">${esc(money(c.saldoSistema))}</div></div>
+      <div class="stat"><div class="lbl">Saldo Banco${c.saldoManual ? ` (${esc(formatDate(c.saldoManual.fecha))})` : ""}</div><div class="val">${esc(money(c.saldoSistema))}</div></div>
       <div class="stat"><div class="lbl">Saldo manual</div><div class="val">${esc(money(c.saldoManual?.monto ?? null))}</div></div>
       <div class="stat"><div class="lbl">Diferencia</div><div class="val">${esc(money(c.diferencia))}</div></div>
       <div class="stat"><div class="lbl">Pendientes (neto)</div><div class="val">${esc(money(c.sumaPendientesNeta))}</div></div>
